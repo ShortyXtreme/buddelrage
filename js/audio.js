@@ -1,6 +1,6 @@
 // BuddelRage – Ton: Geräusche (OpenClonk-Sounds, CC-BY) und prozedural erzeugte, ruhige Hintergrundmusik (WebAudio)
 'use strict';
-const SETTINGS_DEFAULT = { sfx: 0.8, music: 0.35, musicOn: true, muted: false, hints: true, traj: true, touch: 'auto', tutDone: false };
+const SETTINGS_DEFAULT = { sfx: 0.8, music: 0.35, musicOn: true, muted: false, hints: true, traj: true, touch: 'auto', tutDone: false, zoom: 1, wheel: 'zoom' };
 const settings = Object.assign({}, SETTINGS_DEFAULT, (() => { try { return JSON.parse(localStorage.getItem('br_settings') || '{}'); } catch (e) { return {}; } })());
 if (localStorage.getItem('br_muted') === '1' && localStorage.getItem('br_settings') === null) settings.muted = true;
 function saveSettings() { try { localStorage.setItem('br_settings', JSON.stringify(settings)); } catch (e) { } }
@@ -8,8 +8,22 @@ function saveSettings() { try { localStorage.setItem('br_settings', JSON.stringi
 const SFX = { blast: [3, 0.9], throw: [3, 0.5], punch: [3, 0.6], hurt: [3, 0.7], die: [3, 0.8], splash: [3, 0.6], rock: [3, 0.3], growl: [3, 0.7], dig: [5, 0.35], cash: [1, 0.8], uncash: [1, 0.7], fuse: [1, 0.5], click: [1, 0.6], fanfare: [1, 0.8], error: [1, 0.5], grab: [1, 0.5], build: [1, 0.7], hitliving: [1, 0.6], inflame: [1, 0.5], sizzle: [1, 0.6], swing: [3, 0.6], bow: [3, 0.6], shield: [1, 0.7], arrowhit: [1, 0.4], cannon: [1, 0.9], catapult: [1, 0.8], dump: [1, 0.7], door: [1, 0.5], ding: [1, 0.7], metalhit: [1, 0.6] };
 const audio = { pool: {}, get muted() { return settings.muted; }, set muted(v) { settings.muted = !!v; saveSettings(); Music.apply(); } };
 for (const [n, [cnt]] of Object.entries(SFX)) { audio.pool[n] = []; for (let i = 1; i <= cnt; i++) { const a = new Audio('assets/sounds/' + n + (cnt > 1 ? i : '') + '.ogg'); a.preload = 'auto'; audio.pool[n].push(a); } }
+// Selbst erzeugte Kurz-Geräusche (WebAudio, keine Dateien): Ballon platzt, Chat-Ping
+const SYNTH = {
+  pop(c, t, v) { const len = c.sampleRate * 0.12 | 0, b = c.createBuffer(1, len, c.sampleRate), d = b.getChannelData(0); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 4); const s = c.createBufferSource(); s.buffer = b; const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 0.7; const g = c.createGain(); g.gain.value = v * 1.6; s.connect(f); f.connect(g); g.connect(c.destination); s.start(t); },
+  chat(c, t, v) { for (const [k, hz] of [[0, 880], [0.07, 1320]]) { const o = c.createOscillator(), g = c.createGain(); o.type = 'sine'; o.frequency.value = hz; g.gain.setValueAtTime(0, t + k); g.gain.linearRampToValueAtTime(v * 0.25, t + k + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + k + 0.16); o.connect(g); g.connect(c.destination); o.start(t + k); o.stop(t + k + 0.2); } },
+};
+const SYNTH_VOL = { pop: 0.7, chat: 0.6 };
 function playSnd(n, x, y, vmul) {
-  if (settings.muted || !audio.pool[n] || settings.sfx <= 0) return;
+  if (settings.muted || settings.sfx <= 0) return;
+  if (SYNTH[n]) {
+    let vol = SYNTH_VOL[n] * settings.sfx * (vmul || 1);
+    if (G.world && (x || y)) { const S = R.scale, cx = R.cam.x + cv.width / S / 2, cy = R.cam.y + cv.height / S / 2; vol *= Math.max(0, 1 - Math.hypot(x - cx, y - cy) / 450); }
+    if (vol < 0.03 || !Music.init || !Music.init()) return;
+    try { const c = Music.ctx; if (c.state === 'suspended') c.resume(); SYNTH[n](c, c.currentTime + 0.01, vol); } catch (e) { }
+    return;
+  }
+  if (!audio.pool[n] || !SFX[n]) return;
   let vol = SFX[n][1] * settings.sfx * (vmul || 1);
   if (G.world && (x || y)) { const S = R.scale, cx = R.cam.x + cv.width / S / 2, cy = R.cam.y + cv.height / S / 2; const d = Math.hypot(x - cx, y - cy); vol *= Math.max(0, 1 - d / 450); }
   if (vol < 0.03) return;

@@ -1,16 +1,21 @@
 // BuddelRage – Menüs: Laden, Forschung, Bauen, Pause, Einstellungen, Hilfe, Credits
 'use strict';
-const MODALS = ['shop', 'buildmenu', 'research', 'pausemenu', 'help', 'settings', 'credits'];
+const MODALS = ['shop', 'buildmenu', 'research', 'pausemenu', 'help', 'settings', 'credits', 'saves'];
 function openMenu(id) {
   if (input.listen) input.listen = null;
   for (const m of MODALS) $(m).style.display = 'none';
   $(id).style.display = 'block'; $('backdrop').style.display = 'block'; G.menu = id; G.menuSel = 0;
   document.body.classList.toggle('buildopen', id === 'buildmenu'); G.buildHover = null; G.buildPrev = null;
-  if ((id === 'pausemenu' || id === 'help' || id === 'settings') && G.role === 'single') G.paused = true;
+  if ((id === 'pausemenu' || id === 'help' || id === 'settings' || id === 'saves') && G.role === 'single') G.paused = true;
   if (G.world) { releaseAll(); pushKeys(true); }
   if (id === 'shop') renderShop(); else if (id === 'research') renderResearch(); else if (id === 'buildmenu') renderBuild();
-  else if (id === 'settings') renderSettings(); else if (id === 'help') renderHelp(); else if (id === 'credits') renderCredits();
-  else { $('btnrestart').style.display = G.role === 'single' ? 'block' : 'none'; menuHL(); }
+  else if (id === 'settings') renderSettings(); else if (id === 'help') renderHelp(); else if (id === 'credits') renderCredits(); else if (id === 'saves') renderSaves();
+  else {
+    $('btnrestart').style.display = $('btnsaves').style.display = G.role === 'single' ? 'block' : 'none';
+    const eb = $('btnescape'), ec = G.world && !G.spectate ? escapeInfo() : null;
+    eb.style.display = ec ? 'block' : 'none'; if (ec) { eb.textContent = 'Notausgang' + (ec.ok ? ' (' + ec.cost + ')' : ' – ' + ec.why.replace(/^Notausgang (erst )?/, '').replace(' wieder möglich', '').replace(' – kein Notausgang!', '')); eb.disabled = !ec.ok; }
+    menuHL();
+  }
   cv.classList.remove('ingame');
 }
 function closeAllMenus() {
@@ -29,7 +34,7 @@ function numBadge(i) { return i < 9 ? i + 1 : i === 9 ? 0 : ''; }
 function keepSel(fn) { const s = G.menuSel; fn(); G.menuSel = s; menuHL(); }
 
 // ---------- Laden ----------
-const SHOP_DESC = { flint: 'Explodiert beim Aufprall', superflint: 'Große Explosion beim Aufprall', tnt: 'Lunte – zündet nach 2,5 s, sehr stark', rock: 'Wurfgeschoss & Katapult-Munition', clonk: 'Neuer Arbeiter für dein Team', lorry: 'Sammelt Gegenstände ein (25 Plätze)', catapult: 'Schleudert Munition im hohen Bogen', cannon: 'Schießt flach und hart', sword: 'Nahkampf-Waffe', shield: 'Blocken: Rechtsklick halten', bow: 'Fernkampf, braucht Pfeile', arrows: '+10 Pfeile', armor: 'Nimmt 40 % weniger Schaden', knight: 'Schwert, Schild, Bogen & Rüstung' };
+const SHOP_DESC = { flint: 'Explodiert beim Aufprall', superflint: 'Große Explosion beim Aufprall', tnt: 'Lunte – zündet nach 2,5 s, sehr stark', rock: 'Wurfgeschoss & Katapult-Munition', clonk: 'Neuer Arbeiter für dein Team', lorry: 'Sammelt Gegenstände ein (25 Plätze)', catapult: 'Schleudert Munition im hohen Bogen', cannon: 'Schießt flach und hart', sword: 'Nahkampf-Waffe', shield: 'Blocken: Rechtsklick halten', bow: 'Fernkampf, braucht Pfeile', arrows: '+10 Pfeile', armor: 'Nimmt 40 % weniger Schaden', knight: 'Schwert, Schild, Bogen & Rüstung', hook: 'Seil schießen, schwingen, hochziehen', balloon: 'Schwebt langsam nach oben' };
 function shopTitle(k) { return k === 'clonk' ? 'Buddler' : k === 'knight' ? 'Ritter' : VEH[k] ? VEH[k].name : ITEMS[k].name; }
 function ownedCount(w, t, k) {
   const own = w.clonks.filter(c => c.team === t.id && c.act !== 'dead');
@@ -77,7 +82,7 @@ function renderResearch() {
     else if (cur) st = '<span class="runinfo">läuft · ' + Math.floor(t.rp * 100) + '%</span>';
     else if (!reqOk) st = '<span class="lockinfo">' + icon('lock', 'ico-s') + ' ' + r.req.filter(q => !t.res[q]).map(q => RES_BY[q].name).join(', ') + '</span>';
     else st = '<span class="price' + (t.money < r.cost ? ' no' : '') + '">' + icon('coin', 'ico-s') + r.cost + '</span><span class="owned">' + r.time + ' s</span>';
-    const ik = { lorry: 'lorry', tower: 'tower', tnt: 'tnt', weapons: 'sword', catapult: 'catapult', castle: 'castle', cannon: 'cannon', knight: 'knight' }[r.k];
+    const ik = { lorry: 'lorry', tower: 'tower', tnt: 'tnt', weapons: 'sword', catapult: 'catapult', castle: 'castle', cannon: 'cannon', knight: 'knight', balloon: 'balloon' }[r.k];
     h += '<div class="card opt ' + (dis ? 'dis' : '') + (!reqOk && !done ? ' locked' : '') + '" data-res="' + r.k + '"><span class="num">' + numBadge(i) + '</span><div class="icon"><img src="' + entIcon(ik, t.color) + '" style="height:' + (BUILD[ik] ? 50 : 40) + 'px"></div><h3>' + r.name + '</h3><p>' + r.desc + '</p>' +
       (cur ? '<div class="bar thin"><i style="width:' + (t.rp * 100).toFixed(1) + '%"></i></div>' : '') + '<div class="foot">' + st + '</div></div>';
   });
@@ -121,7 +126,8 @@ function renderSettings() {
       const b = binds[a.k];
       h += '<div class="bindrow"><span>' + a.n + '</span>' + [0, 1].map(i => { const L = input.listen && input.listen.action === a.k && input.listen.idx === i; return '<button class="chip' + (L ? ' listen' : '') + '" data-bind="' + a.k + '" data-i="' + i + '">' + (L ? 'Taste drücken…' : b[i] ? keyCap(b[i]) : '<span class="muted small">frei</span>') + '</button>'; }).join('') + '</div>';
     }
-    h += '<div class="ctlgrp">Fest</div><div class="bindrow"><span>Pause / Menü schließen</span>' + keyCap('Escape') + '<span></span></div><div class="bindrow"><span>Inventarplatz wechseln</span>' + keyCap('WheelUp') + keyCap('WheelDown') + '</div></div>';
+    h += '<div class="ctlgrp">Fest</div><div class="bindrow"><span>Pause / Menü schließen</span>' + keyCap('Escape') + '<span></span></div><div class="bindrow"><span>Mausrad</span>' + keyCap('WheelUp') + keyCap('WheelDown') + '<span class="muted small">' + (settings.wheel === 'slot' ? 'Inventar · Shift = Zoom' : 'Zoom · Shift = Inventar') + '</span></div></div>' +
+      '<div class="setrow"><label>Mausrad</label><select id="s_wheel" style="width:auto"><option value="zoom"' + (settings.wheel !== 'slot' ? ' selected' : '') + '>Zoomen (Shift = Inventarplatz)</option><option value="slot"' + (settings.wheel === 'slot' ? ' selected' : '') + '>Inventarplatz (Shift = Zoomen)</option></select></div>';
     h += sw('s_traj', 'Flugbahn-Vorschau beim Zielen', settings.traj) + '<button class="btn sm" id="s_reset" style="margin-top:10px">Standardbelegung wiederherstellen</button>';
   } else {
     h += sw('s_hints', 'Hinweise & Tastensymbole im Spiel anzeigen', settings.hints) +
@@ -134,6 +140,7 @@ function renderSettings() {
   bindR('s_sfx', 'sfx'); bindR('s_music', 'music');
   const bindS = (id, key, fn) => { const el = $(id); if (el) el.onchange = () => { settings[key] = el.checked; saveSettings(); Music.apply(); if (fn) fn(); }; };
   bindS('s_musicon', 'musicOn', () => { if (settings.musicOn) Music.start(); }); bindS('s_muted', 'muted'); bindS('s_traj', 'traj'); bindS('s_hints', 'hints', () => { HUD.sig = {}; });
+  if ($('s_wheel')) $('s_wheel').onchange = () => { settings.wheel = $('s_wheel').value; saveSettings(); renderSettings(); };
   if ($('s_touch')) $('s_touch').onchange = () => { settings.touch = $('s_touch').value; saveSettings(); updateTouchUI(); };
   if ($('s_tut')) $('s_tut').onclick = () => { settings.tutDone = false; saveSettings(); if (G.world && G.role === 'single') { closeAllMenus(); tutStart(); } else toast('Das Tutorial startet beim nächsten Einzelspiel.', 'info'); };
   if ($('s_reset')) $('s_reset').onclick = () => { resetBinds(); toast('Standardbelegung wiederhergestellt.', 'good'); refreshKeyTexts(); renderSettings(); };
@@ -155,13 +162,13 @@ function renderHelp() {
     let grp = '';
     const items = ACTIONS.map(a => ({ a, cap: bindCap(a.k, true) }));
     const col = list => '<div class="ctl">' + list.map(({ a, cap }) => { let s = ''; if (a.g !== grp) { grp = a.g; s += '<div class="ctlgrp">' + grp + '</div>'; } return s + '<div class="keys">' + cap + '</div><div class="d">' + a.n + '</div>'; }).join('') + '</div>';
-    h += col(items.slice(0, 12)); grp = ''; h += col(items.slice(12).concat([{ a: { g: 'Menüs', n: 'Pause' }, cap: keyCap('Escape') }, { a: { g: 'Menüs', n: 'Inventarplatz wechseln' }, cap: keyCap('WheelUp') + keyCap('WheelDown') }]));
+    h += col(items.slice(0, 12)); grp = ''; h += col(items.slice(12).concat([{ a: { g: 'Menüs', n: 'Pause' }, cap: keyCap('Escape') }, { a: { g: 'Ansicht', n: 'Zoomen' }, cap: keyCap('WheelUp') + keyCap('WheelDown') }, { a: { g: 'Ansicht', n: 'Inventarplatz wechseln' }, cap: kbdShift() + keyCap('WheelUp') }]));
     h += '</div><div class="muted small" style="margin-top:10px">Die Maus zielt: Würfe, Pfeile, Graben und Geschütze folgen dem Mauszeiger. Alle Tasten lassen sich unter Einstellungen › Steuerung neu belegen.</div>';
   } else if (tab === 'pad') {
     const rows = [['LS', 'Laufen · hoch = klettern · ganz durchdrücken = sprinten'], ['RS', 'Zielen (Twin-Stick)'], ['RT', 'Aktion: werfen / schlagen / schießen / feuern'], ['LT', 'Halten: graben in Zielrichtung · mit Schwert/Schild blocken'], ['A', 'Springen · in Menüs: auswählen'], ['B', 'Graben an/aus · in Menüs: zurück'], ['X', 'Benutzen (Fahrzeug, Tür, Aufheben)'], ['Y', 'Ablegen · Lore ausladen'], ['LB', 'Inventarplatz links'], ['RB', 'Inventarplatz rechts'], ['L3', 'Nächster Buddler'], ['R3', 'Forschung'], ['Select', 'Laden'], ['Start', 'Pause (dort: Bauen über Dock/Maus)'], ['DP', 'Laufen · in Menüs navigieren']];
     h += '<div class="ctl">' + rows.map(([b, d]) => '<div class="keys">' + padCap(b) + '</div><div class="d">' + d + '</div>').join('') + '</div><div class="muted small" style="margin-top:10px">Xbox-/PlayStation-Standardbelegung (✕ = A, ◯ = B, ▢ = X, △ = Y). Wird automatisch erkannt.</div>';
   } else if (tab === 'touch') {
-    h += '<ul class="tips"><li><b>Linker Stick</b>: laufen, nach oben schieben = springen/klettern.</li><li><b>Ins Spielfeld tippen</b>: Aktion (werfen, schlagen, schießen) in Richtung des Fingers.</li><li><b>Ins Spielfeld lange drücken</b>: dorthin graben (Finger bewegen = Richtung).</li><li><b>Knöpfe rechts</b>: Sprung, Aktion, Graben, Benutzen, Ablegen, Inventarplatz, Buddler wechseln.</li><li><b>Oben</b>: Laden und Menü. Das Dock rechts öffnet Bauen, Forschung, Hilfe und Einstellungen.</li></ul><div class="muted small">Touch-Steuerung lässt sich unter Einstellungen › Anzeige erzwingen oder abschalten.</div>';
+    h += '<ul class="tips"><li><b>Linker Stick</b>: laufen, nach oben schieben = springen/klettern.</li><li><b>Ins Spielfeld tippen</b>: Aktion (werfen, schlagen, schießen) in Richtung des Fingers.</li><li><b>Ins Spielfeld lange drücken</b>: dorthin graben (Finger bewegen = Richtung).</li><li><b>Knöpfe rechts</b>: Sprung, Aktion, Graben, Benutzen, Ablegen, Inventarplatz, Buddler wechseln.</li><li><b>Zwei Finger</b> auf dem Spielfeld auseinander/zusammen ziehen = zoomen.</li><li><b>💬 oben</b> (Mehrspieler): Chat und Emotes.</li><li><b>Oben</b>: Laden und Menü. Das Dock rechts öffnet Bauen, Forschung, Hilfe und Einstellungen.</li></ul><div class="muted small">Touch-Steuerung lässt sich unter Einstellungen › Anzeige erzwingen oder abschalten.</div>';
   } else if (tab === 'ai') {
     h += '<ul class="tips"><li><b>Drei Stufen</b> pro KI-Team (Einzelspieler-Menü bzw. Lobby): <b>Leicht</b> – langsam, ungenau, passiv, greift erst spät an. <b>Mittel</b> – ausgewogen, forscht, baut Wachturm und Burg, nutzt Loren. <b>Schwer</b> – reagiert schnell, zielt mit Vorhalt, blockt mit dem Schild, wirtschaftet effizient, nutzt Fahrzeuge und greift koordiniert an.</li>' +
       '<li>Die KI <b>arbeitet wie ein Spieler</b>: Gold abbauen und an der Hütte verkaufen, Buddler, Waffen und Feuersteine kaufen, forschen, bauen, verteidigen. Ihr Weg wird mit einer Wegsuche geplant (Laufen, Springen, Klettern, Hangeln, Schwimmen, Graben); bleibt ein Buddler hängen, gräbt er sich frei oder eine Treppe nach oben.</li>' +
@@ -172,7 +179,15 @@ function renderHelp() {
       '<li>Verliert im Mehrspieler jemand die Verbindung, übernimmt eine KI mit der in der Lobby gewählten Stufe sein Team.</li>' +
       '<li><b>Buddler-Name</b>: Im Einzelspieler-Menü bzw. Mehrspieler-Menü kannst du deinem Buddler einen Namen geben (max. 16 Zeichen). Er steht über dem Buddler und in der Buddlerliste; weitere gekaufte Buddler heißen „Name 2“, „Name 3“ … Leer lassen = zufällige Namen.</li></ul>';
   } else {
-    h += '<ul class="tips"><li><b>Goldrausch</b>: Grabe Gold, verkaufe es an der Hütte (' + bindCap('sell') + ') und erreiche das Geldziel.</li><li><b>Melee</b>: Das letzte überlebende Team gewinnt. Ritter, Katapulte und Burgen helfen.</li><li><b>Forschung</b> (' + bindCap('research') + ') schaltet Lore, Katapult, Kanone, Wachturm, Burg, Waffen, Ritter und TNT frei.</li><li><b>Bauen</b> (' + bindCap('build') + '): Gebäude entstehen als Baustelle vor deinem Buddler – Buddler in der Nähe bauen sie auf. Die Vorschau zeigt den Platz: <b style="color:#7ee69a">grün</b> = frei, <b style="color:#ffd36b">gelb</b> = wird zuerst planiert (Erde/Sand abtragen, Lücken auffüllen, kostet etwas Geld und Zeit), <b style="color:#ff8a80">rot</b> = unmöglich (z. B. Fels im Weg – erst sprengen).</li><li>Jede Startbasis liegt auf einem ebenen Plateau mit Platz für Hütte, Wachturm und Burg. Die Kartengröße (Klein bis Riesig) wählst du im Menü bzw. der Host in der Lobby.</li><li>Feuersteine explodieren beim Aufprall, TNT nach kurzer Zeit.</li><li>Lava verbrennt alles und wird mit Wasser zu Fels. Feuer breitet sich über Gras und Holz aus – ins Wasser springen löscht.</li><li>Nachts sind Monster gefährlicher. Gebäude und Feuer spenden Licht.</li><li>Du startest im Einzelspieler mit einem Buddler – weitere kaufst du im Laden.</li></ul>';
+    h += '<ul class="tips"><li><b>Goldrausch</b>: Grabe Gold, verkaufe es an der Hütte (' + bindCap('sell') + ') und erreiche das Geldziel.</li><li><b>Melee</b>: Das letzte überlebende Team gewinnt. Ritter, Katapulte und Burgen helfen.</li><li><b>Forschung</b> (' + bindCap('research') + ') schaltet Lore, Katapult, Kanone, Wachturm, Burg, Waffen, Ritter und TNT frei.</li><li><b>Bauen</b> (' + bindCap('build') + '): Gebäude entstehen als Baustelle vor deinem Buddler – Buddler in der Nähe bauen sie auf. Die Vorschau zeigt den Platz: <b style="color:#7ee69a">grün</b> = frei, <b style="color:#ffd36b">gelb</b> = wird zuerst planiert (Erde/Sand abtragen, Lücken auffüllen, kostet etwas Geld und Zeit), <b style="color:#ff8a80">rot</b> = unmöglich (z. B. Fels im Weg – erst sprengen).</li><li>Jede Startbasis liegt auf einem ebenen Plateau mit Platz für Hütte, Wachturm und Burg. Die Kartengröße (Klein bis Riesig) wählst du im Menü bzw. der Host in der Lobby.</li><li>Feuersteine explodieren beim Aufprall, TNT nach kurzer Zeit.</li><li>Lava verbrennt alles und wird mit Wasser zu Fels. Feuer breitet sich über Gras und Holz aus – ins Wasser springen löscht.</li><li>Nachts sind Monster gefährlicher. Gebäude und Feuer spenden Licht.</li><li>Du startest im Einzelspieler mit einem Buddler – weitere kaufst du im Laden.</li>' +
+      '<li><b>Tiere</b>: <b>Wipfe</b> laufen über die Wiesen – mit ' + bindCap('interact') + ' fangen, tragen (belegt einen Inventarplatz), mit ' + bindCap('drop') + ' freilassen oder an der Hütte verkaufen. Vögel, Fische und Fledermäuse sind harmlos. <b>Haie</b> leben in tiefem Wasser und beißen Schwimmer – schnell raus!</li>' +
+      '<li><b>Monster</b> ducken sich und knurren kurz, bevor sie zubeißen (rotes Ausrufezeichen) – jetzt ausweichen oder mit dem Schild blocken.</li>' +
+      '<li><b>Enterhaken</b> (Laden): ' + bindCap('primary') + ' schießt den Haken zum Mauszeiger, er hält an festem Material. ' + bindCap('up') + '/' + bindCap('down') + ' holt das Seil ein/lässt ab, ' + bindCap('left') + '/' + bindCap('right') + ' schwingt, ' + bindCap('jump') + ' springt ab, ' + bindCap('primary') + ' löst das Seil.</li>' +
+      '<li><b>Ballon</b> (Forschung „Ballonbau“, dann Laden): ' + bindCap('primary') + ' bläst ihn auf, du schwebst langsam nach oben (~24 s). ' + bindCap('down') + ' sinkt, ' + bindCap('jump') + ' packt ihn am Boden ein bzw. lässt ihn in der Luft los. Pfeile, Würfe, Explosionen und Feuer lassen ihn platzen.</li>' +
+      '<li><b>Notausgang</b>: Unter der Erde steckengeblieben? ' + bindCap('rescue') + ' 1,5 s halten (oder Pause › Notausgang) bringt den Buddler zur Basis bzw. an die Oberfläche. Kostet ' + ESCAPE_COST + ' Geld (ohne Geld ' + ESCAPE_HP + ' Leben), danach 60 s Abklingzeit, nicht mit Gegnern in der Nähe.</li>' +
+      '<li>Nach einem Treffer blinkt dein Buddler kurz und ist ~1 s unverwundbar (Feuer und Lava wirken weiter).</li>' +
+      '<li><b>Speichern</b>: Im Einzelspieler über Pause › Speichern / Laden (3 Plätze, im Browser). Laden auch im Hauptmenü.</li>' +
+      '<li><b>Mehrspieler</b>: ' + bindCap('chat') + ' öffnet den Chat, ' + bindCap('emote') + ' halten öffnet das Emote-Rad (oder 1–8 drücken). Verlässt der Host das Spiel, übernimmt automatisch ein Mitspieler – das Spiel läuft nach ein paar Sekunden weiter.</li></ul>';
   }
   $('help').innerHTML = h;
   for (const b of $('help').querySelectorAll('[data-htab]')) b.onclick = () => { G.helpTab = b.dataset.htab; uiSnd(); renderHelp(); };

@@ -38,6 +38,10 @@
   <div id="tutorial" class="glass" style="display:none"></div>
   <div id="spectate" class="glass" style="display:none">Zuschauer-Modus</div>
   <div id="h-net" class="muted small"></div>
+  <div id="chatlog" style="display:none"></div>
+  <div id="chatbox" class="glass" style="display:none"><input id="chatin" maxlength="120" placeholder="Nachricht… (Enter senden, Esc abbrechen)" autocomplete="off"><div id="chatemos"></div></div>
+  <div id="emotewheel" style="display:none"></div>
+  <div id="migbanner" class="glass" style="display:none"></div>
   <div id="touch" style="display:none">
     <div id="tjoy"><div id="tknob"></div></div>
     <div id="tbtns">
@@ -49,7 +53,7 @@
       <button data-t="slot" class="tb">Platz ⟳</button>
       <button data-t="next" class="tb">Buddler</button>
     </div>
-    <div id="ttop"><button data-t="shop" class="tb sm">Laden</button><button data-t="menu" class="tb sm">☰</button></div>
+    <div id="ttop"><button data-t="chat" class="tb sm" id="tchat">💬</button><button data-t="shop" class="tb sm">Laden</button><button data-t="menu" class="tb sm">☰</button></div>
   </div>
 </div>
 
@@ -62,6 +66,7 @@
     <div class="tagline">Graben · Klettern · Gold · Burgen · Ritter · Katapulte · Lava</div>
     <nav class="mainnav">
       <button id="btnsp" class="bigbtn primary"><span class="ico pick"></span><span><b>Einzelspieler</b><small>Goldrausch oder Melee gegen die KI</small></span></button>
+      <button id="btnloadm" class="bigbtn"><span class="ico save"></span><span><b>Spiel laden</b><small>Gespeicherten Einzelspieler-Stand fortsetzen</small></span></button>
       <button id="btnmp" class="bigbtn"><span class="ico globe"></span><span><b>Mehrspieler</b><small>Private Räume, Peer-to-Peer</small></span></button>
       <button id="btnset" class="bigbtn"><span class="ico gear"></span><span><b>Einstellungen</b><small>Ton, Musik, Steuerung</small></span></button>
       <button id="btnhelpm" class="bigbtn"><span class="ico help"></span><span><b>Hilfe</b><small>Steuerung &amp; Spielziel</small></span></button>
@@ -89,6 +94,7 @@
       <label class="switch"><input type="checkbox" id="opthelper"><i></i> Eigene Buddler arbeiten selbstständig (KI-Helfer)</label>
       <label class="switch"><input type="checkbox" id="optallres"><i></i> Alles erforscht (schneller Start)</label>
       <label class="switch"><input type="checkbox" id="optday" checked><i></i> Tag &amp; Nacht</label>
+      <label class="switch"><input type="checkbox" id="optanimals" checked><i></i> Tiere (Wipfe, Vögel, Fische, Fledermäuse, Haie)</label>
     </div>
     <div class="muted small center">Du startest mit einem Buddler – weitere gibt es im Laden.</div>
   </div>
@@ -129,7 +135,7 @@
       <label class="field inline">Buddler pro Team <select id="optclonks"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label></div>
       <div class="inrow" id="aidiffs"></div>
       <div class="inrow"><label class="field inline" title="Wenn ein Mitspieler die Verbindung verliert, übernimmt eine KI sein Team">KI bei Verbindungsabbruch <select id="opttakeover" class="diffsel"></select></label></div>
-      <div class="toggles"><label class="switch"><input type="checkbox" id="optmon"><i></i> Monster</label><label class="switch"><input type="checkbox" id="opthelper2"><i></i> KI-Helfer für eigene Buddler</label><label class="switch"><input type="checkbox" id="optallres2" checked><i></i> Alles erforscht</label><label class="switch"><input type="checkbox" id="optday2" checked><i></i> Tag &amp; Nacht</label></div>
+      <div class="toggles"><label class="switch"><input type="checkbox" id="optmon"><i></i> Monster</label><label class="switch"><input type="checkbox" id="opthelper2"><i></i> KI-Helfer für eigene Buddler</label><label class="switch"><input type="checkbox" id="optallres2" checked><i></i> Alles erforscht</label><label class="switch"><input type="checkbox" id="optday2" checked><i></i> Tag &amp; Nacht</label><label class="switch"><input type="checkbox" id="optanimals2" checked><i></i> Tiere</label></div>
       <button id="btnstart" class="btn primary big">▶ Melee starten</button>
     </div>
     <div id="waithost" style="display:none" class="busy">Warte, bis der Host startet…</div>
@@ -154,6 +160,8 @@
 <div id="pausemenu" class="modal narrow">
   <div class="phead"><h2>Pause</h2><button class="x" data-close>✕</button></div>
   <button id="btnresume" class="btn primary opt">Weiter</button>
+  <button id="btnsaves" class="btn opt">Speichern / Laden</button>
+  <button id="btnescape" class="btn opt">Notausgang</button>
   <button id="btnsetp" class="btn opt">Einstellungen</button>
   <button id="btnhelp" class="btn opt">Hilfe &amp; Steuerung</button>
   <button id="btnrestart" class="btn opt">Neustart</button>
@@ -162,6 +170,7 @@
 <div id="help" class="modal wide"></div>
 <div id="settings" class="modal wide"></div>
 <div id="credits" class="modal"></div>
+<div id="saves" class="modal"></div>
 
 <script src="js/assets.js"></script>
 <script src="js/peerjs.min.js"></script>
@@ -169,11 +178,15 @@
 <script src="js/net.js"></script>
 <script src="js/game.js"></script>
 <script src="js/ai.js"></script>
+<script src="js/fauna.js"></script>
+<script src="js/gear.js"></script>
+<script src="js/save.js"></script>
 <script src="js/render.js"></script>
 <script src="js/main.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/input.js"></script>
 <script src="js/hud.js"></script>
+<script src="js/chat.js"></script>
 <script src="js/menus.js"></script>
 <script src="js/boot.js"></script>
 </body>

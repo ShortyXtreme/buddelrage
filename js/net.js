@@ -15,7 +15,7 @@ const NETCFG = Object.assign({
   maxPlayers: 6
 }, window.BR_NETCFG || {}); // eigene TURN-Server o. Ä. können per window.BR_NETCFG = { iceServers: [...] } ergänzt werden
 const PEER_PREFIX = 'buddelrage-v1-';
-const HOST_TYPES = new Set(['start', 'map', 'snap', 'chunks']);
+const HOST_TYPES = new Set(['start', 'map', 'snap', 'chunks', 'chat', 'mig']);
 const CHUNK = 16000;
 
 // ---------- Hilfsfunktionen: Zufall & SHA-256 ----------
@@ -58,6 +58,7 @@ function pSend(conn, s) {
 }
 function pRecv(conn, data, cb) {
   if (typeof data !== 'string') return;
+  conn._rx = Date.now();
   if (data.charCodeAt(0) === 1) {
     const p1 = data.indexOf('|'), p2 = data.indexOf('|', p1 + 1), p3 = data.indexOf('|', p2 + 1);
     const id = data.slice(1, p1), i = +data.slice(p1 + 1, p2), n = +data.slice(p2 + 1, p3);
@@ -71,9 +72,11 @@ function pRecv(conn, data, cb) {
 }
 
 // ---------- Netz-Zustand ----------
-const P2P = { peer: null, isHost: false, secret: null, salt: null, key: null, conns: new Map(), hostConn: null, nextId: 2, started: false, fails: [], onErr: null, closing: false };
+const P2P = { peer: null, isHost: false, secret: null, salt: null, key: null, conns: new Map(), hostConn: null, nextId: 2, started: false, fails: [], onErr: null, closing: false, myId: 1 };
+// Zugangsdaten des Clients für einen Host-Wechsel (bleiben über p2pClose hinweg erhalten, nur im Arbeitsspeicher)
+const MIGKEY = { secret: null, salt: null, key: null, pw: null, name: '', cname: '' };
 function newPeer(id) {
-  const opts = { host: NETCFG.peerHost, port: NETCFG.peerPort, path: NETCFG.peerPath, secure: NETCFG.secure, config: { iceServers: NETCFG.iceServers }, debug: 1 };
+  const opts = { host: NETCFG.peerHost, port: NETCFG.peerPort, path: NETCFG.peerPath, secure: NETCFG.secure, config: { iceServers: NETCFG.iceServers }, debug: (typeof G !== 'undefined' && G.migrating) ? 0 : 1 }; // beim Host-Wechsel sind Fehlversuche erwartet
   return id ? new Peer(id, opts) : new Peer(opts);
 }
 function peerErrText(e) {
@@ -90,16 +93,16 @@ function p2pClose() {
   for (const c of P2P.conns.values()) try { c.conn.close(); } catch (e) { }
   if (P2P.hostConn) try { P2P.hostConn.close(); } catch (e) { }
   if (P2P.peer) try { P2P.peer.destroy(); } catch (e) { }
-  Object.assign(P2P, { peer: null, isHost: false, secret: null, salt: null, key: null, conns: new Map(), hostConn: null, nextId: 2, started: false, fails: [] });
+  Object.assign(P2P, { peer: null, isHost: false, secret: null, salt: null, key: null, conns: new Map(), hostConn: null, nextId: 2, started: false, fails: [], myId: 1 });
   setTimeout(() => { P2P.closing = false; }, 0);
 }
 
 // ---------- Host ----------
-function hostPlayers() { return [{ id: 1, name: P2P.hostName, cname: P2P.hostCname || '' }].concat([...P2P.conns.values()].filter(c => c.auth).map(c => ({ id: c.id, name: c.name, cname: c.cname || '' }))); }
-function hostBroadcastPlayers() { const m = { t: 'players', players: hostPlayers(), hostId: 1 }; const s = JSON.stringify(m); for (const c of P2P.conns.values()) if (c.auth) pSend(c.conn, s); onNet(m); }
+function hostPlayers() { return [{ id: P2P.myId, name: P2P.hostName, cname: P2P.hostCname || '' }].concat([...P2P.conns.values()].filter(c => c.auth).map(c => ({ id: c.id, name: c.name, cname: c.cname || '' }))); }
+function hostBroadcastPlayers() { const m = { t: 'players', players: hostPlayers(), hostId: P2P.myId }; const s = JSON.stringify(m); for (const c of P2P.conns.values()) if (c.auth) pSend(c.conn, s); onNet(m); }
 async function p2pCreate(name, pw, onErr, cname) {
   p2pClose(); P2P.closing = false;
-  P2P.isHost = true; P2P.hostName = name; P2P.hostCname = cleanName(cname || '', ''); P2P.onErr = onErr;
+  P2P.isHost = true; P2P.hostName = name; P2P.hostCname = cleanName(cname || '', ''); P2P.onErr = onErr; P2P.myId = 1;
   P2P.secret = randSecret(24); // 32 Zeichen, 192 Bit
   P2P.salt = randSecret(16);
   P2P.key = await pwKey(P2P.salt, pw);
@@ -124,12 +127,13 @@ function hostAccept(conn) {
   });
   const authTimer = setTimeout(() => { if (!c.auth) try { conn.close(); } catch (e) { } }, 30000);
   conn.on('data', d => pRecv(conn, d, m => hostOnMsg(c, m)));
-  conn.on('close', () => {
+  c.drop = () => {
     clearTimeout(authTimer);
-    if (!P2P.conns.has(c.id)) return;
+    if (P2P.conns.get(c.id) !== c) return;
     P2P.conns.delete(c.id);
     if (c.auth && P2P.isHost) { hostBroadcastPlayers(); onNet({ t: 'left', id: c.id }); }
-  });
+  };
+  conn.on('close', c.drop);
   conn.on('error', () => { });
 }
 async function hostOnMsg(c, m) {
@@ -142,14 +146,22 @@ async function hostOnMsg(c, m) {
       return;
     }
     if (hostPlayers().length >= NETCFG.maxPlayers) { pSend(c.conn, JSON.stringify({ t: 'err', s: 'Raum ist voll (max. 6).' })); setTimeout(() => c.conn.close(), 500); return; }
-    c.auth = true; c.id = P2P.nextId++; c.name = cleanName(String(m.name || ''), 'Spieler'); c.cname = cleanName(String(m.cname || ''), '');
+    // Wiederverbinden (oder nach Host-Wechsel): alte Spieler-ID übernehmen, wenn ihr Team existiert und gerade niemand damit verbunden ist
+    const old = Number.isInteger(m.old) ? m.old : 0, cfgT = (typeof G !== 'undefined' && G.cfg && G.world && G.cfg.teams) || [];
+    const prev = old > 0 ? P2P.conns.get(old) : null;
+    if (prev && prev.conn._rx && Date.now() - prev.conn._rx > 2500 && prev.drop) { try { prev.conn.close(); } catch (e) { } prev.drop(); } // alte, stumme Verbindung ersetzen
+    c.auth = true; c.id = (old > 0 && old !== P2P.myId && !P2P.conns.has(old) && cfgT.some(t => t.pid === old)) ? old : P2P.nextId++;
+    P2P.nextId = Math.max(P2P.nextId, c.id + 1);
+    c.name = cleanName(String(m.name || ''), 'Spieler'); c.cname = cleanName(String(m.cname || ''), '');
     P2P.conns.set(c.id, c);
-    pSend(c.conn, JSON.stringify({ t: 'joined', code: 'Privatraum', id: c.id, host: false, players: hostPlayers(), hostId: 1 }));
+    pSend(c.conn, JSON.stringify({ t: 'joined', code: 'Privatraum', id: c.id, host: false, players: hostPlayers(), hostId: P2P.myId }));
     hostBroadcastPlayers();
     if (P2P.started) onNet({ t: 'late', id: c.id, name: c.name });
     return;
   }
+  if (m.t === 'ping') return;
   if (m.t === 'in') { m.from = c.id; onNet(m); }
+  else if (m.t === 'chat') onNet({ t: 'chatin', from: c.id, s: typeof m.s === 'string' ? m.s.slice(0, 200) : '', e: m.e });
 }
 function hostSend(o) {
   if (o.t === 'start' && !o.to) P2P.started = true;
@@ -160,9 +172,10 @@ function hostSend(o) {
 }
 
 // ---------- Client ----------
-async function p2pJoin(secret, name, pw, onErr, cname) {
+async function p2pJoin(secret, name, pw, onErr, cname, old) {
   p2pClose(); P2P.closing = false;
   P2P.isHost = false; P2P.secret = secret; P2P.onErr = onErr;
+  Object.assign(MIGKEY, { secret, pw, name, cname: cname || '' });
   const pid = await peerIdFor(secret);
   const peer = newPeer(null); P2P.peer = peer;
   let joined = false, gotErr = false;
@@ -171,17 +184,55 @@ async function p2pJoin(secret, name, pw, onErr, cname) {
     const conn = peer.connect(pid, { reliable: true, serialization: 'raw' }); P2P.hostConn = conn;
     const to = setTimeout(() => { if (!joined && !gotErr && peer === P2P.peer) onErr('Zeitüberschreitung – Host nicht erreichbar.'); }, 25000);
     conn.on('data', d => pRecv(conn, d, async m => {
-      if (m.t === 'chal') { const k = await pwKey(String(m.salt), pw); pSend(conn, JSON.stringify({ t: 'auth', r: await sha256(k + '|' + m.nonce), name, cname: cname || '' })); return; }
+      if (m.t === 'chal') { const k = await pwKey(String(m.salt), pw); MIGKEY.salt = String(m.salt); MIGKEY.key = k; pSend(conn, JSON.stringify({ t: 'auth', r: await sha256(k + '|' + m.nonce), name, cname: cname || '', old: old || 0 })); return; }
       if (m.t === 'err') { gotErr = true; clearTimeout(to); onErr(m.s); return; }
-      if (m.t === 'joined') { joined = true; clearTimeout(to); }
-      if (!joined) return;
+      if (m.t === 'joined') { joined = true; clearTimeout(to); conn._joined = true; }
+      if (!joined || m.t === 'ping') return;
       onNet(m);
     }));
-    conn.on('close', () => { clearTimeout(to); if (peer !== P2P.peer || P2P.closing) return; if (joined) onNet({ t: 'hostleft' }); else if (!gotErr) onErr('Verbindung zum Host getrennt.'); });
+    conn._lost = () => { if (conn._gone) return; conn._gone = true; clearTimeout(to); if (peer !== P2P.peer || P2P.closing) return; if (joined) onNet({ t: 'hostleft' }); else if (!gotErr) onErr('Verbindung zum Host getrennt.'); };
+    conn.on('close', conn._lost);
     conn.on('error', e => { if (peer === P2P.peer && !joined) onErr(peerErrText(e)); });
   });
   peer.on('error', e => { if (peer === P2P.peer && !gotErr) onErr(peerErrText(e)); });
 }
-function clientSend(o) { if (o.t === 'in') pSend(P2P.hostConn, JSON.stringify(o)); }
+function clientSend(o) { if (o.t === 'in' || o.t === 'chat') pSend(P2P.hostConn, JSON.stringify(o)); }
+// Host-Wechsel: dieser Client übernimmt die Raum-ID des alten Hosts (wird frei, sobald dessen Browser getrennt ist)
+async function p2pPromote(myId, nextId, onOpen, onFail, maxMs) {
+  const K = MIGKEY; if (!K.secret || !K.key) { onFail('keine Zugangsdaten'); return; }
+  p2pClose(); P2P.closing = false;
+  Object.assign(P2P, { isHost: true, hostName: K.name, hostCname: K.cname, secret: K.secret, salt: K.salt, key: K.key, myId, nextId, started: true, onErr: () => { } });
+  const pid = await peerIdFor(K.secret), t0 = Date.now();
+  const attempt = () => {
+    if (!P2P.isHost || P2P.secret !== K.secret) return;
+    const peer = newPeer(pid); P2P.peer = peer; let opened = false;
+    peer.on('open', () => { if (peer !== P2P.peer) return; opened = true; onOpen(); });
+    peer.on('connection', conn => { if (peer === P2P.peer) hostAccept(conn); });
+    peer.on('disconnected', () => { if (peer === P2P.peer && !P2P.closing && !peer.destroyed && opened) setTimeout(() => { try { peer.reconnect(); } catch (e) { } }, 1000); });
+    peer.on('error', e => {
+      if (peer !== P2P.peer || opened) return;
+      try { peer.destroy(); } catch (x) { }
+      if (Date.now() - t0 < (maxMs || 25000)) setTimeout(attempt, 1500); else onFail(peerErrText(e));
+    });
+  };
+  attempt();
+}
+// Lebenszeichen: beide Seiten pingen jede Sekunde; bleibt die Gegenseite stumm, gilt sie als getrennt
+// (das „close“-Ereignis von WebRTC kommt beim Schließen eines Tabs oft erst sehr spät oder gar nicht)
+const NET_TIMEOUT = { host: 6000, client: 8000 };
+setInterval(() => {
+  const now = Date.now();
+  if (P2P.isHost) {
+    for (const c of [...P2P.conns.values()]) {
+      if (!c.auth) continue;
+      if (c.conn._rx && now - c.conn._rx > NET_TIMEOUT.client) { try { c.conn.close(); } catch (e) { } if (c.drop) c.drop(); continue; }
+      pSend(c.conn, '{"t":"ping"}');
+    }
+  } else if (P2P.hostConn && P2P.hostConn._joined && !P2P.hostConn._gone) {
+    const hc = P2P.hostConn;
+    if (hc._rx && now - hc._rx > NET_TIMEOUT.host) { try { hc.close(); } catch (e) { } if (hc._lost) hc._lost(); return; }
+    pSend(hc, '{"t":"ping"}');
+  }
+}, 1000);
 function p2pSend(o) { if (P2P.isHost) hostSend(o); else clientSend(o); }
 window.__P2P = P2P;

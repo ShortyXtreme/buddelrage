@@ -19,8 +19,11 @@ const ITEMS = {
   arrows: { name: 'Pfeile (10)', price: 6, sell: 3, dmg: 3 },
   armor: { name: 'Rüstung', price: 25, sell: 12, dmg: 6 },
   arrow: { name: 'Pfeil', price: 0, sell: 0, dmg: 13 },
+  wipf: { name: 'Wipf', price: 0, sell: 6, dmg: 1 },
+  hook: { name: 'Enterhaken', price: 15, sell: 7, dmg: 4 },
+  balloon: { name: 'Ballon', price: 12, sell: 5, dmg: 1 },
 };
-const ITEM_CODES = ['rock', 'flint', 'superflint', 'tnt', 'gold', 'sword', 'shield', 'bow', 'arrows', 'armor', 'arrow'];
+const ITEM_CODES = ['rock', 'flint', 'superflint', 'tnt', 'gold', 'sword', 'shield', 'bow', 'arrows', 'armor', 'arrow', 'wipf', 'hook', 'balloon'];
 const AMMO = new Set(['rock', 'flint', 'superflint', 'tnt', 'gold']);
 const THROWABLE = new Set(['flint', 'superflint', 'tnt']);
 const PRICE_CLONK = 60, PRICE_KNIGHT = 90, PRICE_BRIDGE = 12;
@@ -54,10 +57,11 @@ const RESEARCH = [
   { k: 'castle', name: 'Burg', cost: 70, time: 30, req: ['tower'], desc: 'Gebäude: Heimatbasis, Laden, Rüstung, Heilung' },
   { k: 'cannon', name: 'Kanone', cost: 70, time: 30, req: ['catapult', 'weapons'], desc: 'Fahrzeug: schießt flach und hart' },
   { k: 'knight', name: 'Ritter', cost: 60, time: 25, req: ['castle', 'weapons'], desc: 'Ritter mit Schwert, Schild, Bogen & Rüstung kaufen' },
+  { k: 'balloon', name: 'Ballonbau', cost: 25, time: 12, desc: 'Ballon im Laden: schwebt langsam nach oben (raus aus Gruben)' },
 ];
 const RES_BY = Object.fromEntries(RESEARCH.map(r => [r.k, r]));
 const SHOP_ALL = [
-  { k: 'flint' }, { k: 'superflint' }, { k: 'tnt', res: 'tnt' }, { k: 'rock' }, { k: 'clonk' },
+  { k: 'flint' }, { k: 'superflint' }, { k: 'tnt', res: 'tnt' }, { k: 'rock' }, { k: 'hook' }, { k: 'balloon', res: 'balloon' }, { k: 'clonk' },
   { k: 'lorry', res: 'lorry' }, { k: 'catapult', res: 'catapult' }, { k: 'cannon', res: 'cannon' },
   { k: 'sword', res: 'weapons' }, { k: 'shield', res: 'weapons' }, { k: 'bow', res: 'weapons' }, { k: 'arrows', res: 'weapons' }, { k: 'armor', res: 'weapons' },
   { k: 'knight', res: 'knight' },
@@ -71,7 +75,8 @@ function arrowVel(px, py, ax, ay, dir) { const dx = ax - px, dy = ay - py, d = M
 function digAngle(c, ax, ay) { const dx = Math.abs(ax - c.x), dy = ay - (c.y - 5); return Math.max(-1.1, Math.min(1.5, Math.atan2(dy, Math.max(1, dx)))); }
 const DAY_LEN = 60 * 60 * 4; // 4 Minuten pro Tag
 const TEAM_COLORS = ['#2f5fe0', '#e03030', '#2fae3c', '#e0b818', '#a040d0', '#18b8c0'];
-const ACTS = ['walk', 'jump', 'climb', 'hangle', 'dig', 'swim', 'fight', 'tumble', 'dead', 'push'];
+const ACTS = ['walk', 'jump', 'climb', 'hangle', 'dig', 'swim', 'fight', 'tumble', 'dead', 'push', 'rope', 'float'];
+const INV_TICKS = 55; // kurze Unverwundbarkeit nach einem Treffer (~0,9 s, Buddler blinkt)
 const NAMES = ['Hans', 'Jörg', 'Kurt', 'Fritz', 'Otto', 'Paul', 'Karl', 'Willi', 'Bernd', 'Uwe', 'Gerd', 'Heinz', 'Rudi', 'Sepp', 'Franz', 'Toni', 'Max', 'Egon', 'Udo', 'Horst'];
 const INV_MAX = 3;
 const NOKEYS = { l: 0, r: 0, u: 0, d: 0, b: 0, s: 0, g: 0, am: 0, ax: 0, ay: 0 };
@@ -140,7 +145,7 @@ class World {
     this.activeNext = new Uint8Array(this.cw * this.chh);
     this.stamp = new Uint16Array(W * H);
     this.renderDirty = new Set(); this.netDirty = new Set();
-    this.clonks = []; this.items = []; this.monsters = []; this.structs = []; this.teams = []; this.vehicles = [];
+    this.clonks = []; this.items = []; this.monsters = []; this.structs = []; this.teams = []; this.vehicles = []; this.animals = [];
     this.fires = []; this.fireSet = new Set();
     this.events = []; this.particles = [];
     this.nextId = 1; this.tick = 0; this.state = 'run'; this.winner = -1;
@@ -344,6 +349,7 @@ class World {
       team.sel = this.clonks.find(c => c.team === ti).id;
     });
     if (cfg.monsters) for (let k = 0; k < (cfg.monsterCount || 4); k++) this.spawnMonster();
+    if (cfg.animals !== false && this.spawnFauna) this.spawnFauna();
   }
   addStruct(type, x, y, team, prog) {
     const B = BUILD[type];
@@ -362,6 +368,7 @@ class World {
     return c;
   }
   spawnItem(type, x, y) {
+    if (type === 'wipf' && this.spawnAnimal) return this.spawnAnimal('wipf', x, y, true); // Wipfe sind lebendig: Ablegen/Werfen lässt sie frei
     const it = { id: this.id(), type, x, y, vx: 0, vy: 0, armed: false, owner: 0, fuse: 0, stuck: false, age: 0, pickCd: 0, chain: 0, shot: 0 };
     this.items.push(it); return it;
   }
@@ -408,6 +415,7 @@ class World {
     const aim = Array.isArray(arg) && arg.length === 2 && isFinite(arg[0]) && isFinite(arg[1]) ? [+arg[0], +arg[1]] : null;
     if (a === 'primary') return this.primary(c, aim);
     if (a === 'interact') a = 'use';
+    if (a === 'up') { if (c.act === 'rope' || c.act === 'float') return; a = 'jump'; } // „Hoch“ zieht am Seil, statt loszulassen
     if (c.inside) { // im Gebäude
       if (a === 'use' || a === 'jump') this.leave(c);
       else if (a === 'throw') this.throwItem(c);
@@ -417,6 +425,7 @@ class World {
       else if (a === 'inv') { if (c.inv.length > 1) c.inv.push(c.inv.shift()); }
       return;
     }
+    if ((c.act === 'rope' || c.act === 'float') && this.gearAction(c, a, aim)) return;
     if (c.act === 'push') {
       const v = this.vehById(c.veh);
       if (a === 'use') { this.release(c); return; }
@@ -446,6 +455,7 @@ class World {
       case 'sell': this.sell(c); break;
       case 'build': this.build(c, arg); break;
       case 'use': this.use(c); break;
+      case 'escape': this.escape(c); break;
     }
   }
   // Hauptaktion (Linksklick / RT): Richtung Zielpunkt werfen, schlagen, schießen, feuern
@@ -454,6 +464,9 @@ class World {
     const it = actItem(c);
     if (c.act === 'push') { const v = this.vehById(c.veh); if (v) { if (VEH[v.type].gun) this.fireGun(v, c); else this.loadLorry(v, c); } return; }
     if (aim && !c.inside && (c.act === 'walk' || c.act === 'fight' || c.act === 'jump' || c.act === 'swim' || c.act === 'dig') && Math.abs(aim[0] - c.x) > 2) c.dir = Math.sign(aim[0] - c.x);
+    if (c.act === 'rope' || c.act === 'float') { this.gearAction(c, 'primary', aim); return; }
+    if (it === 'hook' && !c.inside) { this.fireHook(c, aim); return; }
+    if (it === 'balloon' && !c.inside) { this.inflate(c); return; }
     if (c.inside) { const s = this.structById(c.inside); if (aim && s && Math.abs(aim[0] - s.x) > 2) c.dir = Math.sign(aim[0] - s.x); }
     if (it === 'bow' && c.arrows > 0) { if (c.cd <= 0 && c.act !== 'climb' && c.act !== 'hangle' && c.act !== 'push') this.shoot(c, aim); return; }
     if (it === 'sword') { if (c.inside) return; if (c.cd <= 0 && c.act !== 'climb' && c.act !== 'hangle') this.swingSword(c); return; }
@@ -479,6 +492,11 @@ class World {
   grabNear(c) {
     let best = null, bd = 14;
     for (const it of this.items) { if (it.remove || it.fuse > 0 || it.chain || it.type === 'arrow' || it.stuck) continue; const d = Math.hypot(it.x - c.x, (it.y - c.y + 4) * 1.5); if (d < bd) { bd = d; best = it; } }
+    const wf = this.nearWipf ? this.nearWipf(c, bd) : null;
+    if (wf) { // Wipf fangen und tragen
+      if (c.inv.length >= INV_MAX) { if (!this.teams[c.team].ai) this.msg('Inventar voll (3 Plätze)!', c.team); return true; }
+      wf.remove = true; c.inv.push('wipf'); this.snd('grab', c.x, c.y); if (!this.teams[c.team].ai) this.msg('Wipf gefangen! (Ablegen lässt ihn frei, an der Hütte verkaufen)', c.team); return true;
+    }
     if (!best) return false;
     if (best.type === 'arrows') { c.arrows += 10; best.remove = true; this.snd('grab', c.x, c.y); return true; }
     if (best.type === 'armor' && !c.armor) { c.armor = 1; best.remove = true; this.snd('grab', c.x, c.y); return true; }
@@ -701,6 +719,7 @@ class World {
       else { this.hurt(foe, 12 + this.rand() * 5, c); this.snd('metalhit', foe.x, foe.y); if (foe.act !== 'dead' && this.rand() < 0.35) this.fling(foe, c.dir * 1.6, -1.4); }
     }
     for (const m of this.monsters) if (Math.abs(m.x - c.x) < 15 && Math.abs(m.y - c.y) < 10 && Math.sign(m.x - c.x) === c.dir) { m.hp -= 18; m.vx = c.dir * 1.6; m.vy = -1.2; m.act = 'jump'; this.snd('hitliving', m.x, m.y); }
+    if (this.faunaMelee) this.faunaMelee(c, 15, 18);
     for (const v of this.vehicles) if (v.team !== c.team && Math.abs(v.x - c.x) < 14 && Math.abs(v.y - c.y) < 10) v.hp -= 6;
   }
   shoot(c, aim) {
@@ -720,14 +739,18 @@ class World {
       if (this.blocks(foe, c.dir)) { this.snd('shield', foe.x, foe.y); foe.blockT = 10; }
       else { this.hurt(foe, 8, c); if (foe.act !== 'dead') this.fling(foe, c.dir * 2.2, -1.8); this.snd('punch', c.x, c.y); }
     }
+    if (this.faunaMelee) this.faunaMelee(c, 12, 10);
     const mo = this.monsters.find(o => Math.abs(o.x - c.x) < 12 && Math.abs(o.y - c.y) < 10);
     if (mo) { mo.hp -= 10; mo.vx = c.dir * 2; mo.vy = -1.5; mo.act = 'jump'; this.snd('punch', c.x, c.y); }
   }
-  fling(c, vx, vy) { if (c.act === 'dead' || c.inside) return; if (c.act === 'push') this.release(c); c.act = 'tumble'; c.vx = vx; c.vy = vy; c.tumbleT = 0; c.block = 0; }
+  fling(c, vx, vy) { if (c.act === 'dead' || c.inside) return; if (c.act === 'push') this.release(c); if (c.hk) c.hk = null; c.act = 'tumble'; c.vx = vx; c.vy = vy; c.tumbleT = 0; c.block = 0; }
   hurt(c, dmg, src) {
     if (c.act === 'dead' || dmg <= 0 || c.inside) return;
+    const cont = src === 'fire'; // Dauerschaden (Brennen, Lava, Ertrinken) zählt nicht als Treffer
+    if (!cont && c.invT > 0) return;
     if (c.armor && src !== 'fire') dmg *= 0.6;
     c.hp -= dmg;
+    if (!cont && dmg >= 3 && c.hp > 0) c.invT = INV_TICKS;
     if (c.hp <= 0) { this.creditKill(c, src); this.kill(c); return; }
     if (dmg >= 3 && (c.hurtSnd || 0) < this.tick) { this.snd('hurt', c.x, c.y); c.hurtSnd = this.tick + 25; }
   }
@@ -738,7 +761,7 @@ class World {
   }
   kill(c) {
     if (c.act === 'push') this.release(c);
-    c.hp = 0; c.act = 'dead'; c.deadT = 0; c.vx = 0; c.fire = 0; c.block = 0;
+    c.hp = 0; c.act = 'dead'; c.deadT = 0; c.vx = 0; c.fire = 0; c.block = 0; c.hk = null; c.bl = null; c.invT = 0;
     for (const ty of c.inv) { const it = this.spawnItem(ty, c.x, c.y - 5); it.vx = (this.rand() - 0.5) * 1.5; it.vy = -1.5; it.pickCd = 30; }
     c.inv = [];
     this.snd('die', c.x, c.y);
@@ -792,6 +815,7 @@ class World {
         it.stuck = false; const f = 1 - d / R; it.vx += dx / d * f * 3; it.vy += dy / d * f * 3 - 1;
       }
     }
+    if (this.faunaBlast) this.faunaBlast(x, y, r, R);
     for (const v of this.vehicles) {
       const dx = v.x - x, dy = v.y - 4 - y, d = Math.hypot(dx, dy) || 1;
       if (d < R + 4) { const f = 1 - d / (R + 4); v.hp -= f * r * 2.2; v.vx += dx / d * f * 2; v.vy = -f * 2; if (VEH[v.type].wood && this.rand() < 0.5) v.fire = 400; }
@@ -893,6 +917,7 @@ class World {
     for (const v of this.vehicles) this.updVehicle(v);
     for (const it of this.items) this.updItem(it);
     for (const m of this.monsters) this.updMonster(m);
+    if (this.updFauna) this.updFauna();
     for (const s of this.structs) if (s.prog < 1) {
       const B = BUILD[s.type];
       const builders = this.clonks.filter(c => c.team === s.team && (c.act === 'walk' || (s.lv && c.act === 'dig')) && !c.inside && Math.abs(c.x - s.x) < s.w / 2 + (s.lv ? 14 : 8) && Math.abs(c.y - s.y) < (s.lv ? 30 : 12)).length;
@@ -1037,7 +1062,7 @@ class World {
     }
   }
   updClonk(c) {
-    if (c.cd > 0) c.cd--; if (c.punch > 0) c.punch--; if (c.swing > 0) c.swing--; if (c.bowT > 0) c.bowT--; if (c.blockT > 0) c.blockT--;
+    if (c.cd > 0) c.cd--; if (c.punch > 0) c.punch--; if (c.swing > 0) c.swing--; if (c.bowT > 0) c.bowT--; if (c.blockT > 0) c.blockT--; if (c.invT > 0) c.invT--;
     if (c.act === 'dead') { c.deadT++; if (!this.boxHit(c.x, c.y + 1)) c.y += 1; if (c.deadT > 400) c.remove = true; return; }
     const k = this.keysFor(c);
     if (c.inside) {
@@ -1062,6 +1087,7 @@ class World {
     }
     if (headWater) { c.breath -= 0.16; if (c.breath <= 0) { c.breath = 0; this.hurt(c, 0.25, 'fire'); if (c.act === 'dead') return; } } else c.breath = Math.min(100, c.breath + 1);
     if (inWater && (c.act === 'walk' || c.act === 'jump' || c.act === 'hangle' || c.act === 'fight')) { if (c.act === 'jump' && c.vy > 1.5) this.snd('splash', c.x, c.y); c.act = 'swim'; }
+    if (c.hk || c.bl || c.act === 'rope' || c.act === 'float') { this.updGear(c, k, inWater, inLava); if (c.act === 'rope' || c.act === 'float') return; }
     const hasShield = c.inv.includes('shield');
     const secBlock = k.g && hasShield && BLOCK_SLOT.has(actItem(c));
     c.block = ((k.b || secBlock) && hasShield && (c.act === 'walk' || c.act === 'fight')) ? 1 : 0;
@@ -1272,6 +1298,9 @@ class World {
         }
       }
       if (it.remove) return;
+      if (this.gearHit && this.gearHit(it)) return;
+      if (this.faunaHit && this.faunaHit(it, sp)) return;
+      if (it.remove) return;
       for (const m of this.monsters) {
         if (Math.abs(it.x - m.x) <= 5 && it.y >= m.y - 11 && it.y <= m.y + 1) {
           if (it.type === 'flint' || it.type === 'superflint') { it.remove = true; this.explode(it.x, it.y, ITEMS[it.type].blast, it.owner); return; }
@@ -1366,7 +1395,7 @@ class World {
     else if (m.think <= 0) { m.think = 120 + this.rand() * 200 | 0; if (this.rand() < 0.4) m.dir = -m.dir; }
     const inWater = this.matAt(m.x, m.y - 4) === MAT.WATER;
     if (m.act === 'walk') {
-      const sp = (target ? (night ? 0.85 : 0.7) : 0.4) * (inWater ? 0.5 : 1);
+      const sp = (target ? (night ? 0.85 : 0.7) : 0.4) * (inWater ? 0.5 : 1) * (m.wind ? 0.2 : 1);
       if (!this.walkStep(m, m.dir * sp)) { m.act = 'jump'; m.vy = -2.3; m.vx = m.dir * 0.6; if (this.rand() < 0.3) m.dir = -m.dir; }
       m.anim += 0.12;
       if (!this.boxHit(m.x, m.y + 1)) { let d = 0; while (d < 4 && !this.boxHit(m.x, m.y + d + 1)) d++; if (d < 4) m.y += d; else { m.act = 'jump'; m.vy = 0; m.vx = m.dir * 0.4; } }
@@ -1377,10 +1406,14 @@ class World {
       if (!this.boxHit(m.x, m.y + m.vy)) m.y += m.vy; else { if (m.vy > 0) { m.act = 'walk'; m.y = Math.round(m.y); } m.vy = 0; }
       if (inWater) m.act = 'walk';
     }
-    if (target && m.cd === 0 && Math.abs(target.x - m.x) < 8 && Math.abs(target.y - m.y) < 9) {
-      m.cd = 55; m.bite = 10; this.snd('growl', m.x, m.y);
-      if (this.blocks(target, m.dir)) { this.snd('shield', target.x, target.y); target.blockT = 10; m.vx = -m.dir; }
-      else { this.hurt(target, 9, null); if (target.act !== 'dead') this.fling(target, m.dir * 1.6, -1.4); }
+    // Biss mit Vorwarnung: Monster duckt sich und knurrt (~0,27 s), dann schnappt es zu
+    if (target && m.cd === 0 && !m.wind && Math.abs(target.x - m.x) < 13 && Math.abs(target.y - m.y) < 10) { m.wind = 16; this.snd('growl', m.x, m.y); }
+    if (m.wind > 0 && --m.wind === 0) {
+      m.cd = 55; m.bite = 10;
+      if (target && Math.abs(target.x - m.x) < 12 && Math.abs(target.y - m.y) < 10 && Math.sign(target.x - m.x) !== -m.dir) {
+        if (this.blocks(target, m.dir)) { this.snd('shield', target.x, target.y); target.blockT = 10; m.vx = -m.dir; }
+        else { this.hurt(target, 9, null); this.snd('hitliving', target.x, target.y); if (target.act !== 'dead') this.fling(target, m.dir * 1.6, -1.4); }
+      }
     }
     if (m.bite > 0) m.bite--;
   }
@@ -1394,9 +1427,11 @@ class World {
     for (const f of this.fires) fl.push(f.x, f.y, f.k);
     return {
       c: this.clonks.map(c => [c.id, c.team, r1(c.x), r1(c.y), c.dir, ACTS.indexOf(c.act), Math.ceil(c.hp), r1(c.anim), invEnc(c.inv), Math.round(c.breath), c.name, c.punch, r1(c.digA),
-        (c.armor ? 1 : 0) | (c.knight ? 2 : 0) | (c.block ? 4 : 0) | (c.bowT > 0 ? 8 : 0) | (c.fire > 0 ? 16 : 0) | (c.blockT > 0 ? 32 : 0), c.arrows, c.inside, c.swing, c.veh, c.slot || 0]),
+        (c.armor ? 1 : 0) | (c.knight ? 2 : 0) | (c.block ? 4 : 0) | (c.bowT > 0 ? 8 : 0) | (c.fire > 0 ? 16 : 0) | (c.blockT > 0 ? 32 : 0) | (c.invT > 0 ? 64 : 0), c.arrows, c.inside, c.swing, c.veh, c.slot || 0,
+        c.hk ? c.hk.st : 0, c.hk ? r1(c.hk.x) : 0, c.hk ? r1(c.hk.y) : 0, c.bl ? (c.bl.gas > 0 ? 1 : 2) : 0, (c.escCd || 0) > this.tick ? Math.ceil((c.escCd - this.tick) / 60) : 0]),
       i: this.items.map(i => [i.id, ITEM_CODES.indexOf(i.type), r1(i.x), r1(i.y), i.fuse, i.stuck ? 1 : 0, r1(i.vx), r1(i.vy), i.landed ? 1 : 0]),
-      m: this.monsters.map(m => [m.id, r1(m.x), r1(m.y), m.dir, Math.ceil(m.hp), r1(m.anim), m.bite || 0, m.fire > 0 ? 1 : 0]),
+      m: this.monsters.map(m => [m.id, r1(m.x), r1(m.y), m.dir, Math.ceil(m.hp), r1(m.anim), m.bite > 0 ? m.bite : m.wind > 0 ? -m.wind : 0, m.fire > 0 ? 1 : 0]),
+      a: this.animals.map(a => [a.id, ANIMAL_KINDS.indexOf(a.k), r1(a.x), r1(a.y), a.dir, r1(a.anim), (a.flee > 0 ? 1 : 0) | (a.flop ? 2 : 0) | (a.bite > 0 ? 4 : 0) | (a.perch ? 8 : 0)]),
       s: this.structs.map(s => [s.id, s.type, s.x, s.y, s.team, Math.round(s.prog * 100) / 100, Math.ceil(s.hp), s.fire > 0 ? 1 : 0, s.lv ? 1 : 0]),
       v: this.vehicles.map(v => [v.id, VEH_CODES.indexOf(v.type), r1(v.x), r1(v.y), v.dir, v.team, Math.ceil(v.hp), Math.round(v.ang * 100) / 100, invEnc(v.inv), v.fire > 0 ? 1 : 0, v.pusher, v.cd]),
       t: this.teams.map(t => [t.money, t.sel, t.elim ? 1 : 0, Object.keys(t.res).join(','), t.rq, Math.round(t.rp * 1000) / 1000, t.ai ? 1 : 0, t.diff || '', t.stat || '', t.helper ? 1 : 0]),
@@ -1410,13 +1445,16 @@ class World {
       const c = old.get(a[0]) || { rx: a[2], ry: a[3] };
       const fl = a[13] || 0;
       Object.assign(c, { id: a[0], team: a[1], x: a[2], y: a[3], dir: a[4], act: ACTS[a[5]], hp: a[6], anim: a[7], inv: invDec(a[8]), breath: a[9], name: a[10], punch: a[11], digA: a[12],
-        armor: fl & 1, knight: fl & 2, block: fl & 4, bowT: fl & 8 ? 1 : 0, fire: fl & 16 ? 1 : 0, blockT: fl & 32 ? 1 : 0, arrows: a[14], inside: a[15], swing: a[16], veh: a[17], slot: a[18] || 0 });
+        armor: fl & 1, knight: fl & 2, block: fl & 4, bowT: fl & 8 ? 1 : 0, fire: fl & 16 ? 1 : 0, blockT: fl & 32 ? 1 : 0, invT: fl & 64 ? 1 : 0, arrows: a[14], inside: a[15], swing: a[16], veh: a[17], slot: a[18] || 0 });
+      c.hk = a[19] ? { st: a[19], x: a[20], y: a[21] } : null; c.bl = a[22] ? { gas: a[22] === 1 ? 1 : 0 } : null; c.escCd = a[23] ? this.tick + a[23] * 60 : 0;
       return c;
     });
     const oi = new Map(this.items.map(c => [c.id, c]));
     this.items = s.i.map(a => { const it = oi.get(a[0]) || { rx: a[2], ry: a[3] }; Object.assign(it, { id: a[0], type: ITEM_CODES[a[1]], x: a[2], y: a[3], fuse: a[4], stuck: !!a[5], vx: a[6], vy: a[7], landed: !!a[8] }); if (it.type === 'arrow' && !it.landed) it.ang = Math.atan2(it.vy, it.vx); return it; });
     const om = new Map(this.monsters.map(c => [c.id, c]));
-    this.monsters = s.m.map(a => { const m = om.get(a[0]) || { rx: a[1], ry: a[2] }; Object.assign(m, { id: a[0], x: a[1], y: a[2], dir: a[3], hp: a[4], anim: a[5], bite: a[6], fire: a[7] }); return m; });
+    this.monsters = s.m.map(a => { const m = om.get(a[0]) || { rx: a[1], ry: a[2] }; Object.assign(m, { id: a[0], x: a[1], y: a[2], dir: a[3], hp: a[4], anim: a[5], bite: a[6] > 0 ? a[6] : 0, wind: a[6] < 0 ? -a[6] : 0, fire: a[7] }); return m; });
+    const oa = new Map(this.animals.map(c => [c.id, c]));
+    this.animals = (s.a || []).map(a => { const o = oa.get(a[0]) || { rx: a[2], ry: a[3] }; Object.assign(o, { id: a[0], k: ANIMAL_KINDS[a[1]], x: a[2], y: a[3], dir: a[4], anim: a[5], flee: a[6] & 1, flop: a[6] & 2, bite: a[6] & 4 ? 1 : 0, perch: a[6] & 8 }); return o; });
     this.structs = s.s.map(a => { const B = BUILD[a[1]]; return { id: a[0], type: a[1], x: a[2], y: a[3], team: a[4], prog: a[5], hp: a[6], fire: a[7], lv: a[8] || 0, w: B.w, h: B.h }; });
     const ov = new Map(this.vehicles.map(c => [c.id, c]));
     this.vehicles = (s.v || []).map(a => { const v = ov.get(a[0]) || { rx: a[2], ry: a[3] }; Object.assign(v, { id: a[0], type: VEH_CODES[a[1]], x: a[2], y: a[3], dir: a[4], team: a[5], hp: a[6], ang: a[7], inv: invDec(a[8]), fire: a[9], pusher: a[10], cd: a[11] }); return v; });

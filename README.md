@@ -81,6 +81,49 @@ für den Mehrspieler wird er nicht mehr gebraucht. Lokal geht auch `python3 -m h
 * **Tag & Nacht** (4 Minuten pro Tag): Himmel, Sterne, Sonne/Mond, Dunkelheit mit Lichtquellen (Buddler, Gebäude, Feuer, Lava, Explosionen). Nachts sind Monster schneller und zahlreicher.
 * **Gamepad** (Gamepad-API, Standardbelegung) – siehe unten und Hilfe [H].
 
+## Tiere, Enterhaken, Ballon, Notausgang
+* **Tiere** (Schalter „Tiere“ im Einzelspieler-Menü bzw. in der Lobby, Standard an; Anzahl wächst mit der Kartengröße,
+  im Mehrspieler vom Host synchronisiert, fehlende Tiere tauchen nach und nach wieder auf):
+  * **Wipfe** laufen und hüpfen über die Wiesen, fliehen vor Gefahr (Monster, Explosionen, Kämpfe, Feuer). Mit **E** fangen
+    (belegt einen der 3 Inventarplätze), mit **Q** freilassen, werfen oder an der Hütte für 6 Geld verkaufen.
+  * **Vögel** am Himmel (setzen sich auch mal hin, fliegen vor Buddlern weg), **Fische** in Seen, **Fledermäuse** in Höhlen.
+  * **Haie** in tiefem Wasser: jagen schwimmende Buddler und beißen (13 Schaden). Mit Pfeilen, Würfen, Schwert oder Sprengstoff zu besiegen.
+* **Monster** (neu gezeichnet): geduckte, stachelige Bestie mit glühenden Augen, Krallen und Zähnen. Vor dem Biss duckt sie sich
+  und knurrt kurz (rotes „!“ über dem Kopf) – Zeit zum Ausweichen oder Blocken. Verletzte Monster blinken auf und zeigen einen Lebensbalken.
+* **Enterhaken** (Laden, 15 Geld): **Linksklick** schießt den Haken zum Mauszeiger (Vorschau: grüner Kreis = trifft, rotes X = zu weit).
+  Er hält an festem Material (Erde, Fels, Holz …). Am Seil: **W/S** einholen/ablassen, **A/D** schwingen, **Leertaste** abspringen,
+  **Linksklick/E** Seil lösen. Bricht der Ankerpunkt weg, fällt man.
+* **Ballon** (Forschung „Ballonbau“, dann Laden, 12 Geld): **Linksklick** bläst ihn auf (braucht etwas Platz nach oben), der Buddler
+  schwebt ~24 s langsam nach oben. **A/D** lenken, **S** sinken, **Leertaste/E** am Boden einpacken bzw. in der Luft loslassen.
+  Pfeile, Würfe, Explosionen, Feuer und Lava lassen ihn platzen.
+* **Notausgang**: unter der Erde **N 1,5 s halten** (oder Pause › Notausgang) → der Buddler kehrt zur nächsten eigenen Basis zurück
+  (ohne Basis: an die Oberfläche). Kostet 10 Geld, ohne Geld 20 Leben; 60 s Abklingzeit; nicht im Gebäude, nicht an der Oberfläche
+  und nicht mit Gegnern in der Nähe.
+* **Kurze Unverwundbarkeit**: nach einem Treffer (ab 3 Schaden) blinkt der Buddler ~1 s und nimmt keinen weiteren Treffer-Schaden
+  (Feuer, Lava und Ertrinken wirken weiter).
+* Die **KI** (Mittel/Schwer) kauft nach wiederholtem Steckenbleiben einen Enterhaken und zieht sich damit aus Gruben; Ballons nutzt
+  sie, wenn sie welche trägt. Echte KI-Teams verwenden nach sehr langem Feststecken unter der Erde auch den Notausgang.
+
+## Komfort
+* **Zoom**: Mausrad (Standard; **Shift+Mausrad** wechselt dann den Inventarplatz – in den Einstellungen umkehrbar), Tasten **+ / −**
+  (bzw. Num+ / Num−), auf Touch-Geräten mit **zwei Fingern** (Pinch). Grenzen 50–250 %, beim Herauszoomen höchstens so weit,
+  dass die Karte den Bildschirm noch füllt. Der Zoom wird gespeichert.
+* **Speichern/Laden** (Einzelspieler): Pause › „Speichern / Laden“ – 3 Plätze im Browser (localStorage, komprimiert,
+  ca. 100–300 KB je Stand). Laden auch im Hauptmenü („Spiel laden“). Überschreiben/Löschen mit Bestätigung (zweiter Klick).
+
+## Mehrspieler: Chat, Emotes, Host-Wechsel
+* **Chat**: **Enter** öffnet die Eingabe (max. 120 Zeichen), Enter sendet, Esc bricht ab. Nachrichten erscheinen als Sprechblase
+  über dem ausgewählten Buddler und im Chatverlauf links unten. Touch: 💬-Knopf oben.
+* **Emotes**: **G halten** öffnet das Emote-Rad (Maus zeigen, loslassen) oder G halten + **1–8**; im Chatfenster als Knöpfe
+  (👋 Hallo, 👍 Gut gemacht, 😂 Haha, 😮 Oha, 😠 Grrr, ❤️ Danke, 🆘 Hilfe, 💰 Gold).
+* Der Host prüft alle Nachrichten (Länge, Steuerzeichen, max. 6 Nachrichten pro 5 s je Spieler); Anzeige ist HTML-sicher.
+* **Host-Wechsel (best effort)**: Der Host schickt alle 5 s einen kompakten Spielstand an alle. Verlässt er das Spiel
+  (Tab zu, Verbindung weg – erkannt per Lebenszeichen nach ~6 s), übernimmt der erste verbliebene Mitspieler die Raum-ID,
+  die anderen verbinden sich automatisch neu (gleiches Team, kein Passwort nötig). Das Team des alten Hosts übernimmt die KI.
+  Im Test dauerte das ~7 s (neuer Host) bzw. ~10 s (übrige Spieler). Wer nicht binnen 20 s zurückkommt, wird von der KI ersetzt;
+  kommt er später doch noch über den Einladungslink, bekommt er eine neue Zuschauer-Kennung.
+* Verbindet sich ein Mitspieler nach einem Abbruch neu (Seite noch offen), übernimmt er wieder sein Team.
+
 ## Oberfläche
 * Modernes „Glas“-Design, Schriften Inter und Lilita One (OFL), alles responsiv (Desktop, Tablet, Handy quer).
 * HUD: Geld mit Symbol, Uhrzeit/Tag, Gesundheits- und Luftbalken, **Schnellleiste mit 3 Inventarplätzen** (Symbole + Tasten 1–3),
@@ -101,8 +144,13 @@ für den Mehrspieler wird er nicht mehr gebraucht. Lokal geht auch `python3 -m h
 | **Linke Maustaste** | Aktion zum Mauszeiger: Werfen · Schwert · Bogen · Faust · Katapult/Kanone feuern · Lore beladen |
 | **Rechte Maustaste (halten)** | In Richtung Mauszeiger graben · mit Schwert/Schild: Blocken |
 | Maus bewegen | Zielen (auch Katapult-/Kanonenwinkel) |
-| 1 / 2 / 3 oder Mausrad | Inventarplatz wählen |
-| E | Benutzen: Fahrzeug anfassen/loslassen, Gebäude betreten/verlassen, Gegenstand aufheben |
+| 1 / 2 / 3 oder Shift + Mausrad | Inventarplatz wählen |
+| Mausrad · + / − | Zoomen |
+| N (1,5 s halten) | Notausgang |
+| Enter / G (halten) | Chat / Emote-Rad (Mehrspieler) |
+| E | Benutzen: Fahrzeug anfassen/loslassen, Gebäude betreten/verlassen, Gegenstand aufheben, Wipf fangen |
+| Am Seil: W/S · A/D · Leertaste | Einholen/Ablassen · Schwingen · Abspringen |
+| Im Ballon: A/D · S · Leertaste | Lenken · Sinken · Einpacken/Loslassen |
 | Q | Ablegen (TNT wird gezündet) · Lore ausladen |
 | F / X | Nahkampf / Graben an-aus (ohne Maus) |
 | Tab | Nächster Buddler |
@@ -112,7 +160,7 @@ für den Mehrspieler wird er nicht mehr gebraucht. Lokal geht auch `python3 -m h
 ## Steuerung (Gamepad, Twin-Stick)
 | Knopf | Aktion |
 |---|---|
-| Linker Stick | Laufen, ↑ Klettern; ganz ausgelenkt = Sprinten |
+| Linker Stick | Laufen, ↑ Klettern; ganz ausgelenkt = Sprinten · am Seil ↑/↓ einholen/ablassen |
 | Rechter Stick | Zielen (Zielkreuz + Wurfbahn) |
 | RT / LT (halten) | Aktion / Graben zum Ziel bzw. Blocken |
 | A / B / X / Y | Springen / Graben an-aus / Benutzen / Ablegen |
@@ -122,11 +170,18 @@ für den Mehrspieler wird er nicht mehr gebraucht. Lokal geht auch `python3 -m h
 
 ## Touch
 Virtueller Stick links, Knöpfe rechts (Aktion, Sprung, Graben, Benutzen, Ablegen, Platz, Buddler), Dock als Symbolleiste oben.
-Tippen in die Welt = Aktion zu dieser Stelle, lange drücken = dorthin graben. In den Einstellungen: Touch Auto/An/Aus.
+Tippen in die Welt = Aktion zu dieser Stelle, lange drücken = dorthin graben, zwei Finger = zoomen, 💬 = Chat/Emotes. Am Seil: Stick hoch/runter = einholen/ablassen, Sprung = abspringen. In den Einstellungen: Touch Auto/An/Aus.
 
 ## Bekannte Einschränkungen
 * Mitspieler (nicht Host) haben übers Internet eine kleine Verzögerung; wer mitten in ein Spiel kommt, schaut zu.
-* Verlässt der Host das Spiel, endet die Runde für alle (kein Host-Wechsel).
+* Host-Wechsel ist „best effort“: Es gibt genau einen Nachfolger-Kandidaten nach dem anderen (je 15 s Zeit); Stand ist der letzte
+  Zwischenstand (max. ~5 s alt) plus die Positionen aus den Schnappschüssen des Nachfolgers – ganz kurz vor dem Wechsel Gekauftes
+  oder Erforschtes kann verloren gehen. Die KI-Planung startet neu. Ist die Raum-ID beim Vermittlungsdienst noch belegt
+  (Host nur „eingefroren“ statt weg), scheitert die Übernahme und alle landen mit Hinweis im Hauptmenü.
+* Läuft der Host-Tab im Hintergrund, drosselt der Browser das Spiel für alle (wie bisher).
+* Kein Splitscreen (bewusst weggelassen, um die Stabilität nicht zu gefährden).
+* Speichern nur im Einzelspieler; Spielstände liegen im Browser des Geräts (kein Export).
+* Emojis im Chat nutzen die Emoji-Schrift des Systems (Aussehen je nach Gerät).
 * Ohne TURN-Server klappt die P2P-Verbindung bei manchen NAT-/Firewall-Kombinationen nicht. Die PeerJS-Cloud ist ein kostenloser Dienst ohne Garantie.
 * Gamepad: es wird das erste verbundene Gamepad für den lokalen Spieler genutzt (kein Splitscreen).
 * Touch-Steuerung ist eine einfache Grundversion (kein Zielen mit Wurfbahn per Finger, außer Tippen auf das Ziel).

@@ -3,6 +3,7 @@
 const SV = (p, extra) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' + (extra || '') + '>' + p + '</svg>';
 const ICONS = {
   coin: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#f5b81c"/><circle cx="12" cy="12" r="7.2" fill="#ffd458" stroke="#c98a0c" stroke-width="1.4"/><path d="M10 8.5h3.2a2 2 0 0 1 0 4H10m0 0h3.6a2 2 0 0 1 0 4H10V8.5" fill="none" stroke="#a86a06" stroke-width="1.6"/></svg>',
+  save: SV('<path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7 3v5h8V3M7 21v-7h10v7"/>'),
   cart: SV('<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.6 12.2a1.6 1.6 0 0 0 1.6 1.3h8.6a1.6 1.6 0 0 0 1.6-1.2L21 8H6"/>'),
   sell: SV('<path d="M12 2v20M17 6.5C17 4.6 14.8 3.5 12 3.5S7 4.6 7 6.5 9 9.3 12 10s5 1.7 5 3.8-2.2 3.2-5 3.2-5-1.2-5-3"/>'),
   hammer: SV('<path d="M14.5 6.5 3 18l3 3 11.5-11.5"/><path d="m12.5 4.5 4-3 6 6-3 4z"/>'),
@@ -83,7 +84,7 @@ function refreshKeyTexts() { renderDock(); HUD.sig = {}; if (G.menu === 'help') 
 // ---------- HUD-Aktualisierung ----------
 const HUD = { sig: {}, money: null };
 function setHTML(id, html) { if (HUD.sig[id] === html) return; HUD.sig[id] = html; $(id).innerHTML = html; }
-const ACT_DE = { walk: 'Läuft', jump: 'Springt', climb: 'Klettert', hangle: 'Hangelt', dig: 'Gräbt', swim: 'Schwimmt', fight: 'Kämpft', tumble: 'Taumelt', dead: 'Tot', push: 'Schiebt' };
+const ACT_DE = { walk: 'Läuft', jump: 'Springt', climb: 'Klettert', hangle: 'Hangelt', dig: 'Gräbt', swim: 'Schwimmt', fight: 'Kämpft', tumble: 'Taumelt', dead: 'Tot', push: 'Schiebt', rope: 'Am Seil', float: 'Schwebt' };
 function myClonk() { const w = G.world; if (!w || G.myTeam < 0) return null; const t = w.teams[G.myTeam]; return t ? w.clonks.find(o => o.id === t.sel && o.act !== 'dead') : null; }
 function nearVehicle(w, c) { let v = null; for (const o of w.vehicles) if (!o.pusher && Math.abs(o.x - c.x) < VEH[o.type].w / 2 + 5 && Math.abs(o.y - c.y) < 8 && (!v || Math.abs(o.x - c.x) < Math.abs(v.x - c.x))) v = o; return v; }
 function nearDoor(w, c) { return w.structs.find(s => s.team === c.team && s.prog >= 1 && Math.abs(c.x - s.x) < Math.min(14, s.w / 2) && c.y > s.y - 10 && c.y < s.y + 5); }
@@ -93,7 +94,9 @@ function interactTarget(w, c) {
   const v = nearVehicle(w, c), s = nearDoor(w, c);
   if (v && !(s && Math.abs(s.x - c.x) < Math.abs(v.x - c.x))) return { kind: 'veh', o: v, label: VEH[v.type].name + (VEH[v.type].gun ? ' bedienen' : ' schieben') };
   if (s) return { kind: 'door', o: s, label: BUILD[s.type].name + ' betreten' };
-  const it = nearItem(w, c); if (it) return { kind: 'item', o: it, label: (ITEMS[it.type] ? ITEMS[it.type].name : it.type) + ' aufheben' };
+  const it = nearItem(w, c), wf = w.nearWipf ? w.nearWipf(c, it ? Math.hypot(it.x - c.x, (it.y - c.y + 4) * 1.5) : 14) : null;
+  if (wf) return { kind: 'wipf', o: wf, label: 'Wipf fangen' };
+  if (it) return { kind: 'item', o: it, label: (ITEMS[it.type] ? ITEMS[it.type].name : it.type) + ' aufheben' };
   return null;
 }
 function pr(cap, txt, main) { return '<span class="pr' + (main ? ' main' : '') + '">' + cap + txt + '</span>'; }
@@ -101,12 +104,18 @@ function primaryLabel(c) {
   const it = actItem(c);
   if (it === 'bow' && c.arrows > 0) return 'Pfeil schießen';
   if (it === 'sword') return 'Schwerthieb';
+  if (it === 'hook') return c.hk ? 'Haken einholen' : 'Enterhaken schießen';
+  if (it === 'balloon') return 'Ballon aufblasen';
+  if (it === 'wipf') return 'Wipf werfen';
   if (!it || it === 'shield' || it === 'bow') return 'Schlagen';
   return (THROWABLE.has(it) ? 'Werfen: ' : 'Werfen: ') + ITEMS[it].name;
 }
 function buildPrompts(w, c) {
   const P = [], prim = bindCap('primary'), sec = bindCap('secondary'), E = bindCap('interact');
   const near = w.nearBase(c);
+  if (G.rescueP > 0) { P.push(pr(bindCap('rescue'), 'Notausgang… ' + Math.round(G.rescueP * 100) + ' %', true)); return P; }
+  if (c.act === 'rope') { P.push(pr(bindCap('up') + bindCap('down'), 'Einholen / Ablassen', true)); P.push(pr(bindCap('left') + bindCap('right'), 'Schwingen')); P.push(pr(bindCap('jump'), 'Abspringen')); P.push(pr(prim, 'Seil lösen')); return P; }
+  if (c.act === 'float') { const gas = c.bl && c.bl.gas > 0; P.push(pr(bindCap('left') + bindCap('right'), 'Lenken', true)); P.push(pr(bindCap('down'), 'Sinken')); P.push(pr(bindCap('jump'), w.solid(c.x, c.y + 2) ? 'Ballon einpacken' : 'Ballon loslassen')); if (!gas) P.push(pr('', 'Ballon verliert Luft')); return P; }
   if (c.inside) {
     const s = w.structs.find(o => o.id === c.inside);
     P.push(pr(E, 'Verlassen', true));
@@ -212,6 +221,22 @@ function drawTrajectory(g, w, c, aim, toS) {
     const dir = Math.abs(aim[0] - cx) > 2 ? Math.sign(aim[0] - cx) : c.dir;
     if (c.inside) { const s = w.structs.find(o => o.id === c.inside); if (!s) return; px = s.type === 'hut' ? s.x + dir * 16 : s.x + dir * (s.w / 2 - 3); py = s.type === 'hut' ? s.y - 6 : s.y - s.h - 2; }
     else { px = cx + dir * 4; py = cy - 8; }
+    if (it === 'hook') {
+      if (c.hk || c.inside) return;
+      const v2 = hookVel(cx + c.dir, cy - 7, aim[0], aim[1], dir); px = cx + c.dir; py = cy - 7;
+      g.save(); let hit = false;
+      for (let t = 0; t < 150; t++) {
+        const nx = px + v2[0] / 3, ny = py + v2[1] / 3; v2[1] += HOOK_G / 3;
+        if (Math.hypot(nx - cx, ny - cy + 7) > HOOK_MAX || nx < 0 || nx >= w.W || ny >= w.H) break;
+        px = nx; py = ny;
+        if (py > 0 && w.solid(px, py)) { hit = true; break; }
+        if (t % 4 === 0) { const [sx, sy] = toS(px, py); g.fillStyle = 'rgba(230,200,140,' + Math.max(0.2, 0.8 - t / 200).toFixed(2) + ')'; g.fillRect(sx - 1.5, sy - 1.5, 3, 3); }
+      }
+      const [sx, sy] = toS(px, py); g.lineWidth = 2; g.strokeStyle = hit ? 'rgba(120,255,140,.95)' : 'rgba(255,120,100,.8)'; g.beginPath();
+      if (hit) g.arc(sx, sy, 5, 0, 7); else { g.moveTo(sx - 4, sy - 4); g.lineTo(sx + 4, sy + 4); g.moveTo(sx + 4, sy - 4); g.lineTo(sx - 4, sy + 4); }
+      g.stroke(); g.restore(); return;
+    }
+    if (it === 'balloon') return;
     if (it === 'bow' && c.arrows > 0) { const v2 = arrowVel(px, py + 1, aim[0], aim[1], dir); vx = v2[0]; vy = v2[1]; grav = 0.07; col = 'rgba(200,230,255,'; }
     else if (it && it !== 'sword' && it !== 'shield' && it !== 'bow') { const v2 = throwVel(px, py, aim[0], aim[1]); vx = v2[0]; vy = v2[1]; grav = 0.1; if (THROWABLE.has(it)) col = 'rgba(255,160,90,'; }
     else return;
@@ -231,10 +256,10 @@ const TUT = [
   { id: 'move', t: () => 'Laufe mit ' + bindCap('left') + ' ' + bindCap('right') + ' – halte ' + bindCap('sprint') + ' zum Sprinten.' },
   { id: 'jump', t: () => 'Springe mit ' + bindCap('jump') + '. An Wänden ' + bindCap('jump') + ' oder ' + bindCap('up') + ' halten, um zu klettern.' },
   { id: 'dig', t: () => 'Halte ' + bindCap('secondary') + ', um zu graben – die Maus bestimmt die Richtung. Grabe nach Gold!' },
-  { id: 'slot', t: () => 'Wähle einen Inventarplatz mit ' + bindCap('slot1') + ' ' + bindCap('slot2') + ' ' + bindCap('slot3') + ' oder dem Mausrad.' },
+  { id: 'slot', t: () => 'Wähle einen Inventarplatz mit ' + bindCap('slot1') + ' ' + bindCap('slot2') + ' ' + bindCap('slot3') + ' oder ' + kbdShift() + '+Mausrad. Das Mausrad allein zoomt.' },
   { id: 'primary', t: () => bindCap('primary') + ' wirft, schlägt oder schießt in Richtung Mauszeiger. Die Punkte zeigen die Flugbahn.' },
   { id: 'shop', t: () => 'Öffne den Laden mit ' + bindCap('shop') + ' oder dem Knopf „Kaufen“ rechts. Gold verkaufst du an der Hütte mit ' + bindCap('sell') + '.' },
-  { id: 'end', t: () => bindCap('interact') + ' benutzt Fahrzeuge und Gebäude. Alles Weitere unter ' + bindCap('help') + ' Hilfe. Viel Spaß!' },
+  { id: 'end', t: () => bindCap('interact') + ' benutzt Fahrzeuge und Gebäude und fängt Wipfe. Steckst du fest: Enterhaken, Ballon oder ' + bindCap('rescue') + ' halten (Notausgang). Alles Weitere unter ' + bindCap('help') + ' Hilfe. Viel Spaß!' },
 ];
 const tut = { on: false, i: 0, x0: 0 };
 function tutStart() { if (settings.tutDone || G.role !== 'single') { tut.on = false; $('tutorial').style.display = 'none'; return; } tut.on = true; tut.i = 0; const c = myClonk(); tut.x0 = c ? c.x : 0; tutRender(); }
@@ -256,3 +281,4 @@ function tutTick() {
   else if (id === 'dig' && c.act === 'dig' && !tut.wait) { tut.wait = 1; setTimeout(() => { tut.wait = 0; tutAdvance(); }, 1200); }
   else if (id === 'shop' && G.menu === 'shop') tutAdvance();
 }
+function kbdShift() { return '<kbd class="k wide">Shift</kbd>'; }

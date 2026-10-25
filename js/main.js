@@ -27,6 +27,16 @@ function handleEvents(evs) {
       if (e.big) w.particles.push({ x: e.x, y: e.y, vx: 0, vy: 0, l: 10, c: 'rgba(0,0,0,0)', s: 0, g: 0, light: 40 });
     }
     else if (e.e === 'msg') { if (e.team === -1 || e.team === G.myTeam) addMsg(e.s); }
+    else if (e.e === 'poof') {
+      const w = G.world, esc = e.k === 'esc', cols = esc ? ['#bfe8ff', '#ffffff', '#8fd0ff'] : e.k === 'fish' || e.k === 'shark' ? ['#cfe6ff', '#9cc8f0', '#ffffff'] : ['#e8e2d8', '#ffffff', '#c9c0b4'];
+      for (let k = 0; k < (esc ? 22 : 10); k++) { const a = Math.random() * 6.28, s = Math.random() * (esc ? 1.6 : 0.9); w.particles.push({ x: e.x, y: e.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 0.4, l: 22 + Math.random() * 20, c: cols[k % 3], s: 1 + (k % 2), g: 0 }); }
+      if (esc) w.particles.push({ x: e.x, y: e.y, vx: 0, vy: 0, l: 18, c: 'rgba(0,0,0,0)', s: 0, g: 0, light: 60 });
+    }
+    else if (e.e === 'pop') {
+      const w = G.world; playSnd('pop', e.x, e.y);
+      for (let k = 0; k < 14; k++) { const a = Math.random() * 6.28, s = 0.6 + Math.random() * 1.4; w.particles.push({ x: e.x, y: e.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, l: 16 + Math.random() * 18, c: k % 3 ? (e.col || '#e33') : '#fff', s: 1 + (k % 2) }); }
+    }
+    else if (e.e === 'away') { const w = G.world; for (let k = 0; k < 6; k++) w.particles.push({ x: e.x + (Math.random() - 0.5) * 6, y: e.y, vx: (Math.random() - 0.5) * 0.3, vy: -0.6 - Math.random() * 0.5, l: 60 + k * 8, c: k % 2 ? (e.col || '#e33') : '#fff', s: 2, g: 0 }); }
     else if (e.e === 'boom') {
       const w = G.world;
       for (let k = 0; k < e.r * 4; k++) { const a = Math.random() * 6.28, s = Math.random() * e.r / 6; w.particles.push({ x: e.x, y: e.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 1, l: 30 + Math.random() * 30, c: ['#fff3a0', '#ffb030', '#ff6a10', '#6b4a2a', '#888'][k % 5], s: 1 + (k % 3 === 0) }); }
@@ -66,28 +76,38 @@ function startSingle(mode) {
   applySize(cfg, $('spsize').value);
   const cn = cleanName($('spcname').value, ''); $('spcname').value = cn; try { localStorage.setItem('br_cname', cn); } catch (e) {}
   cfg.teams[0].cname = cn; cfg.teams[0].helper = $('opthelper').checked;
-  cfg.allResearch = $('optallres').checked; cfg.daynight = $('optday').checked; cfg.lava = true;
+  cfg.allResearch = $('optallres').checked; cfg.daynight = $('optday').checked; cfg.lava = true; cfg.animals = $('optanimals').checked;
   if (mode !== 'settle') cfg.money = cfg.allResearch ? 120 : 60;
   G.role = 'single'; G.myTeam = 0; G.spectate = false; G.spMode = mode;
   launchWorld(cfg, false);
   tutStart();
 }
-function launchWorld(cfg, remote, map) {
+function launchWorld(cfg, remote, map, prebuilt) {
   G.cfg = cfg; G.msgs = []; G.demo = null; G.acc = 0;
-  const w = new World(cfg, remote);
-  if (!remote) w.setup();
+  const w = prebuilt || new World(cfg, remote);
+  if (prebuilt) { }
+  else if (!remote) w.setup();
   else { w.teams = cfg.teams.map((tc, i) => ({ id: i, name: cleanName(tc.name, 'Team'), color: tc.color || TEAM_COLORS[i % 6], ai: !!tc.ai, diff: AI_DIFF[tc.diff] ? tc.diff : 'normal', helper: !tc.ai && !!tc.helper, stat: '', money: 0, sel: -1, elim: false, keys: {}, res: {}, rq: '', rp: 0 })); if (map) w.loadMap(map); }
   G.world = w; R.attach(w); R.miniDom = $('minimap'); R.resize();
   const me = w.teams[G.myTeam]; const f = w.clonks.find(c => me && c.id === me.sel) || w.clonks[0];
   if (f) { R.cam.x = f.x - cv.width / R.scale / 2; R.cam.y = f.y - cv.height / R.scale / 2; }
   G.paused = false; closeAllMenus(); hideAll(); $('hud').style.display = 'block'; $('menubg').style.display = 'none'; $('toasts').innerHTML = '';
+  if ($('tchat')) $('tchat').style.display = G.role === 'single' ? 'none' : '';
+  if (G.rejoinToast) { toast(G.rejoinToast, 'good'); G.rejoinToast = null; }
   HUD.sig = {}; HUD.money = null; $('hud-teams').style.display = ''; cv.classList.add('ingame'); updateTouchUI();
-  if (cfg.size && MAP_SIZES[cfg.size]) addMsg('Karte: ' + MAP_SIZES[cfg.size].n + ' (' + cfg.W + ' × ' + cfg.H + ')');
-  addMsg(cfg.mode === 'settle' ? 'Goldrausch: Verdiene ' + cfg.goal + ' Geld! Grabe Gold und verkaufe es an der Hütte.' : 'Melee: Das letzte überlebende Team gewinnt!');
+  if (typeof chatClose === 'function' && CHAT.open) chatClose();
+  if (!prebuilt) { CHAT.log = []; CHAT.bubbles = {}; if (typeof renderChatLog === 'function') renderChatLog(); }
+  if (prebuilt) { if (G.role !== 'single') addMsg('Spiel geht weiter.'); }
+  else {
+    if (cfg.size && MAP_SIZES[cfg.size]) addMsg('Karte: ' + MAP_SIZES[cfg.size].n + ' (' + cfg.W + ' × ' + cfg.H + ')');
+    addMsg(cfg.mode === 'settle' ? 'Goldrausch: Verdiene ' + cfg.goal + ' Geld! Grabe Gold und verkaufe es an der Hütte.' : 'Melee: Das letzte überlebende Team gewinnt!');
+  }
   input.lastSent = ''; pushKeys(true);
 }
 function toMenu() {
   G.world = null; G.role = 'none'; p2pClose(); net.link = null; net.code = null; tut.on = false; $('tutorial').style.display = 'none';
+  G.mig = null; G.migrating = null; migBanner(''); MIGKEY.secret = MIGKEY.key = MIGKEY.pw = null;
+  if (typeof chatClose === 'function') { chatClose(); wheelClose(false); CHAT.log = []; CHAT.bubbles = {}; renderChatLog(); }
   if (location.hash) history.replaceState(null, '', location.href.split('#')[0]);
   closeAllMenus(); hideAll(); $('hud').style.display = 'none'; $('mainmenu').style.display = 'flex'; cv.classList.remove('ingame'); startDemo();
 }
@@ -123,10 +143,16 @@ function mpErr(t) { $('mperr').textContent = t; $('mpbusy').style.display = 'non
 function onNet(m) {
   switch (m.t) {
     case 'err': $('mperr').textContent = m.s; break;
-    case 'joined': net.id = m.id; net.code = m.code; net.host = m.host; net.players = m.players; net.hostId = m.hostId; net.link = m.link || null; $('mpbusy').style.display = 'none'; $('mperr').textContent = ''; showLobby(); break;
-    case 'players': net.players = m.players; net.hostId = m.hostId; showLobby(); break;
+    case 'joined': net.id = m.id; net.code = m.code; net.host = m.host; net.players = m.players; net.hostId = m.hostId; net.link = m.link || null; $('mpbusy').style.display = 'none'; $('mperr').textContent = '';
+      if (G.migrating && G.world) { G.migrating.joined = true; migBanner('Verbunden – Spielstand wird übertragen…'); break; }
+      showLobby(); break;
+    case 'players': net.players = m.players; net.hostId = m.hostId; if (!G.world && !G.migrating) showLobby(); break;
+    case 'chat': if (G.role === 'client') chatDeliver(m); break;
+    case 'chatin': if (G.role === 'host') hostChatIn(m.from, m.s, m.e); break;
+    case 'mig': if (G.role === 'client' && m.st && Array.isArray(m.order)) G.mig = { st: m.st, order: m.order, hostId: m.hostId, at: Date.now() }; break;
     case 'start':
       if (net.host) return;
+      if (G.migrating) { G.migrating = null; migBanner(''); G.rejoinToast = 'Wieder verbunden – das Spiel geht weiter.'; }
       G.role = 'client'; G.myTeam = m.cfg.teams.findIndex(t => t.pid === net.id); G.spectate = G.myTeam < 0;
       G.pendingCfg = m.cfg; G.world = null; G.chunkBuf = []; hideAll(); $('loading').style.display = 'flex'; break;
     case 'map':
@@ -136,9 +162,15 @@ function onNet(m) {
     case 'snap': if (G.world && G.role === 'client') { G.world.applySnap(m.d); handleEvents(m.ev || []); } break;
     case 'chunks': if (G.world && G.role === 'client') for (const [ci, d] of m.c) G.world.applyChunk(ci, d); else if (G.chunkBuf && G.role === 'client') G.chunkBuf.push(...m.c); break;
     case 'in': if (G.role === 'host' && G.world) { const ti = G.world.teams.findIndex(t => t.pid === m.from); if (ti < 0) return; if (m.k) G.world.setKeys(ti, m.k); if (m.a) G.world.action(ti, m.a, m.arg); } break;
-    case 'late': if (G.role === 'host' && G.world) { netSend({ t: 'start', cfg: G.cfg, to: m.id }); sendMap(m.id); addMsg(m.name + ' schaut zu.'); } break;
-    case 'left': if (G.role === 'host' && G.world) { const t = G.world.teams.find(t => t.pid === m.id); if (t && !t.ai) { G.world.aiTakeover(t, G.cfg.takeover || 'normal'); addMsg(t.name + ' hat das Spiel verlassen – KI (' + aiDiffName(t.diff) + ') übernimmt.'); } } break;
-    case 'hostleft': toMenu(); toast('Der Host hat das Spiel verlassen.', 'warn'); break;
+    case 'late': if (G.role === 'host' && G.world) {
+      netSend({ t: 'start', cfg: G.cfg, to: m.id }); sendMap(m.id);
+      G.migSoon = G.world.tick + 90;
+      const t = G.world.teams.find(t => t.pid === m.id);
+      if (t && !t.elim) { if (t.wasHuman) restoreHuman(t); addMsg(t.name + ' ist wieder verbunden.'); }
+      else addMsg(m.name + ' schaut zu.');
+    } break;
+    case 'left': if (G.role === 'host' && G.world) { const t = G.world.teams.find(t => t.pid === m.id); if (t && !t.ai) { t.awaitUntil = 0; humanToAi(t); addMsg(t.name + ' hat das Spiel verlassen – KI (' + aiDiffName(t.diff) + ') übernimmt.'); } } break;
+    case 'hostleft': onHostLeft(); break;
   }
 }
 function showLobby() {
@@ -165,15 +197,81 @@ function hostStart() {
   for (let k = 0; k < ai; k++) teams.push({ name: 'KI ' + (k + 1), ai: true, diff: diffs[k] || 'normal', color: TEAM_COLORS[teams.length % 6] });
   if (teams.length < 2) { alert('Mindestens 2 Teams nötig (KI-Gegner hinzufügen oder auf Mitspieler warten).'); return; }
   const allRes = $('optallres2').checked;
-  const cfg = { mode: 'melee', W: 1100 + teams.length * 380, H: 620, seed: newSeed(), teams, clonks: cl, money: allRes ? 120 : 60, monsters: mon, monsterCount: 3, allResearch: allRes, daynight: $('optday2').checked, lava: true, takeover: $('opttakeover').value };
+  const cfg = { mode: 'melee', W: 1100 + teams.length * 380, H: 620, seed: newSeed(), teams, clonks: cl, money: allRes ? 120 : 60, monsters: mon, monsterCount: 3, allResearch: allRes, daynight: $('optday2').checked, animals: $('optanimals2').checked, lava: true, takeover: $('opttakeover').value };
   applySize(cfg, $('optsize').value);
   G.role = 'host'; G.myTeam = teams.findIndex(t => t.pid === net.id); G.spectate = false;
   launchWorld(cfg, false);
   netSend({ t: 'start', cfg }); sendMap();
   G.world.netDirty.clear(); G.chunkSent = new Map();
 }
+// ---------- Host-Wechsel (best effort) ----------
+function humanToAi(t) { if (!t.wasHuman) { t.wasHuman = true; t.helperWas = !!t.helper; } G.world.aiTakeover(t, G.cfg.takeover || 'normal'); }
+function restoreHuman(t) {
+  t.ai = false; t.helper = !!t.helperWas; t.brain = null; t.stat = ''; t.keys = { ...NOKEYS }; t.awaitUntil = 0;
+  const tc = G.cfg.teams[t.id]; if (tc) { tc.ai = false; }
+  for (const c of G.world.clonks) if (c.team === t.id) { c.ai = null; c.aiKeys = { ...NOKEYS }; }
+}
+function migOrder() {
+  const ids = [...P2P.conns.values()].filter(c => c.auth).map(c => c.id), hasTeam = id => G.cfg.teams.some(t => t.pid === id);
+  return ids.filter(hasTeam).concat(ids.filter(id => !hasTeam(id)));
+}
+function migBanner(s) { const b = $('migbanner'); if (!b) return; b.textContent = s; b.style.display = s ? 'block' : 'none'; }
+function migFail(why) { console.warn('Host-Wechsel', why); toMenu(); toast('Der Host hat das Spiel verlassen' + (why ? ' – Übernahme fehlgeschlagen.' : '.'), 'warn'); }
+function onHostLeft() {
+  const w = G.world;
+  if (!w || G.role !== 'client' || w.state !== 'run' || !G.mig || Date.now() - G.mig.at > 20000 || !MIGKEY.key) { migFail(''); return; }
+  const oldHost = net.hostId, order = G.mig.order.filter(id => id !== oldHost && id !== G.mig.hostId), succ = order[0];
+  if (!succ) { migFail(''); return; }
+  releaseAll(); if (typeof chatClose === 'function') chatClose();
+  G.migrating = { t0: Date.now(), tc: Date.now(), succ, oldHost, cands: order, idx: 0 };
+  // Nachfolger: erst kurz prüfen, ob der Host noch da ist (vielleicht war nur die eigene Verbindung weg), sonst übernehmen
+  if (succ === net.id) { migBanner('Verbindung zum Host verloren – prüfe…'); G.migrating.probe = true; setTimeout(migRejoin, 300); }
+  else { migBanner('Der Host ist weg – warte auf neuen Host…'); setTimeout(migRejoin, 2500); }
+}
+function migPromote() {
+  const M = G.migrating, live = G.world, mig = G.mig; M.promoting = true;
+  p2pPromote(net.id, Math.max(10, ...mig.order) + 1, () => {
+    if (G.migrating !== M) return;
+    let w;
+    try { w = deserializeWorld(mig.st, live.mat); mergeLive(w, live); }
+    catch (e) { console.warn('Host-Wechsel', e); p2pClose(); migFail('state'); return; }
+    G.migrating = null; migBanner('');
+    G.role = 'host'; net.host = true; net.hostId = net.id; net.players = hostPlayers();
+    G.myTeam = w.teams.findIndex((t, i) => w.cfg.teams[i] && w.cfg.teams[i].pid === net.id); G.spectate = G.myTeam < 0;
+    G.pendingEv = []; G.mapPending = 0;
+    launchWorld(w.cfg, false, null, w);
+    w.netDirty.clear(); G.chunkSent = new Map(); G.migSoon = w.tick + 60;
+    const now = Date.now();
+    w.teams.forEach((t, i) => {
+      const tc = w.cfg.teams[i]; if (!tc || tc.ai || t.elim || t.ai) return;
+      if (tc.pid === M.oldHost) { humanToAi(t); addMsg(t.name + ' (alter Host) ist weg – KI (' + aiDiffName(t.diff) + ') übernimmt.'); }
+      else if (tc.pid !== net.id) { t.wasHuman = true; t.helperWas = !!t.helper; t.awaitUntil = now + 20000; }
+    });
+    addMsg('Du bist jetzt der Host. Die anderen verbinden sich neu…');
+    toast('Host-Wechsel: Du bist jetzt der Host.', 'good');
+  }, err => { if (G.migrating !== M) return; migFail(err || 'claim'); }, 40000);
+}
+function migRejoin() {
+  const M = G.migrating; if (!M || !G.world || M.promoting) return;
+  // Nachfolger meldet sich nicht → nächster Kandidat (ggf. man selbst) übernimmt
+  if (!M.joined && Date.now() - M.tc > 15000) {
+    M.idx++; M.tc = Date.now(); const nx = M.cands[M.idx];
+    if (nx === undefined) { migFail('timeout'); return; }
+    if (nx === net.id) { p2pClose(); migBanner('Der Host ist weg – du übernimmst das Spiel…'); migPromote(); return; }
+  }
+  if (Date.now() - M.t0 > 70000) { migFail('timeout'); return; }
+  let failed = false;
+  p2pJoin(MIGKEY.secret, MIGKEY.name, MIGKEY.pw, err => {
+    if (failed || G.migrating !== M || M.joined) return; failed = true;
+    if (M.probe) { M.probe = false; migBanner('Der Host ist weg – du übernimmst das Spiel…'); migPromote(); return; }
+    if (/Passwort|voll/.test(String(err))) { migFail(err); return; }
+    setTimeout(migRejoin, 2000);
+  }, MIGKEY.cname, net.id);
+}
 function hostSync() {
   const w = G.world;
+  if ((w.tick % 300 === 150 || w.tick === G.migSoon) && P2P.conns.size && w.state === 'run') { try { netSend({ t: 'mig', st: serializeWorld(w, false), order: migOrder(), hostId: P2P.myId }); } catch (e) { console.warn('mig', e); } }
+  if (w.tick % 60 === 30) { const now = Date.now(); for (const t of w.teams) if (t.awaitUntil && now > t.awaitUntil && !t.ai) { t.awaitUntil = 0; humanToAi(t); addMsg(t.name + ' ist nicht zurückgekommen – KI (' + aiDiffName(t.diff) + ') übernimmt.'); } }
   if (w.tick % 3 === 0) { netSend({ t: 'snap', d: w.snap(), ev: G.pendingEv }); G.pendingEv = []; }
   if (w.tick % 3 === 1 && w.netDirty.size && !G.mapPending) {
     const arr = []; const ls = G.chunkSent || (G.chunkSent = new Map()); const now = w.tick;
@@ -215,7 +313,7 @@ function frame(ts) {
   if (!focus) focus = w.clonks.find(c => c.act !== 'dead');
   if (focus && w.remote) focus = { x: focus.rx !== undefined ? focus.rx : focus.x, y: focus.ry !== undefined ? focus.ry : focus.y };
   R.draw(w, focus, G.myTeam, dt);
-  drawAimOverlay();
+  drawAimOverlay(); drawBubbles(); G.rescueP = rescueTick();
   if (input.mouse.moved && (input.kb.g || pad.keys.g || input.touch.keys.g || myPushingGun())) pushKeys();
   updateHUD(); tutTick();
   checkOver();

@@ -24,6 +24,11 @@ const ACTIONS = [
   { k: 'help', n: 'Hilfe / Steuerung', g: 'Menüs', def: ['KeyH', 'F1'] },
   { k: 'settings', n: 'Einstellungen', g: 'Menüs', def: ['KeyO'] },
   { k: 'mute', n: 'Ton an/aus', g: 'Menüs', def: ['KeyM'] },
+  { k: 'zoomin', n: 'Hineinzoomen (auch Mausrad)', g: 'Ansicht', def: ['BracketRight', 'NumpadAdd'] },
+  { k: 'zoomout', n: 'Herauszoomen (auch Mausrad)', g: 'Ansicht', def: ['Slash', 'NumpadSubtract'] },
+  { k: 'chat', n: 'Chat öffnen (Mehrspieler)', g: 'Mehrspieler', def: ['Enter'] },
+  { k: 'emote', n: 'Emote-Rad (halten, zeigen, loslassen)', g: 'Mehrspieler', def: ['KeyG'] },
+  { k: 'rescue', n: 'Notausgang (1,5 s halten)', g: 'Aktionen', def: ['KeyN'] },
 ];
 const ACT_BY = Object.fromEntries(ACTIONS.map(a => [a.k, a]));
 let binds = {};
@@ -109,7 +114,7 @@ function press(code, repeat) {
     if (HOLD[a]) {
       if (!canPlay()) continue;
       if (!repeat) {
-        if (a === 'jump' || a === 'up') act('jump');
+        if (a === 'jump') act('jump'); else if (a === 'up') act('up');
         if (a === 'down') { const now = performance.now(); if (now - input.lastDown < 280) act('digdown'); input.lastDown = now; }
       }
       input.kb[HOLD[a]] = 1; used = true; continue;
@@ -131,13 +136,21 @@ function press(code, repeat) {
       case 'help': toggleMenu('help'); break;
       case 'settings': toggleMenu('settings'); break;
       case 'mute': audio.muted = !audio.muted; toast(audio.muted ? 'Ton aus' : 'Ton an', 'info'); break;
+      case 'zoomin': if (G.world) zoomBy(1); break;
+      case 'zoomout': if (G.world) zoomBy(-1); break;
+      case 'chat': if (G.world && G.role !== 'single') chatOpen(); else if (G.world) toast('Chat gibt es nur im Mehrspieler.', 'info'); break;
+      case 'emote': if (G.world && G.role !== 'single') wheelOpen(); break;
+      case 'rescue': if (canPlay()) rescueStart(); break;
     }
   }
   pushKeys();
   return used;
 }
 function release(code) {
-  if (!actionsFor(code).some(a => HOLD[a])) return;
+  const al = actionsFor(code);
+  if (al.includes('emote')) wheelClose(true);
+  if (al.includes('rescue')) rescueStop();
+  if (!al.some(a => HOLD[a])) return;
   const nk = { l: 0, r: 0, u: 0, d: 0, s: 0, g: 0 };
   for (const a in HOLD) if (binds[a] && binds[a].some(c => heldCodes.has(c))) nk[HOLD[a]] = 1;
   for (const n in nk) input.kb[n] = nk[n] && canPlay() ? 1 : 0;
@@ -148,6 +161,8 @@ const heldCodes = new Set();
 // ---------- Tastatur ----------
 addEventListener('keydown', e => {
   if (input.listen) { e.preventDefault(); finishListen(e.code); return; }
+  if (CHAT.wheel && /^Digit[1-8]$/.test(e.code)) { e.preventDefault(); CHAT.wheel.sel = +e.code.slice(5) - 1; wheelClose(true); return; }
+  if (CHAT.wheel && e.code === 'Escape') { wheelClose(false); return; }
   const tag = document.activeElement && document.activeElement.tagName;
   if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') { if (e.code === 'Escape') document.activeElement.blur(); return; }
   if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'F1'].includes(e.code)) e.preventDefault();
@@ -160,7 +175,44 @@ addEventListener('keydown', e => {
   press(e.code, e.repeat);
 });
 addEventListener('keyup', e => { heldCodes.delete(e.code); release(e.code); });
-addEventListener('blur', () => { heldCodes.clear(); releaseAll(); });
+addEventListener('blur', () => { heldCodes.clear(); releaseAll(); rescueStop(); wheelClose(false); });
+// ---------- Notausgang (halten) ----------
+const RESCUE_MS = 1500;
+function escapeInfo() {
+  const w = G.world, c = myClonk(); if (!w || !c) return null;
+  const why = w.escapeCheck(c), t = w.teams[c.team];
+  return { ok: !why, why: why.replace(/\.$/, ''), cost: t && t.money >= ESCAPE_COST ? ESCAPE_COST + ' Geld' : ESCAPE_HP + ' Leben' };
+}
+function doEscape() { const e = escapeInfo(); if (!e) return; if (!e.ok) { toast(e.why, 'warn'); return; } act('escape'); }
+function rescueStart() { if (input.rescue) return; const e = escapeInfo(); if (e && !e.ok) { toast(e.why, 'warn'); return; } input.rescue = { t0: performance.now() }; }
+function rescueStop() { input.rescue = null; }
+function rescueTick() { // aus der Hauptschleife: Fortschritt 0..1
+  const r = input.rescue; if (!r) return 0;
+  if (!canPlay()) { input.rescue = null; return 0; }
+  const p = (performance.now() - r.t0) / RESCUE_MS;
+  if (p >= 1) { input.rescue = null; doEscape(); return 0; }
+  return p;
+}
+// ---------- Zoom (Mausrad, Tasten, Zwei-Finger-Geste) ----------
+const ZOOM_STEPS = [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.75, 2, 2.5];
+function setZoom(z, quiet) {
+  const before = R.zoom; R.setZoom(z, G.world || G.demo);
+  settings.zoom = R.zoom; saveSettings && saveSettings();
+  if (!quiet && G.world && Math.abs(before - R.zoom) > 1e-3) zoomHint();
+  else if (!quiet && G.world && Math.abs(z - R.zoom) > 1e-3) zoomHint(z > R.zoom ? 'Maximaler Zoom' : 'Minimaler Zoom');
+}
+function zoomBy(d) {
+  const z = R.zoom; let t = null;
+  if (d > 0) t = ZOOM_STEPS.find(s => s > z + 1e-3); else for (let k = ZOOM_STEPS.length - 1; k >= 0; k--) if (ZOOM_STEPS[k] < z - 1e-3) { t = ZOOM_STEPS[k]; break; }
+  setZoom(t == null ? z + (d > 0 ? 0.5 : -0.25) : t);
+}
+let zoomHintT = 0;
+let zoomToast = null;
+function zoomHint(s) { // ein einziger, wiederverwendeter Hinweis statt Toast-Flut
+  const txt = s || ('Zoom ' + Math.round(R.zoom * 100) + ' %');
+  if (zoomToast && zoomToast.isConnected) { zoomToast.textContent = txt; clearTimeout(zoomToast._t); zoomToast._t = setTimeout(() => zoomToast && zoomToast.remove(), 1400); return; }
+  toast(txt, 'info'); const box = $('toasts'); zoomToast = box && box.lastChild; if (zoomToast) zoomToast._t = setTimeout(() => zoomToast && zoomToast.remove(), 1400);
+}
 function menuKey(e) { // Tasten in Menüs
   const id = G.menu, c = e.code;
   if (c === 'Escape') { closeAllMenus(); return true; }
@@ -195,10 +247,14 @@ cv.addEventListener('pointerdown', e => {
 addEventListener('pointerup', e => { if (e.pointerType === 'touch') return; const code = 'Mouse' + e.button; if (heldCodes.has(code)) { heldCodes.delete(code); release(code); } });
 addEventListener('pointerdown', e => { if (input.listen && e.pointerType !== 'touch') { e.preventDefault(); e.stopPropagation(); finishListen('Mouse' + e.button); } }, true);
 cv.addEventListener('wheel', e => {
-  e.preventDefault(); if (!canPlay()) return;
+  e.preventDefault(); if (!G.world || G.menu) return;
   const now = performance.now(); if (now - input.wheelT < 70) return; input.wheelT = now;
-  act('slotd', e.deltaY > 0 ? 1 : -1);
+  const slot = settings.wheel === 'slot' ? !e.shiftKey : e.shiftKey; // Standard: Rad = Zoom, Shift+Rad = Inventarplatz
+  const dy = e.deltaY || e.deltaX; if (!dy) return; // Shift+Rad liefert in manchen Browsern deltaX
+  if (slot) { if (canPlay()) act('slotd', dy > 0 ? 1 : -1); return; }
+  zoomBy(dy < 0 ? 1 : -1);
 }, { passive: false });
+addEventListener('mousemove', e => { if (CHAT.wheel) { const r = cv.getBoundingClientRect(); wheelMove(e.clientX - r.left, e.clientY - r.top); } });
 
 // ---------- Neu belegen ----------
 function startListen(action, idx) { input.listen = { action, idx }; renderSettings(); }
@@ -226,6 +282,7 @@ function pollPad() {
   const ax = gp.axes || [];
   const lx = ax[0] || 0, ly = ax[1] || 0, rx = ax[2] || 0, ry = ax[3] || 0;
   const st = { l: lx < -0.45 || B(14), r: lx > 0.45 || B(15), u: ly < -0.6 || B(12) || B(0), d: ly > 0.6 || B(13), g: B(6), s: Math.abs(lx) > 0.93 };
+  const jumpE = B(0) && !pad.prev[0];
   const edge = i => B(i) && !pad.prev[i];
   const upE = st.u && !pad.pu, downE = st.d && !pad.pd;
   const anyInput = gp.buttons.some((b, i) => B(i)) || Math.abs(lx) > 0.45 || Math.abs(ly) > 0.6 || Math.hypot(rx, ry) > 0.3;
@@ -243,7 +300,7 @@ function pollPad() {
     if (btns.length) { if (upE) pad.sel--; if (downE) pad.sel++; pad.sel = (pad.sel + btns.length) % btns.length; btns.forEach((b, i) => b.classList.toggle('hl', i === pad.sel)); if (edge(0)) btns[pad.sel].click(); if (edge(1) && !w) menuBack(); }
   } else {
     pad.keys = { l: +st.l, r: +st.r, u: +st.u, d: +st.d, b: 0, s: +st.s, g: +st.g }; pushKeys();
-    if (upE) act('jump');
+    if (jumpE) act('jump'); else if (upE) act('up');
     if (downE) { const now = performance.now(); if (now - pad.lastDown < 280) act('digdown'); pad.lastDown = now; }
     if (edge(7)) act('primary', aimArg());
     if (edge(1)) act('dig'); if (edge(2)) act('interact'); if (edge(3)) act('drop');
@@ -262,7 +319,7 @@ const tstate = { joyId: null, jx: 0, jy: 0, canvasId: null, t0: 0, timer: null, 
 function joyVec() { return [tstate.jx, tstate.jy]; }
 function setupTouch() {
   const joy = $('tjoy'), knob = $('tknob'); if (!joy) return;
-  const upd = e => { const r = joy.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2; let dx = (e.clientX - cx) / (r.width / 2), dy = (e.clientY - cy) / (r.height / 2); const m = Math.hypot(dx, dy); if (m > 1) { dx /= m; dy /= m; } tstate.jx = dx; tstate.jy = dy; knob.style.transform = 'translate(' + dx * 34 + 'px,' + dy * 34 + 'px)'; const T = input.touch.keys; const wasU = T.u; T.l = dx < -0.35 ? 1 : 0; T.r = dx > 0.35 ? 1 : 0; T.u = dy < -0.55 ? 1 : 0; T.d = dy > 0.6 ? 1 : 0; if (T.u && !wasU && canPlay()) act('jump'); input.mode = 'touch'; pushKeys(); };
+  const upd = e => { const r = joy.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2; let dx = (e.clientX - cx) / (r.width / 2), dy = (e.clientY - cy) / (r.height / 2); const m = Math.hypot(dx, dy); if (m > 1) { dx /= m; dy /= m; } tstate.jx = dx; tstate.jy = dy; knob.style.transform = 'translate(' + dx * 34 + 'px,' + dy * 34 + 'px)'; const T = input.touch.keys; const wasU = T.u; T.l = dx < -0.35 ? 1 : 0; T.r = dx > 0.35 ? 1 : 0; T.u = dy < -0.55 ? 1 : 0; T.d = dy > 0.6 ? 1 : 0; if (T.u && !wasU && canPlay()) act('up'); input.mode = 'touch'; pushKeys(); };
   joy.addEventListener('pointerdown', e => { e.preventDefault(); tstate.joyId = e.pointerId; joy.setPointerCapture(e.pointerId); upd(e); });
   joy.addEventListener('pointermove', e => { if (e.pointerId === tstate.joyId) upd(e); });
   const end = e => { if (e.pointerId !== tstate.joyId) return; tstate.joyId = null; tstate.jx = tstate.jy = 0; knob.style.transform = ''; const T = input.touch.keys; T.l = T.r = T.u = T.d = 0; pushKeys(); };
@@ -276,13 +333,32 @@ function setupTouch() {
       else if (a === 'act') act('primary', (() => { const c = myClonk(); if (!c) return null; const [jx, jy] = joyVec(); return Math.hypot(jx, jy) > 0.3 ? [Math.round(c.x + jx * 70), Math.round(c.y - 6 + jy * 70)] : null; })());
       else if (a === 'use') act('interact'); else if (a === 'drop') act('drop'); else if (a === 'slot') act('slotd', 1); else if (a === 'next') act('next');
       else if (a === 'menu') openMenu('pausemenu'); else if (a === 'shop') openMenu('shop');
+      else if (a === 'chat') { if (G.role !== 'single') chatOpen(); }
       pushKeys();
     });
     const up = () => { b.classList.remove('on'); if (a === 'jump') input.touch.keys.u = 0; if (a === 'dig') { input.touch.keys.g = 0; input.touch.aim = null; } pushKeys(); };
     b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('pointerleave', up);
   }
 }
+// Zwei Finger auf der Spielfläche = zoomen (Pinch)
+const pinch = { pts: new Map(), d0: 0, z0: 1 };
+function pinchDist() { const p = [...pinch.pts.values()]; return Math.hypot(p[0][0] - p[1][0], p[0][1] - p[1][1]); }
+cv.addEventListener('pointermove', e => {
+  if (e.pointerType !== 'touch' || !pinch.pts.has(e.pointerId)) return;
+  pinch.pts.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pinch.pts.size === 2 && pinch.d0 > 20) { const z = pinch.z0 * pinchDist() / pinch.d0; R.setZoom(z, G.world); settings.zoom = R.zoom; }
+});
+const pinchEnd = e => { if (!pinch.pts.delete(e.pointerId)) return; if (pinch.pts.size < 2 && pinch.d0) { pinch.d0 = 0; saveSettings && saveSettings(); } };
+cv.addEventListener('pointerup', pinchEnd); cv.addEventListener('pointercancel', pinchEnd);
 function touchCanvasDown(e) { // Tippen = Aktion zum Punkt · lange halten = dorthin graben
+  if (!G.world || G.menu) return;
+  pinch.pts.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pinch.pts.size === 2) { // zweiter Finger: laufende Aktion abbrechen, Zoom starten
+    e.preventDefault(); pinch.d0 = pinchDist(); pinch.z0 = R.zoom;
+    clearTimeout(tstate.timer); tstate.canvasId = null; tstate.digging = false; tstate.pinched = true; input.touch.keys.g = 0; input.touch.aim = null; pushKeys(true); return;
+  }
+  if (pinch.pts.size > 2) return;
+  if (pinch.pts.size === 1) tstate.pinched = false;
   if (!canPlay()) return; e.preventDefault(); input.mode = 'touch';
   if (tstate.canvasId !== null) return; tstate.canvasId = e.pointerId; cv.setPointerCapture(e.pointerId);
   const pt = screenToWorld(e.offsetX, e.offsetY); input.touch.aim = pt; tstate.digging = false;

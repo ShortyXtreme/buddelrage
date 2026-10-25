@@ -25,6 +25,10 @@ Burg, Wachturm, Ritter, Forschung, Lava, Feuer, Tag/Nacht) orientieren
 sich am Spielprinzip von Clonk/OpenClonk; es wurde kein OpenClonk-Code übernommen.
 Figuren, Ritter, Monster, Hütte, Wachturm, Burg, Fahrzeuge, Waffen, Feuer und Gegenstände sind eigene, prozedural gezeichnete
 Pixel-Grafik. Lava wird prozedural eingefärbt (keine Lava-Textur).
+Neu und ebenfalls eigene, prozedural gezeichnete Pixel-Grafik bzw. eigener Code: Tiere (Wipf, Vogel, Fisch, Fledermaus, Hai),
+das neu gestaltete Monster, Enterhaken mit Seil, Ballon, Notausgang-Effekt, Chat-Sprechblasen und Emote-Rad.
+Die Geräusche „Ballon platzt“ und „Chat-Ping“ werden zur Laufzeit per WebAudio synthetisiert (keine Dateien).
+Emotes sind Unicode-Emojis und werden mit der Emoji-Schrift des jeweiligen Systems dargestellt (es wird keine Emoji-Grafik mitgeliefert).
 
 ## Assets aus OpenClonk (https://github.com/openclonk/openclonk, Commit 36de799)
 Lizenz: **Creative Commons Attribution 3.0** (CC-BY 3.0, https://creativecommons.org/licenses/by/3.0/),

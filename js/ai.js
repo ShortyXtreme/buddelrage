@@ -350,6 +350,7 @@ Object.assign(World.prototype, {
     A.moving = false;
     if (c.act === 'tumble') return this.aiStuckTrack(c, t, A, false);
     if (c.inside) { this.aiInside(c, t, B, D, A, helper); return this.aiStuckTrack(c, t, A, false); }
+    if ((c.act === 'rope' || c.act === 'float') && this.aiGearCtl(c, A, k)) return this.aiStuckTrack(c, t, A, false);
     if (c.act === 'push') { this.aiPush(c, t, B, D, A, helper, k); return this.aiStuckTrack(c, t, A, A.moving); }
     if (!A.task || A.t >= A.nextThink) { A.nextThink = A.t + D.think + (c.id % 5); this.aiDecide(c, t, B, D, A, helper); }
     this.aiProtect(c, t, D, A, k);
@@ -499,6 +500,8 @@ Object.assign(World.prototype, {
   aiArm(c, t, D) {
     const Bt = t.brain, R = Math.max(0, D.reserve - 10) + (Bt && !Bt.defend ? (Bt.keep || 0) : 0);
     if (c.knight && c.arrows < 6 && t.money >= 6 + R) this.aiBuy(t, c, 'arrows');
+    // wer schon öfter feststeckte, nimmt einen Enterhaken mit (Mittel/Schwer)
+    if (D.k !== 'easy' && (c.stuckN || 0) >= 2 && !c.inv.includes('hook') && c.inv.length < INV_MAX && t.money >= ITEMS.hook.price + R) this.aiBuy(t, c, 'hook');
     if (t.res.weapons && !c.inv.includes('sword') && c.inv.length < INV_MAX && t.money >= 15 + R) this.aiBuy(t, c, 'sword');
     if (t.res.weapons && c.inv.includes('sword') && !c.inv.includes('shield') && c.inv.length < INV_MAX && t.money >= 12 + R) this.aiBuy(t, c, 'shield');
     if (t.res.weapons && !c.armor && t.money >= 25 + R + 20) this.aiBuy(t, c, 'armor');
@@ -748,6 +751,7 @@ Object.assign(World.prototype, {
     const st = A.t - A.impT;
     // Rampe: Ziel weit oben und Klettern klappt nicht → schräge, begehbare Treppe graben (wie ein Spieler)
     if (A.ramp) { if (this.aiRamp(c, A, k, x, y)) return false; }
+    else if (st > 120 && dyg < -30 && Math.abs(dxg) < 160 && (c.inv.includes('hook') || c.inv.includes('balloon')) && this.aiGearUp(c, A, x, y)) return false;
     else if (st > 160 && dyg < -24 && Math.abs(dxg) < 140 && !c.inside && !(A.rampCd > A.t)) { if (this.aiRampStart(c, A, dxg)) return false; }
     if (st > 90 && A.lvl < 1) { A.lvl = 1; A.path = null; if (c.act === 'walk') { k[dxg > 0 ? 'r' : 'l'] = 1; this.clonkAction(c, 'jump'); } }
     else if (st > 200 && A.lvl < 2) { // Problemstelle für die Wegsuche merken, dann freigraben
@@ -915,7 +919,10 @@ Object.assign(World.prototype, {
       A.anchorX = c.x; A.anchorY = c.y; A.anchorT = A.t; return;
     }
     const dur = A.t - A.anchorT;
-    if (dur > 300 && !A.stuckOn) { A.stuckOn = true; S.stuckEv++; }
+    if (dur > 300 && !A.stuckOn) { A.stuckOn = true; S.stuckEv++; A.stuckN = (A.stuckN || 0) + 1; c.stuckN = (c.stuckN || 0) + 1; }
+    // sehr lange fest und unter der Erde: Notausgang (nur echte KI-Teams, kostet deren Geld)
+    if (dur > 2400 && t.ai && !A.escTried && this.escapeCheck(c) === '') { A.escTried = true; if (this.escape(c)) { A.anchorX = c.x; A.anchorY = c.y; A.anchorT = A.t; A.stuckOn = false; S.escapes = (S.escapes || 0); return; } }
+    if (dur < 2400) A.escTried = false;
     if (A.stuckOn && dur > S.maxStuck) S.maxStuck = dur;
     if (dur > 1500 && (!A.hardReset || dur % 900 === 0)) { // letzte Stufe (wiederholt): Aufgabe verwerfen, loslassen, Feuerstein zum Freisprengen
       A.hardReset = true; A.task = null; A.path = null; A.mine = -1; A.lvl = 0; A.forceDig = 60;

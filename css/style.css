@@ -262,3 +262,25 @@ body.buildopen #buildmenu .cards{grid-template-columns:repeat(4,1fr)}
 body.buildopen #buildmenu .icon{height:56px!important} body.buildopen #buildmenu .icon img{height:50px!important}
 .pstat{font-size:11.5px;font-weight:700;margin:4px 0 2px;padding:3px 7px;border-radius:8px;display:inline-flex;align-items:center;gap:4px}
 .pstat.ok{background:rgba(80,220,110,.16);color:#7ee69a}.pstat.lvl{background:rgba(255,200,60,.16);color:#ffd36b}.pstat.no{background:rgba(240,70,60,.16);color:#ff8a80}
+/* ---------- Chat, Emotes, Host-Wechsel, Spielstände ---------- */
+#chatlog{position:absolute;left:14px;bottom:150px;width:min(420px,60vw);display:flex;flex-direction:column;gap:3px;pointer-events:none;z-index:6}
+#chatlog .cl{background:rgba(16,14,12,.62);color:#f3eee6;font-size:13px;line-height:1.35;padding:3px 9px;border-radius:8px;width:fit-content;max-width:100%;word-break:break-word;transition:opacity .6s}
+#chatlog .cl.old{opacity:.55}
+#chatbox{position:absolute;left:14px;bottom:110px;width:min(460px,90vw);display:flex;flex-direction:column;gap:6px;padding:8px;z-index:8}
+#chatbox input{width:100%;font-size:14px}
+#chatemos{display:flex;gap:4px;flex-wrap:wrap}
+#chatemos .emo{font-size:18px;line-height:1;padding:5px 7px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);cursor:pointer}
+#chatemos .emo:hover{background:rgba(255,255,255,.16)}
+#emotewheel{position:absolute;width:0;height:0;z-index:9;pointer-events:auto}
+#emotewheel .we{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:1px;background:rgba(20,18,15,.82);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:5px 8px;min-width:58px;cursor:pointer;color:#f3eee6}
+#emotewheel .we span{font-size:22px;line-height:1.1}
+#emotewheel .we small{font-size:10px;opacity:.8;white-space:nowrap}
+#emotewheel .we.on{background:rgba(255,190,70,.9);color:#1d1a16;transform:translate(-50%,-50%) scale(1.12)}
+#emotewheel .wc{position:absolute;transform:translate(-50%,-50%);font-size:11px;color:#fff;opacity:.7;text-shadow:0 1px 2px #000}
+#migbanner{position:absolute;left:50%;top:70px;transform:translateX(-50%);padding:10px 18px;font-weight:600;z-index:9;color:#ffe2a0}
+.slots{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.slot-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08)}
+.slotnum{font-size:20px;font-weight:800;width:26px;text-align:center;opacity:.7}
+.slotinfo{flex:1;min-width:0}
+.slotbtns{display:flex;gap:6px}
+body.touchui #chatlog{bottom:200px}

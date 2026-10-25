@@ -39,12 +39,16 @@ click('btnleave', () => toMenu());
 // Pause & Spielende
 click('btnresume', () => closeAllMenus());
 click('btnsetp', () => openMenu('settings'));
+click('btnsaves', () => openMenu('saves'));
+click('btnloadm', () => openMenu('saves'));
+click('btnescape', () => { closeAllMenus(); doEscape(); });
 click('btnhelp', () => openMenu('help'));
 click('btnrestart', () => { if (G.role === 'single') startSingle(G.spMode || 'melee'); });
 click('btnquit', () => toMenu());
 click('againbtn', () => { if (G.role === 'single') startSingle(G.spMode || 'melee'); });
 click('menubtn', () => toMenu());
 addEventListener('resize', () => R.resize());
+R.want = Math.max(0.5, Math.min(2.5, +settings.zoom || 1)); setupChat();
 // Start
 $('mpname').value = localStorage.getItem('br_name') || ('Buddler' + ((Math.random() * 90 + 10) | 0));
 // KI-Schwierigkeit & Buddler-Name (zuletzt gewählte Werte merken)
@@ -57,6 +61,7 @@ for (const [id, k] of [['spsize', 'br_size'], ['optsize', 'br_size2']]) { const 
 for (const id of ['spcname', 'mpcname']) $(id).addEventListener('change', () => { const n = cleanName($(id).value, ''); $(id).value = n; $('spcname').value = $('mpcname').value = n; localStorage.setItem('br_cname', n); });
 for (const [id, k] of [['spdiff1', 'br_diff1'], ['spdiff2', 'br_diff2'], ['opttakeover', 'br_takeover']]) $(id).addEventListener('change', () => localStorage.setItem(k, $(id).value));
 for (const id of ['opthelper', 'opthelper2']) $(id).addEventListener('change', () => { localStorage.setItem('br_helper', $(id).checked ? '1' : '0'); $('opthelper').checked = $('opthelper2').checked = $(id).checked; });
+for (const id of ['optanimals', 'optanimals2']) { $(id).checked = lsGet('br_animals', '1') === '1'; $(id).addEventListener('change', () => { localStorage.setItem('br_animals', $(id).checked ? '1' : '0'); $('optanimals').checked = $('optanimals2').checked = $(id).checked; }); }
 $('optai').addEventListener('change', renderAiDiffs); renderAiDiffs();
 fillIcons(); renderDock(); setupTouch();
 for (const [id, ic] of [['btnsettle', 'goldnug'], ['btnmelee', 'sword'], ['btnmelee3', 'swords']]) { const m = $(id).querySelector('.mode-ico'); if (m) m.innerHTML = ICONS[ic]; }
