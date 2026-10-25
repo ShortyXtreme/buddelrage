@@ -200,11 +200,18 @@ Object.assign(World.prototype, {
     const bases = this.aiBases(t.id);
     const enemies = this.clonks.filter(c => c.team !== t.id && c.act !== 'dead' && !this.teams[c.team].elim);
     // Bedrohung der Basis
-    B.threat = enemies.filter(e => !e.inside && bases.some(s => Math.abs(e.x - s.x) < 230 && Math.abs(e.y - s.y) < 120));
+    // Bedrohung: bewaffnete Gegner im Umkreis der Basis oder jeder Gegner direkt an der Basis (gegnerische Bergleute in Höhlen darunter zählen nicht)
+    B.threat = enemies.filter(e => !e.inside && bases.some(s => { const dx = Math.abs(e.x - s.x), dy = Math.abs(e.y - s.y); return (dx < 230 && dy < 120 && (e.knight || this.aiArmed(e) || (e.ai && e.ai.task && e.ai.task.type === 'attack'))) || (dx < 90 && dy < 50); }));
     B.defend = B.threat.length > 0;
     // laufende Baustelle
     const site = this.structs.find(s => s.team === t.id && s.prog < 1 && !s.remove);
     B.buildId = site ? site.id : 0;
+    if (B.site && !helper && this.tick - B.site.t0 > 60 * 75) { B.unbuild[B.site.type] = this.tick + 60 * 20; B.site = null; } // geplanter Bau hängt (Bauarbeiter im Kampf) → neu planen
+    if (site && !helper) { // Baustelle ohne Fortschritt (60 s) aufgeben – halber Preis zurück, Gebäudetyp eine Weile meiden
+      const v = site.prog + (site.lvD || 0) * 1e-4;
+      if (!B.siteW || B.siteW.id !== site.id || B.siteW.v !== v) B.siteW = { id: site.id, v, t: this.tick };
+      else if (this.tick - B.siteW.t > 3600) { site.remove = true; t.money += BUILD[site.type].price >> 1; B.unbuild[site.type] = this.tick + 60 * 40; B.buildId = 0; B.siteW = null; this.msg('Baustelle aufgegeben: ' + BUILD[site.type].name, t.id); }
+    }
     // Rollen: Bergleute, Bauarbeiter, Kämpfer (Petra-artige Arbeitsteilung)
     const fighters = [], workers = [];
     for (const c of own) (c.knight ? fighters : workers).push(c);
@@ -245,7 +252,7 @@ Object.assign(World.prototype, {
     let s;
     if (B.defend) s = 'verteidigt die Basis';
     else if (B.attack) s = 'greift an';
-    else if (site) s = 'baut ' + BUILD[site.type].name;
+    else if (site) s = (site.lv ? 'planiert für ' : 'baut ') + BUILD[site.type].name;
     else if (B.site) s = 'plant ' + BUILD[B.site.type].name;
     else if (t.rq) s = 'forscht: ' + RES_BY[t.rq].name;
     else s = 'baut Gold ab';
@@ -258,15 +265,19 @@ Object.assign(World.prototype, {
       return;
     }
     if (n === 0) { if (m >= PRICE_CLONK) this.aiBuy(t, null, t.res.knight && m >= PRICE_KNIGHT ? 'knight' : 'clonk'); return; }
-    const save = B.site ? BUILD[B.site.type].price : 0;
+    const save = B.site ? BUILD[B.site.type].price + (B.site.cost || 0) : 0;
     const free = m - save;
     // 1) Grundversorgung: mindestens 2 Arbeiter
     if (n < 2 && free >= PRICE_CLONK) { this.aiBuy(t, null, 'clonk'); return; }
+    // erforschtes, aber noch nicht gebautes Gebäude hat Vorrang vor weiterer Forschung (sonst wird die Burg nie bezahlt)
+    let pend = 0;
+    if (!B.site && !B.buildId && n >= 3) for (const k of D.builds) { const Bd = BUILD[k]; if (Bd.res && !t.res[Bd.res]) continue; if (this.structs.some(s => s.team === t.id && s.type === k && !s.remove)) continue; if ((B.unbuild[k] || 0) > this.tick) continue; pend = Bd.price; break; }
+    B.keep = save + pend; // Rücklage, die beim Ausrüsten nicht angetastet wird
     // 2) Forschung nach Plan (Bauordnung)
     if (!t.rq) for (const k of D.research) {
       const r = RES_BY[k]; if (t.res[k]) continue;
       if (r.req && !r.req.every(q => t.res[q])) continue;
-      if (free >= r.cost + R) { this.research(t, k); return; }
+      if (free >= r.cost + R + pend) { this.research(t, k); return; }
       break;
     }
     // 3) Gebäude
@@ -275,12 +286,13 @@ Object.assign(World.prototype, {
       if (this.structs.some(s => s.team === t.id && s.type === k && !s.remove)) continue;
       if ((B.unbuild[k] || 0) > this.tick) continue;
       if (k === 'tower' && n < 3) continue;
-      if (m >= Bd.price + R) { this.aiPlanSite(t, B, k); return; }
+      if (m >= Bd.price + (k === 'castle' ? 0 : R)) { this.aiPlanSite(t, B, k); return; } // Burg: Sparziel reicht, keine zusätzliche Reserve
     }
     // Sparziel: nächste geplante Forschung bzw. nächstes Gebäude (sonst frisst der Buddler-Kauf alles auf)
     let goal = 0;
     if (n >= 3 && !B.defend) {
-      if (!t.rq) for (const k of D.research) { const r = RES_BY[k]; if (t.res[k]) continue; if (r.req && !r.req.every(q => t.res[q])) continue; goal = r.cost; break; }
+      if (pend) goal = pend;
+      if (!goal && !t.rq) for (const k of D.research) { const r = RES_BY[k]; if (t.res[k]) continue; if (r.req && !r.req.every(q => t.res[q])) continue; goal = r.cost; break; }
       if (!goal && !B.site && !B.buildId) for (const k of D.builds) { const Bd = BUILD[k]; if (Bd.res && !t.res[Bd.res]) continue; if (this.structs.some(s => s.team === t.id && s.type === k && !s.remove)) continue; if ((B.unbuild[k] || 0) > this.tick) continue; goal = Bd.price; break; }
     }
     // 4) mehr Buddler / Ritter
@@ -302,22 +314,27 @@ Object.assign(World.prototype, {
   aiPlanSite(t, B, type) {
     const base = this.aiBases(t.id)[0] || this.structs.find(s => s.team === t.id) || { x: this.bases[t.id], y: this.surf[this.bases[t.id]] };
     const Bd = BUILD[type], hw = Bd.w >> 1;
-    const offs = []; for (let o = 50; o <= 320; o += 10) offs.push(o, -o);
-    for (const off of offs) {
-      const x = Math.round(base.x + off); if (x - hw < 4 || x + hw > this.W - 4) continue;
-      let y = 0; while (y < this.H - 1 && !this.solid(x, y + 1)) y++;
-      if (y >= this.H - 2 || this.matAt(x, y) === MAT.WATER) continue;
+    const cs = this.castleSites && this.castleSites[t.id], home = cs && Math.abs(base.x - this.bases[t.id]) < 4;
+    const hasCastle = this.structs.some(s => s.team === t.id && s.type === 'castle' && !s.remove);
+    const cand = [];
+    if (type === 'castle' && home) cand.push({ x: cs.x, dir: cs.d, pri: -100 }); // reserviertes Burg-Plateau zuerst
+    for (let o = 50; o <= 320; o += 10) cand.push({ x: Math.round(base.x + o), dir: 1, pri: o / 10 }, { x: Math.round(base.x - o), dir: -1, pri: o / 10 });
+    let best = null;
+    for (const C of cand) {
+      const x = C.x, dir = C.dir, sx = x - dir * (hw + 6);
+      if (x - hw < 4 || x + hw > this.W - 4 || sx < 4 || sx > this.W - 4) continue;
+      let y = 0; while (y < this.H - 1 && !this.solid(sx, y + 1)) y++;
+      if (y >= this.H - 2 || this.matAt(sx, y) === MAT.WATER) continue;
       if (Math.abs(y - base.y) > 70) continue;
-      let ground = 0; for (let xx = x - hw; xx <= x + hw; xx++) if (this.solid(xx, y + 1) || this.solid(xx, y + 2)) ground++;
-      let free = true; for (let xx = x - hw; xx <= x + hw && free; xx += 2) for (let yy = y - Bd.h + 2; yy <= y - 1; yy += 3) if (this.solid(xx, yy)) { free = false; break; }
-      if (ground < Bd.w * 0.85 || !free) continue;
-      if (this.structs.some(s => Math.abs(s.x - x) < (s.w + Bd.w) / 2 + 6 && Math.abs(s.y - y) < 40)) continue;
-      const dir = off > 0 ? 1 : -1;
-      const sx = x - dir * (hw + 6);
       if (this.boxHit(sx, y) || !this.boxHit(sx, y + 2)) continue;
-      B.site = { type, x, y, dir, sx, t0: this.tick };
-      return true;
+      if (type !== 'castle' && home && !hasCastle && Math.abs(x - cs.x) < (Bd.w + BUILD.castle.w) / 2 + 4) continue; // Burgfläche freihalten
+      const pc = this.placeCheck(type, x, y);
+      if (pc.st === 'no') continue;
+      const score = C.pri + (pc.st === 'level' ? 6 + pc.cost * 2 : 0);
+      if (!best || score < best.score) best = { score, x, y, dir, sx, cost: pc.cost || 0, lv: pc.st === 'level' };
+      if (pc.st === 'ok' && C.pri < 0) break;
     }
+    if (best) { B.site = { type, x: best.x, y: best.y, dir: best.dir, sx: best.sx, cost: best.cost, lv: best.lv, t0: this.tick }; return true; }
     B.unbuild[type] = this.tick + 60 * 40; return false;
   },
 
@@ -353,9 +370,10 @@ Object.assign(World.prototype, {
     const foe = this.aiNearestFoe(c, helper ? 45 : 150, helper);
     if (foe) add('fight', (this.aiArmed(c) || c.knight ? 0.95 : 0.72) - (helper ? 0.1 : 0), { target: foe });
     if (!helper) {
-      if (B.defend && (role === 'fighter' || this.aiArmed(c))) { const e = this.aiPick(c, B.threat); if (e) add('fight', 0.9, { target: e, defend: 1 }); }
-      if (role === 'fighter' && !this.aiArmedEnough(c) && home && t.money >= 22) add('arm', 0.86);
-      if (role === 'fighter' && B.attack) add('attack', 0.8);
+      if (B.defend && (role === 'fighter' || (this.aiArmed(c) && B.threat.some(e => Math.abs(e.x - c.x) < 140 && Math.abs(e.y - c.y) < 70)))) { const e = this.aiPick(c, B.threat); if (e) add('fight', 0.9, { target: e, defend: 1 }); } // Bergleute verteidigen nur in der Nähe
+      const spare = t.money - (B.defend ? 0 : (B.keep || 0)); // Rücklage (Gebäude) nicht fürs Ausrüsten verwenden
+      if (role === 'fighter' && !this.aiArmedEnough(c) && home && spare >= 22) add('arm', 0.86);
+      if (role === 'fighter' && B.attack && (this.aiArmedEnough(c) || B.defend)) add('attack', 0.8);
       else if (role === 'fighter' && this.aiArmedEnough(c)) add('guard', (B.threat.length || B.roles.size >= 5) ? 0.45 : 0.28); // ruhige Lage: Kämpfer helfen beim Abbau
       const gun = this.vehicles.find(v => v.team === t.id && VEH[v.type].gun && !v.pusher && !v.remove);
       if (gun && role === 'fighter' && B.attack && D.k === 'hard' && c.inv.some(x => AMMO.has(x)) && (!B.gun || B.gun === c.id)) add('gun', 0.83, { veh: gun.id });
@@ -373,7 +391,7 @@ Object.assign(World.prototype, {
     if (it && c.inv.length < INV_MAX) add('collect', 0.62, { item: it.id });
     const fullNoGold = c.inv.length >= INV_MAX && !golds; // Taschen voll mit Waffen: kann nicht abbauen → Wache halten
     if (fullNoGold) { if (home) add('guard', 0.42); }
-    else if (role !== 'fighter' || !B.attack) add('mine', role === 'fighter' ? 0.3 : 0.5);
+    else if (role !== 'fighter' || !B.attack || !this.aiArmedEnough(c)) add('mine', role === 'fighter' ? (B.attack ? 0.5 : 0.3) : 0.5); // unbewaffnete Kämpfer arbeiten statt untätig zu warten
     // laufende Fahrzeug-/Turm-Aufgaben nicht ständig unterbrechen
     if (A.task && (A.task.type === 'park' || A.task.type === 'haul' || A.task.type === 'gun') && this.vehById(A.task.veh)) add(A.task.type, 0.87, { veh: A.task.veh, x: A.task.x });
     if (!helper && B.defend && this.aiArmed(c)) {
@@ -444,7 +462,7 @@ Object.assign(World.prototype, {
         const S = B.site; if (!S || B.builder !== c.id) { A.task = null; return; }
         if (this.tick - S.t0 > 60 * 60) { B.unbuild[S.type] = this.tick + 60 * 30; B.site = null; A.task = null; return; }
         if (this.aiGoto(c, A, k, S.sx, S.y, 2) && c.act === 'walk') {
-          c.dir = S.dir; const n0 = this.structs.length; this.build(c, S.type);
+          c.dir = S.dir; const n0 = this.structs.length; this.build(c, S.type, { x: S.x, y: S.y });
           if (this.structs.length > n0) { B.buildId = this.structs[this.structs.length - 1].id; B.site = null; A.task = { type: 'help', sid: B.buildId, s: 0.9 }; }
           else { B.unbuild[S.type] = this.tick + 60 * 25; B.site = null; A.task = null; }
         }
@@ -454,6 +472,11 @@ Object.assign(World.prototype, {
         const s = this.structs.find(o => o.id === T.sid);
         if (!s || s.prog >= 1 || s.remove) { A.task = null; return; }
         const off = ((c.id % 3) - 1) * 6;
+        if (s.lv) { // beim Planieren am Rand der Baufläche stehen (Mitte kann noch Hügel/Loch sein)
+          const ex = s.x + (c.x < s.x ? -1 : 1) * ((s.w >> 1) + 2);
+          if (this.aiGoto(c, A, k, ex, s.y, 4)) { if (c.act === 'dig') c.act = 'walk'; }
+          return;
+        }
         if (this.aiGoto(c, A, k, s.x + off, s.y, 4)) { if (c.act === 'dig') c.act = 'walk'; }
         return;
       }
@@ -474,7 +497,7 @@ Object.assign(World.prototype, {
   },
   aiStat0(c, s) { c.aiS = s; },
   aiArm(c, t, D) {
-    const R = Math.max(0, D.reserve - 10);
+    const Bt = t.brain, R = Math.max(0, D.reserve - 10) + (Bt && !Bt.defend ? (Bt.keep || 0) : 0);
     if (c.knight && c.arrows < 6 && t.money >= 6 + R) this.aiBuy(t, c, 'arrows');
     if (t.res.weapons && !c.inv.includes('sword') && c.inv.length < INV_MAX && t.money >= 15 + R) this.aiBuy(t, c, 'sword');
     if (t.res.weapons && c.inv.includes('sword') && !c.inv.includes('shield') && c.inv.length < INV_MAX && t.money >= 12 + R) this.aiBuy(t, c, 'shield');

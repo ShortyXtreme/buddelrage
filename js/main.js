@@ -39,12 +39,31 @@ function handleEvents(evs) {
 }
 
 // ---------- Spielstart ----------
+// Kartengröße anwenden: Breite skaliert, Höhe je Stufe; Monster mitwachsen
+function applySize(cfg, size) { const d = mapDims(cfg.W, size); cfg.W = d.W; cfg.H = d.H; cfg.size = d.size; if (cfg.monsterCount) cfg.monsterCount = Math.max(1, Math.round(cfg.monsterCount * MAP_SIZES[d.size].f)); return cfg; }
+// Karten-Übertragung: RLE + Deflate (CompressionStream), Fallback unkomprimiert; Versand in 16-KB-Stücken (net.js)
+async function deflateB64(str) {
+  const cs = new CompressionStream('deflate-raw'); const w = cs.writable.getWriter(); w.write(new TextEncoder().encode(str)); w.close();
+  const buf = new Uint8Array(await new Response(cs.readable).arrayBuffer()); let s = ''; for (let k = 0; k < buf.length; k += 8192) s += String.fromCharCode.apply(null, buf.subarray(k, k + 8192)); return btoa(s);
+}
+async function inflateB64(b64) {
+  const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  const ds = new DecompressionStream('deflate-raw'); const w = ds.writable.getWriter(); w.write(u); w.close();
+  return new TextDecoder().decode(await new Response(ds.readable).arrayBuffer());
+}
+function sendMap(to) {
+  const m = G.world.fullMap(), raw = JSON.stringify(m); G.mapBytes = raw.length;
+  if (typeof CompressionStream === 'undefined') { netSend(to ? { t: 'map', m, to } : { t: 'map', m }); return; }
+  G.mapPending = (G.mapPending || 0) + 1; const done = () => { G.mapPending--; };
+  deflateB64(raw).then(z => { G.mapBytesZ = z.length; netSend(to ? { t: 'map', z, to } : { t: 'map', z }); done(); }).catch(() => { netSend(to ? { t: 'map', m, to } : { t: 'map', m }); done(); });
+}
 function newSeed() { return (Math.random() * 1e9) | 0; }
 function startSingle(mode) {
   const cfg = mode === 'settle'
     ? { mode, W: 1800, H: 640, seed: newSeed(), teams: [{ name: 'Siedler' }], clonks: 1, money: 40, goal: 300, monsters: true, monsterCount: 4 }
     : { mode: 'melee', W: 1700, H: 620, seed: newSeed(), teams: [{ name: 'Du' }, { name: 'KI Rot', ai: true, diff: $('spdiff1').value }], clonks: 1, money: 40, monsters: false };
   if (mode === 'melee3') { cfg.teams.push({ name: 'KI Grün', ai: true, diff: $('spdiff2').value }); cfg.W = 2300; }
+  applySize(cfg, $('spsize').value);
   const cn = cleanName($('spcname').value, ''); $('spcname').value = cn; try { localStorage.setItem('br_cname', cn); } catch (e) {}
   cfg.teams[0].cname = cn; cfg.teams[0].helper = $('opthelper').checked;
   cfg.allResearch = $('optallres').checked; cfg.daynight = $('optday').checked; cfg.lava = true;
@@ -63,6 +82,7 @@ function launchWorld(cfg, remote, map) {
   if (f) { R.cam.x = f.x - cv.width / R.scale / 2; R.cam.y = f.y - cv.height / R.scale / 2; }
   G.paused = false; closeAllMenus(); hideAll(); $('hud').style.display = 'block'; $('menubg').style.display = 'none'; $('toasts').innerHTML = '';
   HUD.sig = {}; HUD.money = null; $('hud-teams').style.display = ''; cv.classList.add('ingame'); updateTouchUI();
+  if (cfg.size && MAP_SIZES[cfg.size]) addMsg('Karte: ' + MAP_SIZES[cfg.size].n + ' (' + cfg.W + ' × ' + cfg.H + ')');
   addMsg(cfg.mode === 'settle' ? 'Goldrausch: Verdiene ' + cfg.goal + ' Geld! Grabe Gold und verkaufe es an der Hütte.' : 'Melee: Das letzte überlebende Team gewinnt!');
   input.lastSent = ''; pushKeys(true);
 }
@@ -108,14 +128,15 @@ function onNet(m) {
     case 'start':
       if (net.host) return;
       G.role = 'client'; G.myTeam = m.cfg.teams.findIndex(t => t.pid === net.id); G.spectate = G.myTeam < 0;
-      G.pendingCfg = m.cfg; hideAll(); $('loading').style.display = 'flex'; break;
+      G.pendingCfg = m.cfg; G.world = null; G.chunkBuf = []; hideAll(); $('loading').style.display = 'flex'; break;
     case 'map':
       if (net.host || !G.pendingCfg) return;
-      launchWorld(G.pendingCfg, true, m.m); if (G.spectate) addMsg('Du schaust zu (Spiel lief bereits).'); break;
+      if (m.z) { const cfg = G.pendingCfg; inflateB64(m.z).then(str => { if (G.pendingCfg !== cfg) return; launchWorld(cfg, true, JSON.parse(str)); for (const [ci, d] of (G.chunkBuf || [])) G.world.applyChunk(ci, d); G.chunkBuf = null; if (G.spectate) addMsg('Du schaust zu (Spiel lief bereits).'); }).catch(e => { console.warn('Karte', e); $('mperr').textContent = 'Karte konnte nicht entpackt werden.'; }); break; }
+      launchWorld(G.pendingCfg, true, m.m); for (const [ci, d] of (G.chunkBuf || [])) G.world.applyChunk(ci, d); G.chunkBuf = null; if (G.spectate) addMsg('Du schaust zu (Spiel lief bereits).'); break;
     case 'snap': if (G.world && G.role === 'client') { G.world.applySnap(m.d); handleEvents(m.ev || []); } break;
-    case 'chunks': if (G.world && G.role === 'client') for (const [ci, d] of m.c) G.world.applyChunk(ci, d); break;
+    case 'chunks': if (G.world && G.role === 'client') for (const [ci, d] of m.c) G.world.applyChunk(ci, d); else if (G.chunkBuf && G.role === 'client') G.chunkBuf.push(...m.c); break;
     case 'in': if (G.role === 'host' && G.world) { const ti = G.world.teams.findIndex(t => t.pid === m.from); if (ti < 0) return; if (m.k) G.world.setKeys(ti, m.k); if (m.a) G.world.action(ti, m.a, m.arg); } break;
-    case 'late': if (G.role === 'host' && G.world) { netSend({ t: 'start', cfg: G.cfg, to: m.id }); netSend({ t: 'map', m: G.world.fullMap(), to: m.id }); addMsg(m.name + ' schaut zu.'); } break;
+    case 'late': if (G.role === 'host' && G.world) { netSend({ t: 'start', cfg: G.cfg, to: m.id }); sendMap(m.id); addMsg(m.name + ' schaut zu.'); } break;
     case 'left': if (G.role === 'host' && G.world) { const t = G.world.teams.find(t => t.pid === m.id); if (t && !t.ai) { G.world.aiTakeover(t, G.cfg.takeover || 'normal'); addMsg(t.name + ' hat das Spiel verlassen – KI (' + aiDiffName(t.diff) + ') übernimmt.'); } } break;
     case 'hostleft': toMenu(); toast('Der Host hat das Spiel verlassen.', 'warn'); break;
   }
@@ -144,16 +165,17 @@ function hostStart() {
   for (let k = 0; k < ai; k++) teams.push({ name: 'KI ' + (k + 1), ai: true, diff: diffs[k] || 'normal', color: TEAM_COLORS[teams.length % 6] });
   if (teams.length < 2) { alert('Mindestens 2 Teams nötig (KI-Gegner hinzufügen oder auf Mitspieler warten).'); return; }
   const allRes = $('optallres2').checked;
-  const cfg = { mode: 'melee', W: Math.min(3000, 1100 + teams.length * 380), H: 620, seed: newSeed(), teams, clonks: cl, money: allRes ? 120 : 60, monsters: mon, monsterCount: 3, allResearch: allRes, daynight: $('optday2').checked, lava: true, takeover: $('opttakeover').value };
+  const cfg = { mode: 'melee', W: 1100 + teams.length * 380, H: 620, seed: newSeed(), teams, clonks: cl, money: allRes ? 120 : 60, monsters: mon, monsterCount: 3, allResearch: allRes, daynight: $('optday2').checked, lava: true, takeover: $('opttakeover').value };
+  applySize(cfg, $('optsize').value);
   G.role = 'host'; G.myTeam = teams.findIndex(t => t.pid === net.id); G.spectate = false;
   launchWorld(cfg, false);
-  netSend({ t: 'start', cfg }); netSend({ t: 'map', m: G.world.fullMap() });
+  netSend({ t: 'start', cfg }); sendMap();
   G.world.netDirty.clear(); G.chunkSent = new Map();
 }
 function hostSync() {
   const w = G.world;
   if (w.tick % 3 === 0) { netSend({ t: 'snap', d: w.snap(), ev: G.pendingEv }); G.pendingEv = []; }
-  if (w.tick % 3 === 1 && w.netDirty.size) {
+  if (w.tick % 3 === 1 && w.netDirty.size && !G.mapPending) {
     const arr = []; const ls = G.chunkSent || (G.chunkSent = new Map()); const now = w.tick;
     for (const ci of w.netDirty) { if (now - (ls.get(ci) || -99) < 15) continue; arr.push(w.encodeChunk(ci)); w.netDirty.delete(ci); ls.set(ci, now); if (arr.length >= 60) break; }
     if (arr.length) netSend({ t: 'chunks', c: arr });
@@ -197,5 +219,5 @@ function frame(ts) {
   if (input.mouse.moved && (input.kb.g || pad.keys.g || input.touch.keys.g || myPushingGun())) pushKeys();
   updateHUD(); tutTick();
   checkOver();
-  if (w.tick % 30 === 0 && w.tick !== G.lastMenuTick) { G.lastMenuTick = w.tick; if (G.menu === 'shop') renderShop(); else if (G.menu === 'research') renderResearch(); }
+  if (w.tick % 30 === 0 && w.tick !== G.lastMenuTick) { G.lastMenuTick = w.tick; if (G.menu === 'shop') renderShop(); else if (G.menu === 'research') renderResearch(); else if (G.menu === 'buildmenu') renderBuild(); }
 }

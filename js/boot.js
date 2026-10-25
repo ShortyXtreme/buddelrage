@@ -53,6 +53,7 @@ const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e)
 $('spcname').value = $('mpcname').value = cleanName(lsGet('br_cname', ''), '');
 $('spdiff1').value = lsGet('br_diff1', 'normal'); $('spdiff2').value = lsGet('br_diff2', 'normal'); $('opttakeover').value = lsGet('br_takeover', 'normal');
 $('opthelper').checked = $('opthelper2').checked = lsGet('br_helper', '0') === '1';
+for (const [id, k] of [['spsize', 'br_size'], ['optsize', 'br_size2']]) { const v = lsGet(k, 'mittel'); $(id).value = MAP_SIZES[v] ? v : 'mittel'; $(id).addEventListener('change', () => { try { localStorage.setItem(k, $(id).value); } catch (e) {} }); }
 for (const id of ['spcname', 'mpcname']) $(id).addEventListener('change', () => { const n = cleanName($(id).value, ''); $(id).value = n; $('spcname').value = $('mpcname').value = n; localStorage.setItem('br_cname', n); });
 for (const [id, k] of [['spdiff1', 'br_diff1'], ['spdiff2', 'br_diff2'], ['opttakeover', 'br_takeover']]) $(id).addEventListener('change', () => localStorage.setItem(k, $(id).value));
 for (const id of ['opthelper', 'opthelper2']) $(id).addEventListener('change', () => { localStorage.setItem('br_helper', $(id).checked ? '1' : '0'); $('opthelper').checked = $('opthelper2').checked = $(id).checked; });

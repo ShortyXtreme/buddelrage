@@ -94,6 +94,60 @@ und gilt jetzt nur noch für Schwer.
 | Wurfparabel – https://en.wikipedia.org/wiki/Projectile_motion | Formel für den Abwurfwinkel bei gegebener Geschwindigkeit (Würfe, Pfeile, Katapult) |
 | Worms/Liero/Teeworlds (Spielprinzip, Teeworlds-Quellen https://github.com/teeworlds/teeworlds) | Schwierigkeitsgrade über Zielgenauigkeit/Reaktionszeit statt über Schummeln |
 
+## Burgplatz, Planieren und Kartengrößen
+
+**Generator (`generate`)**: Die Karte bleibt zufällig (fBm-Rauschen). Pro Startbasis wird ein Plateau gelegt:
+- Hütte in der Mitte, 78 px Platz auf der Wachturm-Seite und 118 px auf der Burg-Seite (zur Kartenmitte hin).
+- Höhe = Mittel aus Gelände an der Basis und Umgebungsmittel (±260 px), damit das Plateau natürlich liegt.
+- Übergang mit Smoothstep über max(60, 2,6 × Höhenunterschied) px, begrenzt durch den Abstand zur Nachbarbasis.
+- Darunter eine feste Erdschicht von 34 px; Seen werden dort nicht angelegt.
+- Burgplatz (`castleSites`) bei Hütte ± 62 px.
+
+**Platzprüfung (`placeCheck`)**, gleich für Spieler, Vorschau und KI:
+- `ok`: Bauraum frei und ≥ 80 % Boden.
+- `level` (Planieren nötig): Erde/Sand im Bauraum (max. 26 px pro Spalte), Lücken bis 14 px darunter.
+  Tiefere Schächte erhalten eine 6-px-Abdeckung; höchstens 30 % solcher Spalten.
+  Kosten: 1 Geld pro 60 Pixel.
+- `no` (mit Grund): Fels/Granit/Holz, Wasser/Lava, Kartenrand, Gebäude im Weg, zu steiler Hang, kein Boden.
+
+**Planieren (`levelStep`)** ist die erste Bauphase:
+- Arbeitende Buddler (max. 3) tragen ab bzw. füllen auf, je Buddler 3 Pixel alle 2 Ticks.
+- Abtrag oben zuerst, Auffüllen von unten.
+- Gold im Abtrag wird zu Goldklumpen.
+- Terrainänderungen laufen über `setMat`, gehen also über die normale Chunk-Synchronisation an die Clients.
+- Das Planier-Flag steht im Snapshot.
+
+**KI**:
+- `aiPlanSite` prüft zuerst den reservierten Burgplatz und danach Kandidaten links/rechts.
+- Bewertung: Entfernung + Planierkosten.
+- Andere Gebäude halten die Burgfläche frei.
+- Ein erforschtes, aber nicht gebautes Gebäude hat Vorrang vor weiterer Forschung und vor dem Ausrüsten (Rücklage `keep`).
+- Helfer stehen beim Planieren am Rand der Baufläche.
+- Eine Baustelle ohne Fortschritt wird nach 60 s aufgegeben (halber Preis zurück).
+- Als Bedrohung zählen nur bewaffnete Gegner bzw. Gegner direkt an der Basis.
+
+**Kartengrößen** (`MAP_SIZES`): Klein 0,85 × / 580 px, Mittel 1,2 × / 660 px (neuer Standard), Groß 1,6 × / 760 px, Riesig 2,2 × / 880 px.
+- Höhlen, Gold und Gestein wachsen mit der Fläche (Rauschen in festen Pixel-Frequenzen).
+- Mit der Breite wachsen Lava-Höhlen (W/800), Seen (W/1700), eingebettete Gegenstände (nach Fläche) und Monster (× Faktor).
+- Die Startabstände sind proportional zur Breite.
+
+**Performance auf großen Karten**:
+- Materialerzeugung in Prioritätsreihenfolge (weniger Rauschaufrufe).
+- Material-Simulation: Tropfen/Filme auf festem Boden verdunsten bzw. erstarren langsam.
+- Eingeschlossene Luftblasen unter Fels wandern nicht mehr endlos.
+- Lava hält ihren Chunk nur aktiv, wenn sie wirklich fließen kann.
+- Budget von 360 aktiven Chunks pro Tick.
+- Ergebnis Riesig (5060 × 880): aktive Chunks nach 1 min 506 → 231, Simulation 4,8 → 2,6 ms/Tick.
+
+**Vorbilder (nur Ideen, kein Code):**
+- Planieren von Bauplätzen wie bei *Die Siedler II*: Bauarbeiter ebnen den Boden vor dem Bau.
+- Aktive-Chunk-Optimierung für Falling-Sand-Simulationen wie in Petri Purhos GDC-2019-Vortrag „Exploring the Tech and Design of Noita“ (GDC Vault).
+
+**Mehrspieler**:
+- Die Startkarte wird als RLE + Deflate (`CompressionStream`) in 16-KB-Stücken übertragen.
+- Der Host hält Chunk-Updates zurück, bis die Karte gesendet ist; der Client puffert Chunks, bis die Karte entpackt ist.
+- Riesig mit 4 Teams (5760 × 880): 842 KB → 353 KB.
+
 ## Tests
 
 Headless-Simulationen KI gegen KI (Chrome/Playwright, `test/aisim.js`), siehe Ergebnisse unten.
@@ -120,10 +174,39 @@ Headless-Simulation (`world.update()` ohne Rendering), Melee, 30000 Ticks (~8:20
 - **Performance:** 2 KI-Teams 0,8–1,9 ms/Tick, 3 KI-Teams 2,5–3,2 ms/Tick. Spike-Test über 12000 Ticks: Ø 2,58 ms, nur 5 Ticks > 12 ms (4 davon in den ersten 4 Ticks, erster Tick 49 ms durch JIT/NavGrid-Aufbau 6,8 ms).
 - **UI/Netz-Tests (Playwright):** aiui.js (Name bereinigt, „Name 2/3“, localStorage, HUD-Tags), ui1/ui2 (60 fps), touch.js, mpui.js, p2p.js (Namen und Schwierigkeiten auf Host und Client synchron, Terrain-Hash identisch, KI-Übernahme beim Verlassen). Alle ohne Fehler.
 
+### Testergebnisse Burgplatz / Kartengrößen (Okt. 2026)
+
+**Burgplatz-Validierung** (`test/castlecheck.js`): pro Seed Karte erzeugen, 200 Ticks simulieren, dann je Team prüfen: Burg-placeCheck „ok“ (ohne Planieren), Turmplatz frei, KI plant genau den reservierten Burgplatz, Himmel frei. 200 Seeds für 1–4 Teams, 50 Seeds für 6 und 9 Teams, alle vier Größen.
+
+| Größe | Konfigurationen | Startplätze geprüft | Burgplatz ok | Turm ok | KI-Plan ok | Himmel frei | Ø Hang | Ø Generierung |
+|---|---|---|---|---|---|---|---|---|
+| Klein | 1/2/3/4/6/9 Teams | 2750 | 100 % | 100 % | 100 % | 100 % | 0,35–0,39 | 146–360 ms |
+| Mittel | 1/2/3/4/6/9 Teams | 2750 | 100 % | 100 % | 100 % | 100 % | 0,35–0,38 | 225–621 ms |
+| Groß | 1/2/3/4/6/9 Teams | 2750 | 100 % | 100 % | 100 % | 100 % | 0,35–0,37 | 336–869 ms |
+| Riesig | 1/2/3/4/6/9 Teams | 2750 | 100 % | 100 % | 100 % | 100 % | 0,35–0,37 | 544–1397 ms |
+
+Fehlschläge: 0 (Log `test/cc-<größe>.log`).
+
+**KI baut Burg** (`test/aisim2.js`, 30000 Ticks max., 50 Team-Läufe: Mittel-Karten 5 Paarungen × 4 Seeds, 3 Teams Groß ×2, Riesig ×2):
+
+| Schwierigkeit | Läufe | Siege | Ø verdient | Turm | Burg gebaut | davon auf reserviertem Platz | davon mit Planieren | Burg erforscht → gebaut |
+|---|---|---|---|---|---|---|---|---|
+| Schwer | 20 | 14 | 692 | 15 | 7 | 6 | 2 | 7/11 (Ø 3420 Ticks ≈ 57 s) |
+| Mittel | 20 | 6 | 886 | 15 | 10 | 7 | 4 | 10/15 (Ø 2100 Ticks ≈ 35 s) |
+| Leicht | 10 | 0 | 572 | 6 | 0 | – | – | (baut bewusst keine Burg) |
+
+Nicht gebaut trotz Forschung: Team wurde vorher eliminiert/belagert oder hatte zu wenig Einkommen (z. B. Schwer-vs-Schwer Seed 1104: beide < 500 Gold in 8 Minuten). Längste Stuck-Phase 2172 Ticks, danach immer befreit. Keine JS-Fehler. 0,4–1,8 ms/Tick.
+
+**Performance:** idle Box, Riesig (5060 × 880, 3 Teams) 60,25 fps, schlechtester Frame 20 ms, Laden 1,6 s; Mittel 60,25 fps. Materialsimulation: aktive Chunks auf Riesig 506 → 231, 4,8 → 2,6 ms/Tick (Budget 360 Chunks/Tick, Film-Verdunstung, Lava-Fallregel).
+
+**Mehrspieler:** Startkarte deflate-komprimiert und in 16-KB-Teilen übertragen: Mittel 339898 → 142736 Zeichen, Riesig (5760 × 880) 863846 → 360280. Terrain-Hash Host/Client identisch, Planier-Status synchron, Client-Vorschau „⚒ Planieren nötig“, KI-Übernahme baut Burg.
+
+**Regressions-Tests:** aiui, ui1, ui2 (60,5 fps), touch, mpui, buildui (ok/planieren/nein, Burg gebaut nach 981 bzw. 1143 Ticks), p2p (Mittel und Riesig) – alle ERRS [].
+
 ## Bekannte Grenzen
 
 - Ein Schwer-Team auf einer stark zerklüfteten Höhlen-Startposition ist spürbar schwächer: der Hüttenvorplatz ist schlecht erreichbar, daher die Unentschieden.
-- Die Burg wird in Simulationen praktisch nie gebaut, weil selten eine ausreichend ebene Fläche frei ist. Die KI markiert den Bauplatz dann als ungeeignet.
+- Burg: Ohne garantiertes Plateau wurde die Burg früher praktisch nie gebaut – siehe neuer Abschnitt „Burgplatz, Planieren und Kartengrößen“.
 - Erster Tick nach dem Start ~49 ms (einmalig).
 - Helfer-KI steuert nur nicht ausgewählte Buddler und gibt kein Geld aus.
 - Ältere Testskripte (feat.js, smoke.js, sp.js) zielen auf die alte UI/Port 8080 und sind veraltet.

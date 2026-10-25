@@ -29,6 +29,20 @@ Beim ersten Start führt ein kurzes Tutorial durch die Steuerung (in den Einstel
   steht über dem Buddler und in der Buddlerliste, wird im Mehrspieler synchronisiert. Weitere Buddler heißen „Name 2“, „Name 3“ …
 * Details, Quellen und Testergebnisse: [AI_NOTES.md](AI_NOTES.md).
 
+## Karten, Burgplatz und Planieren
+* **Kartengröße:** Klein / Mittel (Standard, ca. 20 % größer als früher) / Groß / Riesig, im Einzelspieler-Menü bzw. vom Host in der Lobby
+  (wird mit der Spielkonfiguration an alle übertragen und gespeichert). Breite: Faktor 0,85 / 1,2 / 1,6 / 2,2 der Grundbreite, Höhe 580 / 660 / 760 / 880 px.
+  Höhlen, Gold, Gestein, Lava-Höhlen, Seen, Gegenstände, Monster und Startabstände wachsen mit.
+* **Garantierter Burgplatz:** Die Karten bleiben zufällig, aber jede Startbasis liegt auf einem ebenen, festen Plateau
+  (Hütte in der Mitte, Platz für den Wachturm auf der einen und für die Burg auf der anderen Seite, freier Himmel darüber).
+  Das Plateau geht mit sanften Hängen ins Gelände über; darunter liegt eine feste Erdschicht, Seen werden dort nicht angelegt.
+* **Planieren:** Ist der Boden uneben, kann trotzdem gebaut werden: Erde/Sand im Bauraum wird abgetragen, Lücken bis 14 px darunter
+  werden mit Erde aufgefüllt (über Schächten nur eine Abdeckung). Das kostet 1 Geld pro 60 Pixel und Arbeitszeit der Buddler (erste Bauphase).
+  Fels, Granit, Wasser oder Lava im Bauraum, zu steile Hänge oder fehlender Boden machen den Platz unmöglich (Fels erst sprengen).
+* **Vorschau** im Bau-Menü: Rahmen vor dem Buddler und Hinweis auf jeder Karte, grün = frei, gelb = wird planiert (+ Kosten), rot = unmöglich (mit Grund).
+* **KI:** reserviert die Burgfläche ihres Plateaus (Wachturm kommt auf die andere Seite), nutzt dieselbe Platzprüfung und dasselbe Planieren,
+  spart für ein erforschtes, aber noch nicht gebautes Gebäude, bevor sie weiter forscht.
+
 ## Mehrspieler (Peer-to-Peer über WebRTC)
 1. **Host:** „Mehrspieler“ → Namen und **Raumpasswort** (mind. 4 Zeichen) eingeben → „Privaten Raum erstellen“.
 2. In der Lobby erscheint ein **Einladungslink** (`…/buddelrage/#raum=<32 Zeichen Geheimnis>`) → „Link kopieren“
@@ -116,6 +130,8 @@ Tippen in die Welt = Aktion zu dieser Stelle, lange drücken = dorthin graben. I
 * Ohne TURN-Server klappt die P2P-Verbindung bei manchen NAT-/Firewall-Kombinationen nicht. Die PeerJS-Cloud ist ein kostenloser Dienst ohne Garantie.
 * Gamepad: es wird das erste verbundene Gamepad für den lokalen Spieler genutzt (kein Splitscreen).
 * Touch-Steuerung ist eine einfache Grundversion (kein Zielen mit Wurfbahn per Finger, außer Tippen auf das Ziel).
+* Kartengröße „Riesig“: der Kartenaufbau dauert etwa 1–2,5 s (je nach Teamzahl), im Mehrspieler wird die Startkarte komprimiert übertragen (z. B. 5760 × 880 → ca. 350 KB).
+* Die KI baut die Burg nur, wenn sie lange genug überlebt und genug Gold hat (Mittel/Schwer); in kurzen, kampfreichen Runden kommt sie oft nicht dazu.
 * Die KI-Wegsuche nutzt ein grobes Raster; in sehr zerklüfteten Höhlen braucht ein KI-Buddler manchmal einige Sekunden, um sich freizugraben.
 
 Credits und Lizenzen: siehe CREDITS.md.

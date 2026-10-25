@@ -115,9 +115,34 @@ function drawStruct(g, s, col) {
   if (s.fire > 0) for (let k = 0; k < 4; k++) drawFlame(g, s.x + (k - 1.5) * s.w / 4, s.y - s.h * (0.3 + 0.5 * ((k * 7) % 3) / 3), 6, s.id + k);
   if (s.prog >= 1 && s.hp < BUILD[s.type].hp) { const x = Math.round(s.x - s.w / 2), y = Math.round(s.y - s.h - 6); g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(x, y, s.w, 2); g.fillStyle = '#e44'; g.fillRect(x, y, Math.max(0, s.w * s.hp / BUILD[s.type].hp), 2); }
 }
+// Bauvorschau: grün = sofort, gelb = Planieren nötig, rot = unmöglich
+function buildPreviewInfo(world, type) {
+  if (!world || G.myTeam < 0 || !BUILD[type]) return null;
+  const t = world.teams[G.myTeam], c = t && world.clonks.find(o => o.id === t.sel);
+  if (!c || c.act === 'dead' || c.inside) return null;
+  const p = world.sitePos(c, type), pc = c.act === 'walk' ? world.placeCheck(type, p.x, p.y) : { st: 'no', why: 'Buddler muss auf festem Boden stehen' };
+  return { x: p.x, y: p.y, pc, B: BUILD[type] };
+}
+function drawBuildPreview(g, world, type) {
+  const I = buildPreviewInfo(world, type); if (!I) return;
+  const { x, y, pc, B } = I, hw = B.w >> 1;
+  const col = pc.st === 'ok' ? '80,220,110' : pc.st === 'level' ? '255,200,60' : '240,70,60';
+  const a = 0.5 + 0.25 * Math.sin(performance.now() / 180);
+  g.fillStyle = 'rgba(' + col + ',' + (0.18 + a * 0.12) + ')'; g.fillRect(x - hw, y - B.h + 1, B.w + 1, B.h);
+  g.fillStyle = 'rgba(' + col + ',.95)';
+  g.fillRect(x - hw, y - B.h + 1, B.w + 1, 1); g.fillRect(x - hw, y, B.w + 1, 1); g.fillRect(x - hw, y - B.h + 1, 1, B.h); g.fillRect(x + hw, y - B.h + 1, 1, B.h);
+  if (pc.st === 'level') { g.fillStyle = 'rgba(255,200,60,.5)'; g.fillRect(x - hw, y + 1, B.w + 1, 3); }
+}
 function drawSite(g, s) {
   const x = Math.round(s.x), y = Math.round(s.y), hw = s.w >> 1, h = Math.round((s.h - 4) * s.prog);
   const R = (cl, xx, yy, w, hh) => { g.fillStyle = cl; g.fillRect(x + xx, y + yy, w, hh); };
+  if (s.lv) { // Planierphase: Absteckpflöcke + gestrichelter Rahmen + Schaufel-Balken
+    const T = (performance.now() / 120) | 0;
+    for (let k = -hw; k < hw; k += 4) if (((k >> 2) + T) % 2) { R('rgba(255,200,60,.85)', k, -s.h, 2, 1); R('rgba(255,200,60,.85)', k, 0, 2, 1); }
+    R('#c8a050', -hw, -10, 1, 10); R('#c8a050', hw, -10, 1, 10); R('#e33', -hw, -10, 2, 2); R('#e33', hw - 1, -10, 2, 2);
+    R('#222', -12, -s.h - 4, 24, 3); R('#fb3', -12 + (T % 20), -s.h - 4, 4, 3);
+    return;
+  }
   g.globalAlpha = 0.5 + s.prog * 0.5;
   R('#7a5530', -hw, -2, s.w, 2);
   for (let px = -hw + 1; px < hw; px += 10) R('#8a6038', px, -2 - h, 2, h);
@@ -187,7 +212,7 @@ class Renderer {
     const g = this.g, S = this.scale, vw = this.cv.width / S, vh = this.cv.height / S;
     this.flush(world);
     if (focus) {
-      const tx = focus.x - vw / 2, ty = focus.y - 8 - vh / 2;
+      const tx = focus.x - vw / 2, ty = focus.y - 8 - vh / 2 + (typeof G !== 'undefined' && G.menu === 'buildmenu' ? vh * 0.2 : 0); // Bauen: Buddler oberhalb des Menüs zeigen
       this.cam.x += (tx - this.cam.x) * 0.12; this.cam.y += (ty - this.cam.y) * 0.12;
       if (Math.abs(tx - this.cam.x) > vw) { this.cam.x = tx; this.cam.y = ty; }
     }
@@ -233,6 +258,7 @@ class Renderer {
     const L = (o) => { if (world.remote) { if (o.rx === undefined || Math.abs(o.x - o.rx) > 40 || Math.abs(o.y - o.ry) > 40) { o.rx = o.x; o.ry = o.y; } o.rx += (o.x - o.rx) * 0.35; o.ry += (o.y - o.ry) * 0.35; return [o.rx, o.ry]; } return [o.x, o.y]; };
     const vis = (x, y, m) => x > cx - m && x < cx + vw + m && y > cy - m && y < cy + vh + m;
     for (const s of world.structs) { if (!vis(s.x, s.y, 80)) continue; const t = world.teams[s.team]; drawStruct(g, s, t ? t.color : '#888'); }
+    if (typeof G !== 'undefined' && G.buildPrev) drawBuildPreview(g, world, G.buildPrev);
     for (const it of world.items) { const [x, y] = L(it); if (!vis(x, y, 10)) continue; if (it.stuck) g.globalAlpha = 0.85; ITEM_DRAW[it.type](g, Math.round(x), Math.round(y) + 1, it); g.globalAlpha = 1; }
     for (const m of world.monsters) { const [x, y] = L(m); if (!vis(x, y, 20)) continue; drawMonster(g, m, x, y); if (m.fire > 0) drawFlame(g, x, y - 5, 5, m.id); }
     for (const c of world.clonks) {

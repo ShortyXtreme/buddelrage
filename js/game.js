@@ -6,6 +6,7 @@ const SOLID = [0, 0, 1, 1, 1, 1, 1, 0, 1, 0];
 const DIGGABLE = [0, 0, 1, 1, 0, 1, 0, 0, 0, 0];
 const BLASTABLE = [0, 0, 1, 1, 1, 1, 0, 0, 1, 0];
 const CH = 32;
+const SIM_CHUNK_BUDGET = 360; // max. aktive Material-Chunks pro Tick (große Karten)
 const ITEMS = {
   rock: { name: 'Stein', price: 3, sell: 2, dmg: 9 },
   flint: { name: 'Feuerstein', price: 10, sell: 5, blast: 13 },
@@ -31,6 +32,13 @@ const VEH = {
 };
 const VEH_CODES = ['lorry', 'catapult', 'cannon'];
 // Gebäude
+// Startplateau: Hütte in der Mitte, Burg auf der Burgseite (CASTLE_OFF), Wachturm auf der Gegenseite
+// Planieren: max. Abtrag je Spalte, max. Lückentiefe, Kappe über Schächten, Pixel pro Geldstück
+const LEVEL_CUT = 26, LEVEL_FILL = 14, LEVEL_CAP = 6, LEVEL_PX_PER_COIN = 60, LEVEL_RATE = 3;
+const CASTLE_OFF = 62, PLAT_BACK = 78, PLAT_FRONT = 118;
+// Kartengrößen (Breite = Grundbreite × f, Höhe fest)
+const MAP_SIZES = { klein: { n: 'Klein', f: 0.85, h: 580 }, mittel: { n: 'Mittel', f: 1.2, h: 660 }, gross: { n: 'Groß', f: 1.6, h: 760 }, riesig: { n: 'Riesig', f: 2.2, h: 880 } };
+function mapDims(baseW, size) { const S = MAP_SIZES[size] || MAP_SIZES.mittel; return { W: Math.round(baseW * S.f / 10) * 10, H: S.h, size: MAP_SIZES[size] ? size : 'mittel' }; }
 const BUILD = {
   hut: { name: 'Hütte', price: 60, w: 30, h: 24, hp: 120, time: 360, base: 1, wood: 1 },
   tower: { name: 'Wachturm', price: 80, w: 18, h: 50, hp: 220, time: 600, wood: 1, res: 'tower' },
@@ -230,32 +238,49 @@ class World {
     else for (let i = 0; i < n; i++) xs.push(Math.round(this.W * (i + 0.5) / n));
     return xs;
   }
+  // Startplateau je Basis: eben, fest, Himmel frei – Platz für Hütte, Wachturm (Gegenseite) und Burg (Burgseite)
+  plateauSpan(bx, d) { return d > 0 ? [bx - PLAT_BACK, bx + PLAT_FRONT] : [bx - PLAT_FRONT, bx + PLAT_BACK]; }
   generate(nBases) {
     const { W, H, seed } = this, surf = this.surf, mat = this.mat;
     const sf = new Float32Array(W);
     for (let x = 0; x < W; x++) sf[x] = H * 0.27 + (fbm(x / 260, 0.5, seed, 3) - 0.5) * 260 + (fbm(x / 40, 3.3, seed + 5, 2) - 0.5) * 26;
     this.bases = this.basePositions(nBases);
-    for (const bx of this.bases) {
-      const h = sf[bx];
-      for (let x = Math.max(0, bx - 90); x < Math.min(W, bx + 90); x++) {
-        const d = Math.abs(x - bx); const f = d < 50 ? 1 : 1 - (d - 50) / 40;
-        sf[x] = sf[x] * (1 - f) + h * f;
-      }
-    }
+    this.baseDir = this.bases.map(bx => (nBases === 1 ? 1 : bx < W / 2 ? 1 : -1));
+    const lo = 60, hi = H * 0.5;
+    const spacing = nBases > 1 ? W / nBases : W;
+    this.plats = [];
+    this.bases.forEach((bx, i) => {
+      const d = this.baseDir[i], [a, b] = this.plateauSpan(bx, d);
+      // Höhe: zwischen Gelände an der Basis und dem Umgebungsmittel → natürliche Lage, kleine Übergänge
+      let m = 0, n = 0; for (let x = Math.max(0, bx - 260); x < Math.min(W, bx + 260); x++) { m += sf[x]; n++; }
+      const h = Math.round(Math.max(lo, Math.min(hi, sf[bx] * 0.5 + (m / n) * 0.5)));
+      const room = Math.max(50, spacing / 2 - (b - a) / 2 - 10);
+      const blend = (edge, dirn) => {
+        const probe = Math.max(0, Math.min(W - 1, edge + dirn * 90));
+        const L = Math.round(Math.max(60, Math.min(room, Math.abs(sf[probe] - h) * 2.6)));
+        for (let k = 1; k <= L; k++) { const x = edge + dirn * k; if (x < 0 || x >= W) break; const tt = k / L, f = 1 - tt * tt * (3 - 2 * tt); sf[x] = sf[x] * (1 - f) + h * f; }
+      };
+      for (let x = Math.max(0, a); x <= Math.min(W - 1, b); x++) sf[x] = h;
+      blend(a, -1); blend(b, 1);
+      this.plats.push({ a, b, h, d });
+    });
     for (let x = 0; x < W; x++) surf[x] = Math.max(50, Math.min(H * 0.55, Math.round(sf[x])));
+    this.castleSites = this.bases.map((bx, i) => ({ x: bx + this.baseDir[i] * CASTLE_OFF, y: surf[bx] - 1, d: this.baseDir[i] }));
+    // Materialien: gleiche Regeln wie zuvor, aber in Prioritätsreihenfolge ausgewertet (spart Rauschaufrufe)
+    const granY = new Float32Array(W); for (let x = 0; x < W; x++) granY[x] = H - 16 - fbm(x / 30, 0, seed + 10, 2) * 18;
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const i = y * W + x, s = surf[x];
       if (y < s) { mat[i] = MAT.SKY; continue; }
-      const d = y - s; let m = MAT.EARTH;
-      if (d < 22 && fbm(x / 130, y / 60, seed + 2, 3) > 0.64) m = MAT.SAND;
-      if (d > 25 && fbm(x / 35, y / 30, seed + 8, 3) > 0.69) m = MAT.SAND;
-      if (fbm(x / 45, y / 30, seed + 3, 4) > 0.64 - Math.min(d, 300) / 2500) m = MAT.ROCK;
-      if (d > 30 && fbm(x / 16, y / 13, seed + 4, 3) > 0.70) m = MAT.GOLD;
-      const c = fbm(x / 90, y / 45, seed + 6, 4);
-      if (d > 40 && Math.abs(c - 0.5) < 0.02) m = MAT.TUNNEL;
+      if (y > granY[x]) { mat[i] = MAT.GRANITE; continue; }
+      const d = y - s; let m;
       if (d > 50 && fbm(x / 60, y / 40, seed + 7, 3) > 0.685) m = (y > H * 0.6 && fbm(x / 220, y / 220, seed + 9, 2) > 0.45) ? MAT.WATER : MAT.TUNNEL;
+      else if (d > 40 && Math.abs(fbm(x / 90, y / 45, seed + 6, 4) - 0.5) < 0.02) m = MAT.TUNNEL;
+      else if (d > 30 && fbm(x / 16, y / 13, seed + 4, 3) > 0.70) m = MAT.GOLD;
+      else if (fbm(x / 45, y / 30, seed + 3, 4) > 0.64 - Math.min(d, 300) / 2500) m = MAT.ROCK;
+      else if (d > 25 && fbm(x / 35, y / 30, seed + 8, 3) > 0.69) m = MAT.SAND;
+      else if (d < 22 && fbm(x / 130, y / 60, seed + 2, 3) > 0.64) m = MAT.SAND;
+      else m = MAT.EARTH;
       if (m === MAT.TUNNEL && d > 70 && y > H * 0.72 && fbm(x / 160, y / 90, seed + 11, 2) > 0.56) m = MAT.LAVA;
-      if (y > H - 16 - fbm(x / 30, 0, seed + 10, 2) * 18) m = MAT.GRANITE;
       mat[i] = m;
     }
     // Lava-Höhlen (unten mit Lava gefüllt, oben Hohlraum)
@@ -278,19 +303,24 @@ class World {
       for (let x = W - 2; x >= 1; x--) { const i = y * W + x; if (mat[i] === MAT.LAVA && (EMP(mat[i + W]) || EMP(mat[i + 1]) && EMP(mat[i + 1 + W]))) mat[i] = MAT.TUNNEL; }
     }
     // Boden unter Basen festigen
-    for (const bx of this.bases) for (let x = bx - 46; x < bx + 46; x++) for (let y = surf[x]; y < surf[x] + 26; y++) {
-      const i = y * W + x; if (mat[i] !== MAT.EARTH && mat[i] !== MAT.GOLD) mat[i] = MAT.EARTH;
+    for (const P of this.plats) for (let x = Math.max(0, P.a - 8); x <= Math.min(W - 1, P.b + 8); x++) {
+      const depth = x >= P.a && x <= P.b ? 34 : 18;
+      for (let y = surf[x]; y < Math.min(H - 20, surf[x] + depth); y++) { const i = y * W + x; if (mat[i] !== MAT.EARTH) mat[i] = MAT.EARTH; }
     }
-    // Oberflächen-See
-    let lx = -1, best = 0;
-    for (let x = 60; x < W - 60; x++) { if (this.bases.some(b => Math.abs(b - x) < 160)) continue; if (surf[x] > best) { best = surf[x]; lx = x; } }
-    if (lx > 0) {
+    // Oberflächen-Seen (Anzahl wächst mit der Kartenbreite; nie auf einem Startplateau)
+    const nLakes = Math.max(1, Math.round(W / 1700)), lakes = [];
+    for (let q = 0; q < nLakes; q++) {
+      let lx = -1, best = 0;
+      for (let x = 60; x < W - 60; x++) { if (this.bases.some(b => Math.abs(b - x) < 200) || lakes.some(L => x > L[0] - 150 && x < L[1] + 150)) continue; if (surf[x] > best) { best = surf[x]; lx = x; } }
+      if (lx < 0) break;
       const level = best - 22; let a = lx, b = lx;
       while (a > 0 && surf[a] > level) a--; while (b < W - 1 && surf[b] > level) b++;
+      lakes.push([a, b]);
+      if (this.plats.some(P => b >= P.a - 12 && a <= P.b + 12)) continue;
       if (b - a < 360 && a > 2 && b < W - 3) for (let x = a; x <= b; x++) for (let y = level; y < surf[x]; y++) mat[y * W + x] = MAT.WATER;
     }
     // Eingebettete Objekte (Feuersteine, Gold, Steine)
-    for (let k = 0; k < Math.round(W / 22); k++) {
+    for (let k = 0; k < Math.round(W * H / (22 * 620)); k++) {
       const x = 10 + Math.floor(R() * (W - 20)); const y = surf[x] + 15 + Math.floor(R() * (H - surf[x] - 50));
       if (mat[y * W + x] !== MAT.EARTH) continue;
       const r = R(); const type = r < 0.55 ? 'flint' : r < 0.75 ? 'gold' : 'rock';
@@ -541,21 +571,75 @@ class World {
     else { const it = this.spawnItem(what, base.x + (this.rand() * 10 - 5), base.y - 6); it.pickCd = 10; }
     this.snd('uncash', base.x, base.y);
   }
-  build(c, what) {
+  // Bauplatz vor dem Buddler (gleiche Formel für Spieler, KI und Vorschau)
+  sitePos(c, what) { const hw = BUILD[what].w >> 1; return { x: Math.round(c.x + c.dir * (hw + 6)), y: Math.round(c.y) }; }
+  // Prüft einen Bauplatz: st = 'ok' (sofort), 'level' (Planieren nötig: Erde/Sand abtragen, Lücken auffüllen), 'no' (unmöglich, why)
+  placeCheck(type, x, y) {
+    const B = BUILD[type]; if (!B) return { st: 'no', why: 'unbekannt' };
+    const hw = B.w >> 1, W = this.W, mat = this.mat;
+    if (x - hw < 3 || x + hw > W - 4 || y - B.h < 1 || y + LEVEL_FILL + 2 >= this.H) return { st: 'no', why: 'Kartenrand' };
+    if (this.structs.some(s => !s.remove && Math.abs(s.x - x) < (s.w + B.w) / 2 + 4 && Math.abs(s.y - y) < 40)) return { st: 'no', why: 'anderes Gebäude im Weg' };
+    let ground = 0, cut = 0, fill = 0, hard = 0, wet = 0, deep = 0, tall = 0;
+    for (let xx = x - hw; xx <= x + hw; xx++) {
+      if (SOLID[mat[(y + 1) * W + xx]] || SOLID[mat[(y + 2) * W + xx]]) ground++;
+      let col = 0;
+      for (let yy = y - B.h + 1; yy <= y; yy++) {
+        const m = mat[yy * W + xx];
+        if (m === MAT.LAVA || (m === MAT.WATER && yy > y - 6)) wet++;
+        if (!SOLID[m]) continue;
+        if (!DIGGABLE[m]) hard++; else { cut++; col = Math.max(col, y - yy + 1); }
+      }
+      if (col > LEVEL_CUT) tall++;
+      let k = 1; while (k <= LEVEL_FILL && !SOLID[mat[(y + k) * W + xx]]) { if (mat[(y + k) * W + xx] === MAT.LAVA) wet++; k++; }
+      if (k > LEVEL_FILL) { deep++; fill += LEVEL_CAP; } else fill += k - 1;
+    }
+    if (wet) return { st: 'no', why: 'Wasser oder Lava im Weg' };
+    if (hard) return { st: 'no', why: 'Fels/Granit im Weg – erst sprengen' };
+    if (cut === 0 && ground >= B.w * 0.8) return { st: 'ok', cut: 0, fill: 0, cost: 0 };
+    if (tall) return { st: 'no', why: 'Hang zu steil (zu viel Erde)' };
+    if (deep > B.w * 0.3) return { st: 'no', why: 'kein Boden darunter' };
+    const n = cut + fill;
+    return { st: 'level', cut, fill, cost: Math.ceil(n / LEVEL_PX_PER_COIN) };
+  }
+  // Planieren als erste Bauphase: pro Arbeitsschritt einige Pixel abtragen (oben zuerst) bzw. auffüllen (von unten)
+  levelStep(s, n) {
+    const B = BUILD[s.type], hw = B.w >> 1, W = this.W, mat = this.mat, y = s.y;
+    let done = 0, any = false;
+    for (let xx = s.x - hw; xx <= s.x + hw && done < n; xx++) {
+      for (let yy = y - B.h + 1; yy <= y && done < n; yy++) {
+        const m = mat[yy * W + xx]; if (!SOLID[m]) continue;
+        any = true; if (!DIGGABLE[m]) continue;
+        if (m === MAT.GOLD) { s.lvG = (s.lvG || 0) + 1; if (s.lvG >= 36) { s.lvG = 0; const it = this.spawnItem('gold', xx, y - 4); it.pickCd = 20; } }
+        const open = yy <= 0 || mat[(yy - 1) * W + xx] === MAT.SKY;
+        this.setMat(xx, yy, open ? MAT.SKY : this.bg(xx, yy));
+        if (open && yy >= this.surf[xx]) this.surf[xx] = yy + 1;
+        done++;
+      }
+      // Lücken darunter: tiefste leere Zelle über festem Grund zuerst füllen (bei Schacht nur eine Kappe)
+      let k = 1; while (k <= LEVEL_FILL && !SOLID[mat[(y + k) * W + xx]]) k++;
+      const from = k > LEVEL_FILL ? LEVEL_CAP : k - 1;
+      for (let j = from; j >= 1 && done < n; j--) { if (SOLID[mat[(y + j) * W + xx]]) continue; this.setMat(xx, y + j, MAT.EARTH); any = true; done++; }
+    }
+    s.lvD += done;
+    if (!any || done === 0) { s.lv = 0; this.msg('Boden für ' + B.name + ' planiert – jetzt wird gebaut.', s.team); this.snd('build', s.x, s.y); }
+  }
+  build(c, what, at) {
     const t = this.teams[c.team];
     if (c.act !== 'walk') { this.msg('Zum Bauen auf festem Boden stehen.', c.team); return; }
     if (BUILD[what]) {
       const B = BUILD[what];
       if (B.res && !t.res[B.res]) { this.msg('Erst erforschen: ' + RES_BY[B.res].name, c.team); this.snd('error', c.x, c.y); return; }
       if (t.money < B.price) { this.msg('Nicht genug Geld (' + B.price + ')!', c.team); this.snd('error', c.x, c.y); return; }
-      const hw = B.w >> 1;
-      const x = Math.round(c.x + c.dir * (hw + 6)), y = Math.round(c.y);
-      let ground = 0; for (let xx = x - hw; xx <= x + hw; xx++) if (this.solid(xx, y + 1) || this.solid(xx, y + 2)) ground++;
-      let free = true; for (let xx = x - hw; xx <= x + hw && free; xx += 2) for (let yy = y - B.h + 2; yy <= y - 1; yy += 3) if (this.solid(xx, yy)) { free = false; break; }
-      if (ground < B.w * 0.8 || !free || this.structs.some(s => Math.abs(s.x - x) < (s.w + B.w) / 2 + 4 && Math.abs(s.y - y) < 40)) { this.msg('Hier kann nicht gebaut werden (Platz/Boden).', c.team); this.snd('error', c.x, c.y); return; }
-      t.money -= B.price;
-      this.addStruct(what, x, y, c.team, 0);
-      this.msg('Baustelle errichtet: ' + B.name + '. Buddler in der Nähe bauen sie auf.', c.team); this.snd('click', x, y);
+      let { x, y } = this.sitePos(c, what);
+      if (at && Math.abs(at.x - x) <= 4 && Math.abs(at.y - y) <= 2) { x = at.x; y = at.y; } // KI: exakt geplanter Platz
+      const pc = this.placeCheck(what, x, y);
+      if (pc.st === 'no') { this.msg('Hier kann nicht gebaut werden: ' + pc.why + '.', c.team); this.snd('error', c.x, c.y); return; }
+      const total = B.price + (pc.cost || 0);
+      if (t.money < total) { this.msg('Nicht genug Geld (' + B.price + (pc.cost ? ' + ' + pc.cost + ' Planieren' : '') + ')!', c.team); this.snd('error', c.x, c.y); return; }
+      t.money -= total;
+      const s = this.addStruct(what, x, y, c.team, 0);
+      if (pc.st === 'level') { s.lv = 1; s.lvN = pc.cut + pc.fill; s.lvD = 0; if (t.stats) t.stats.leveled = (t.stats.leveled || 0) + 1; }
+      this.msg('Baustelle errichtet: ' + B.name + (pc.st === 'level' ? ' – der Boden wird zuerst planiert' : '') + '. Buddler in der Nähe bauen sie auf.', c.team); this.snd('click', x, y);
     } else if (what === 'bridge') {
       if (t.money < PRICE_BRIDGE) { this.msg('Nicht genug Geld (' + PRICE_BRIDGE + ')!', c.team); return; }
       t.money -= PRICE_BRIDGE;
@@ -811,7 +895,8 @@ class World {
     for (const m of this.monsters) this.updMonster(m);
     for (const s of this.structs) if (s.prog < 1) {
       const B = BUILD[s.type];
-      const builders = this.clonks.filter(c => c.team === s.team && c.act === 'walk' && !c.inside && Math.abs(c.x - s.x) < s.w / 2 + 8 && Math.abs(c.y - s.y) < 12).length;
+      const builders = this.clonks.filter(c => c.team === s.team && (c.act === 'walk' || (s.lv && c.act === 'dig')) && !c.inside && Math.abs(c.x - s.x) < s.w / 2 + (s.lv ? 14 : 8) && Math.abs(c.y - s.y) < (s.lv ? 30 : 12)).length;
+      if (builders && s.lv) { if (this.tick % 2 === 0) this.levelStep(s, Math.min(3, builders) * LEVEL_RATE); if (this.tick % 40 === 0) this.snd('dig', s.x, s.y); continue; }
       if (builders) { s.prog = Math.min(1, s.prog + Math.min(3, builders) / B.time); if (s.prog >= 1) { this.snd('build', s.x, s.y); this.msg(B.name + ' fertig gebaut!', s.team); const st = this.teams[s.team].stats; if (st) { st.built++; st.builtList.push(s.type); } } }
     }
     // Forschung
@@ -835,9 +920,13 @@ class World {
     const cur = this.activeNext; this.activeNext = this.active; this.activeNext.fill(0); this.active = cur;
     const W = this.W, H = this.H, mat = this.mat, R = this.rand, st = (this.tick & 0xffff) || 1, stamp = this.stamp, an = this.activeNext;
     const EMPTY = m => m === MAT.SKY || m === MAT.TUNNEL;
+    // Budget für große Karten: bei sehr vielen aktiven Chunks pro Tick nur eine rotierende Teilmenge rechnen (Rest bleibt aktiv)
+    let nAct = 0; for (let k = 0; k < cur.length; k++) nAct += cur[k];
+    const every = nAct > SIM_CHUNK_BUDGET ? Math.ceil(nAct / SIM_CHUNK_BUDGET) : 1, phase = this.tick % every;
     for (let cy = this.chh - 1; cy >= 0; cy--) for (let cx = 0; cx < this.cw; cx++) {
       const ci = cy * this.cw + cx;
       if (!cur[ci]) continue;
+      if (every > 1 && (ci % every) !== phase) { an[ci] = 1; continue; }
       const x0 = cx * CH, x1 = Math.min(W, x0 + CH), y0 = cy * CH, y1 = Math.min(H - 1, y0 + CH);
       for (let y = y1 - 1; y >= y0; y--) {
         const rev = ((y + this.tick) & 1) === 1;
@@ -872,7 +961,9 @@ class World {
               for (let q = 0; q < 4; q++) { const j = nb[q]; if (j >= 0 && j < W * H && mat[j] === MAT.WOOD) this.ignitePoint(j % W, (j / W) | 0); }
               if (y > 0 && EMPTY(mat[i - W])) { this.ignitePoint(x + 2, y - 1); this.ignitePoint(x - 2, y - 1); }
             }
-            const canFall = EMPTY(b) || (x > 0 && EMPTY(mat[i - 1])) || (x < W - 1 && EMPTY(mat[i + 1]));
+            // nur aktiv halten, wenn die Flüssigkeitsregeln unten wirklich eine Bewegung erlauben (sonst bleibt der Chunk ewig aktiv)
+            const restL = b === m && (y === 0 || mat[i - W] !== m);
+            const canFall = EMPTY(b) || (x > 0 && EMPTY(mat[i + W - 1]) && !SOLID[mat[i - 1]] && mat[i - 1] !== MAT.WATER) || (x < W - 1 && EMPTY(mat[i + W + 1]) && !SOLID[mat[i + 1]] && mat[i + 1] !== MAT.WATER) || (!restL && ((x > 0 && EMPTY(mat[i - 1])) || (x < W - 1 && EMPTY(mat[i + 1]))));
             if (!canFall) continue;
             if (R() > 0.22) { an[ci] = 1; continue; } // fließt langsam
           }
@@ -886,10 +977,13 @@ class World {
           }
           if (moved) continue;
           if (b === L && (y === 0 || mat[i - W] !== L)) continue; // ruhige Oberfläche
+          // Film/Tropfen direkt auf festem Boden wandert sonst endlos hin und her (Chunk bleibt aktiv): langsam verdunsten bzw. erstarren
+          if (SOLID[b] && (y === 0 || mat[i - W] !== L) && mat[i - 1] !== L && mat[i + 1] !== L && R() < 0.02) { this.setMat(x, y, L === MAT.LAVA ? MAT.ROCK : this.bg(x, y)); continue; }
+          if (SOLID[b] && (y === 0 || mat[i - W] !== L) && R() < 0.0015) { this.setMat(x, y, L === MAT.LAVA ? MAT.ROCK : this.bg(x, y)); continue; }
           for (const dd of [d, -d]) {
             const nx = x + dd; if (nx < 0 || nx >= W) continue;
             const s2 = mat[i + dd];
-            if (EMPTY(s2)) { this.setMat(x, y, this.bg(x, y)); this.setMat(nx, y, L); stamp[i + dd] = st; break; }
+            if (EMPTY(s2) && (y === 0 || mat[i - W] !== L || !SOLID[mat[i + dd - W]])) { this.setMat(x, y, this.bg(x, y)); this.setMat(nx, y, L); stamp[i + dd] = st; break; } // eingeschlossene Luftblase unter Fels nicht endlos verschieben
           }
         }
       }
@@ -1303,7 +1397,7 @@ class World {
         (c.armor ? 1 : 0) | (c.knight ? 2 : 0) | (c.block ? 4 : 0) | (c.bowT > 0 ? 8 : 0) | (c.fire > 0 ? 16 : 0) | (c.blockT > 0 ? 32 : 0), c.arrows, c.inside, c.swing, c.veh, c.slot || 0]),
       i: this.items.map(i => [i.id, ITEM_CODES.indexOf(i.type), r1(i.x), r1(i.y), i.fuse, i.stuck ? 1 : 0, r1(i.vx), r1(i.vy), i.landed ? 1 : 0]),
       m: this.monsters.map(m => [m.id, r1(m.x), r1(m.y), m.dir, Math.ceil(m.hp), r1(m.anim), m.bite || 0, m.fire > 0 ? 1 : 0]),
-      s: this.structs.map(s => [s.id, s.type, s.x, s.y, s.team, Math.round(s.prog * 100) / 100, Math.ceil(s.hp), s.fire > 0 ? 1 : 0]),
+      s: this.structs.map(s => [s.id, s.type, s.x, s.y, s.team, Math.round(s.prog * 100) / 100, Math.ceil(s.hp), s.fire > 0 ? 1 : 0, s.lv ? 1 : 0]),
       v: this.vehicles.map(v => [v.id, VEH_CODES.indexOf(v.type), r1(v.x), r1(v.y), v.dir, v.team, Math.ceil(v.hp), Math.round(v.ang * 100) / 100, invEnc(v.inv), v.fire > 0 ? 1 : 0, v.pusher, v.cd]),
       t: this.teams.map(t => [t.money, t.sel, t.elim ? 1 : 0, Object.keys(t.res).join(','), t.rq, Math.round(t.rp * 1000) / 1000, t.ai ? 1 : 0, t.diff || '', t.stat || '', t.helper ? 1 : 0]),
       f: fl, b: this.burntNew && this.burntNew.length ? this.burntNew.splice(0) : undefined,
@@ -1323,7 +1417,7 @@ class World {
     this.items = s.i.map(a => { const it = oi.get(a[0]) || { rx: a[2], ry: a[3] }; Object.assign(it, { id: a[0], type: ITEM_CODES[a[1]], x: a[2], y: a[3], fuse: a[4], stuck: !!a[5], vx: a[6], vy: a[7], landed: !!a[8] }); if (it.type === 'arrow' && !it.landed) it.ang = Math.atan2(it.vy, it.vx); return it; });
     const om = new Map(this.monsters.map(c => [c.id, c]));
     this.monsters = s.m.map(a => { const m = om.get(a[0]) || { rx: a[1], ry: a[2] }; Object.assign(m, { id: a[0], x: a[1], y: a[2], dir: a[3], hp: a[4], anim: a[5], bite: a[6], fire: a[7] }); return m; });
-    this.structs = s.s.map(a => { const B = BUILD[a[1]]; return { id: a[0], type: a[1], x: a[2], y: a[3], team: a[4], prog: a[5], hp: a[6], fire: a[7], w: B.w, h: B.h }; });
+    this.structs = s.s.map(a => { const B = BUILD[a[1]]; return { id: a[0], type: a[1], x: a[2], y: a[3], team: a[4], prog: a[5], hp: a[6], fire: a[7], lv: a[8] || 0, w: B.w, h: B.h }; });
     const ov = new Map(this.vehicles.map(c => [c.id, c]));
     this.vehicles = (s.v || []).map(a => { const v = ov.get(a[0]) || { rx: a[2], ry: a[3] }; Object.assign(v, { id: a[0], type: VEH_CODES[a[1]], x: a[2], y: a[3], dir: a[4], team: a[5], hp: a[6], ang: a[7], inv: invDec(a[8]), fire: a[9], pusher: a[10], cd: a[11] }); return v; });
     s.t.forEach((a, i) => { const t = this.teams[i]; if (t) { t.money = a[0]; t.sel = a[1]; t.elim = !!a[2]; t.res = {}; if (a[3]) for (const k of a[3].split(',')) t.res[k] = 1; t.rq = a[4]; t.rp = a[5]; t.ai = !!a[6]; t.diff = a[7] || ''; t.stat = a[8] || ''; t.helper = !!a[9]; } });

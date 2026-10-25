@@ -5,6 +5,7 @@ function openMenu(id) {
   if (input.listen) input.listen = null;
   for (const m of MODALS) $(m).style.display = 'none';
   $(id).style.display = 'block'; $('backdrop').style.display = 'block'; G.menu = id; G.menuSel = 0;
+  document.body.classList.toggle('buildopen', id === 'buildmenu'); G.buildHover = null; G.buildPrev = null;
   if ((id === 'pausemenu' || id === 'help' || id === 'settings') && G.role === 'single') G.paused = true;
   if (G.world) { releaseAll(); pushKeys(true); }
   if (id === 'shop') renderShop(); else if (id === 'research') renderResearch(); else if (id === 'buildmenu') renderBuild();
@@ -16,10 +17,11 @@ function closeAllMenus() {
   input.listen = null;
   for (const m of MODALS) $(m).style.display = 'none';
   $('backdrop').style.display = 'none'; G.menu = null; if (G.role === 'single') G.paused = false;
+  document.body.classList.remove('buildopen'); G.buildPrev = null; G.buildHover = null;
   if (G.world) cv.classList.add('ingame');
 }
 function menuOpts() { return G.menu ? Array.from($(G.menu).querySelectorAll('.opt')).filter(e => e.offsetParent) : []; }
-function menuHL() { const o = menuOpts(); if (G.menuSel >= o.length) G.menuSel = Math.max(0, o.length - 1); o.forEach((e, i) => e.classList.toggle('hl', i === G.menuSel)); const h = o[G.menuSel]; if (h && h.scrollIntoView && G.menuKb) h.scrollIntoView({ block: 'nearest' }); }
+function menuHL() { const o = menuOpts(); if (G.menuSel >= o.length) G.menuSel = Math.max(0, o.length - 1); o.forEach((e, i) => e.classList.toggle('hl', i === G.menuSel)); const h = o[G.menuSel]; if (h && h.scrollIntoView && G.menuKb) h.scrollIntoView({ block: 'nearest' }); if (G.menu === 'buildmenu') { const k = G.buildHover || (h && h.dataset.build); G.buildPrev = BUILD[k] ? k : null; } }
 function menuMove(d) { const o = menuOpts(); if (!o.length) return; G.menuKb = true; G.menuSel = (G.menuSel + d + o.length) % o.length; menuHL(); }
 function menuPick() { const o = menuOpts()[G.menuSel]; if (o) o.click(); }
 function head(title, sub) { return '<div class="phead"><div><h2>' + title + '</h2>' + (sub ? '<div class="sub">' + sub + '</div>' : '') + '</div><button class="x" onclick="closeAllMenus()" title="Schließen (Esc)">✕</button></div>'; }
@@ -89,15 +91,18 @@ function renderBuild() {
   const w = G.world; if (!w || G.myTeam < 0) return;
   const t = w.teams[G.myTeam];
   const rows = [['hut', 'Hütte', BUILD.hut.price, 'Heimatbasis: Kaufen, Verkaufen, Forschen'], ['bridge', 'Holzbrücke', PRICE_BRIDGE, '40 Pixel in Blickrichtung – brennbar!'], ['tower', 'Wachturm', BUILD.tower.price, 'Betretbar: von oben werfen & schießen, Heilung'], ['castle', 'Burg', BUILD.castle.price, 'Stein-Basis mit Laden, Rüstung & schneller Heilung']];
-  let h = head('Bauen', 'Gebäude entstehen als Baustelle vor deinem Buddler – Buddler in der Nähe bauen sie auf') + '<div class="cards">';
+  let h = head('Bauen', 'Baustelle entsteht vor deinem Buddler (Vorschau: grün = frei, gelb = wird planiert, rot = unmöglich)') + '<div class="cards">';
   rows.forEach(([k, n, p, d], i) => {
-    const B = BUILD[k], lock = B && B.res && !t.res[B.res], poor = t.money < p;
-    h += '<div class="card opt ' + (lock ? 'locked dis' : poor ? 'dis' : '') + '" data-build="' + k + '"><span class="num">' + (i + 1) + '</span><div class="icon" style="height:84px"><img src="' + entIcon(k, t.color) + '" style="' + (k === 'bridge' ? 'width:70px' : 'height:76px') + '"></div><h3>' + n + '</h3><p>' + d + '</p><div class="foot">' +
+    const B = BUILD[k], lock = B && B.res && !t.res[B.res];
+    const I = B && !lock ? buildPreviewInfo(w, k) : null, lc = I && I.pc.st === 'level' ? I.pc.cost : 0, poor = t.money < p + lc;
+    const ps = !I ? '' : I.pc.st === 'ok' ? '<div class="pstat ok">✓ Platz frei</div>' : I.pc.st === 'level' ? '<div class="pstat lvl">⚒ Planieren nötig: +' + lc + ' ' + icon('coin', 'ico-s') + '</div>' : '<div class="pstat no">✗ ' + I.pc.why + '</div>';
+    h += '<div class="card opt ' + (lock ? 'locked dis' : poor || (I && I.pc.st === 'no') ? 'dis' : '') + '" data-build="' + k + '"><span class="num">' + (i + 1) + '</span><div class="icon" style="height:84px"><img src="' + entIcon(k, t.color) + '" style="' + (k === 'bridge' ? 'width:70px' : 'height:76px') + '"></div><h3>' + n + '</h3><p>' + d + '</p>' + ps + '<div class="foot">' +
       (lock ? '<span class="lockinfo">' + icon('lock', 'ico-s') + ' ' + RES_BY[B.res].name + '</span>' : '<span class="price' + (poor ? ' no' : '') + '">' + icon('coin', 'ico-s') + p + '</span>') + '</div></div>';
   });
   h += '</div>';
   keepSel(() => { $('buildmenu').innerHTML = h; });
   for (const el of $('buildmenu').querySelectorAll('[data-build]')) el.onclick = () => { const k = el.dataset.build, B = BUILD[k]; if (B && B.res && !t.res[B.res]) { toast('Erst erforschen: ' + RES_BY[B.res].name, 'warn'); return; } uiSnd(); act('build', k); closeAllMenus(); };
+  for (const el of $('buildmenu').querySelectorAll('[data-build]')) { el.onmouseenter = () => { G.buildHover = el.dataset.build; G.buildPrev = BUILD[G.buildHover] ? G.buildHover : null; }; el.onmouseleave = () => { G.buildHover = null; menuHL(); }; }
 }
 
 // ---------- Einstellungen ----------
@@ -160,13 +165,14 @@ function renderHelp() {
   } else if (tab === 'ai') {
     h += '<ul class="tips"><li><b>Drei Stufen</b> pro KI-Team (Einzelspieler-Menü bzw. Lobby): <b>Leicht</b> – langsam, ungenau, passiv, greift erst spät an. <b>Mittel</b> – ausgewogen, forscht, baut Wachturm und Burg, nutzt Loren. <b>Schwer</b> – reagiert schnell, zielt mit Vorhalt, blockt mit dem Schild, wirtschaftet effizient, nutzt Fahrzeuge und greift koordiniert an.</li>' +
       '<li>Die KI <b>arbeitet wie ein Spieler</b>: Gold abbauen und an der Hütte verkaufen, Buddler, Waffen und Feuersteine kaufen, forschen, bauen, verteidigen. Ihr Weg wird mit einer Wegsuche geplant (Laufen, Springen, Klettern, Hangeln, Schwimmen, Graben); bleibt ein Buddler hängen, gräbt er sich frei oder eine Treppe nach oben.</li>' +
+      '<li><b>Bauen</b>: Jede KI baut ihre Burg auf dem ebenen Plateau ihrer Startbasis (die Fläche hält sie frei) und planiert unebenen Boden genauso wie du.</li>' +
       '<li>Was ein KI-Team gerade tut, steht in der <b>Teamübersicht</b> oben rechts (z. B. „baut Gold ab“, „forscht: Burg“, „greift an“).</li>' +
       '<li><b>Fair</b>: Die KI sieht und kann nicht mehr als ein Spieler. Einzige Ausnahme: <b>Schwer</b> erhält wie das bisherige Grundeinkommen +1 Geld alle 2 Sekunden.</li>' +
       '<li><b>KI-Helfer</b> (Schalter im Menü): Deine nicht ausgewählten Buddler arbeiten selbstständig (Gold abbauen, verkaufen, beim Bauen helfen, sich wehren). Sie geben nie Geld aus.</li>' +
       '<li>Verliert im Mehrspieler jemand die Verbindung, übernimmt eine KI mit der in der Lobby gewählten Stufe sein Team.</li>' +
       '<li><b>Buddler-Name</b>: Im Einzelspieler-Menü bzw. Mehrspieler-Menü kannst du deinem Buddler einen Namen geben (max. 16 Zeichen). Er steht über dem Buddler und in der Buddlerliste; weitere gekaufte Buddler heißen „Name 2“, „Name 3“ … Leer lassen = zufällige Namen.</li></ul>';
   } else {
-    h += '<ul class="tips"><li><b>Goldrausch</b>: Grabe Gold, verkaufe es an der Hütte (' + bindCap('sell') + ') und erreiche das Geldziel.</li><li><b>Melee</b>: Das letzte überlebende Team gewinnt. Ritter, Katapulte und Burgen helfen.</li><li><b>Forschung</b> (' + bindCap('research') + ') schaltet Lore, Katapult, Kanone, Wachturm, Burg, Waffen, Ritter und TNT frei.</li><li><b>Bauen</b> (' + bindCap('build') + '): Gebäude entstehen als Baustelle – Buddler in der Nähe bauen sie auf.</li><li>Feuersteine explodieren beim Aufprall, TNT nach kurzer Zeit.</li><li>Lava verbrennt alles und wird mit Wasser zu Fels. Feuer breitet sich über Gras und Holz aus – ins Wasser springen löscht.</li><li>Nachts sind Monster gefährlicher. Gebäude und Feuer spenden Licht.</li><li>Du startest im Einzelspieler mit einem Buddler – weitere kaufst du im Laden.</li></ul>';
+    h += '<ul class="tips"><li><b>Goldrausch</b>: Grabe Gold, verkaufe es an der Hütte (' + bindCap('sell') + ') und erreiche das Geldziel.</li><li><b>Melee</b>: Das letzte überlebende Team gewinnt. Ritter, Katapulte und Burgen helfen.</li><li><b>Forschung</b> (' + bindCap('research') + ') schaltet Lore, Katapult, Kanone, Wachturm, Burg, Waffen, Ritter und TNT frei.</li><li><b>Bauen</b> (' + bindCap('build') + '): Gebäude entstehen als Baustelle vor deinem Buddler – Buddler in der Nähe bauen sie auf. Die Vorschau zeigt den Platz: <b style="color:#7ee69a">grün</b> = frei, <b style="color:#ffd36b">gelb</b> = wird zuerst planiert (Erde/Sand abtragen, Lücken auffüllen, kostet etwas Geld und Zeit), <b style="color:#ff8a80">rot</b> = unmöglich (z. B. Fels im Weg – erst sprengen).</li><li>Jede Startbasis liegt auf einem ebenen Plateau mit Platz für Hütte, Wachturm und Burg. Die Kartengröße (Klein bis Riesig) wählst du im Menü bzw. der Host in der Lobby.</li><li>Feuersteine explodieren beim Aufprall, TNT nach kurzer Zeit.</li><li>Lava verbrennt alles und wird mit Wasser zu Fels. Feuer breitet sich über Gras und Holz aus – ins Wasser springen löscht.</li><li>Nachts sind Monster gefährlicher. Gebäude und Feuer spenden Licht.</li><li>Du startest im Einzelspieler mit einem Buddler – weitere kaufst du im Laden.</li></ul>';
   }
   $('help').innerHTML = h;
   for (const b of $('help').querySelectorAll('[data-htab]')) b.onclick = () => { G.helpTab = b.dataset.htab; uiSnd(); renderHelp(); };

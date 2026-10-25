@@ -254,3 +254,11 @@ body.touchui #hud-bottom{bottom:10px}
 @media (max-width:900px){ #hud-clonks{display:none} #dock .lbl{display:none} #dock .dk kbd{display:none} .split{grid-template-columns:1fr} .cards.three{grid-template-columns:1fr} .helpgrid{grid-template-columns:1fr} #bars{width:240px} }
 @media (max-height:620px){ #hud-tl{padding:8px 10px} .slot{width:52px;height:52px} .slot img{width:36px;height:36px} #hud-clonks{top:100px} #dock .dk{padding:5px 8px} }
 @media (max-width:560px){ #hud-tr .mapframe{display:none} #hud-teams{display:none} .menu-screen{padding-left:0;align-items:center} #mainmenu .menu-col{align-items:center} }
+
+/* Bauen: Menü unten andocken, Welt mit Vorschau bleibt sichtbar */
+body.buildopen #backdrop{background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none}
+body.buildopen #buildmenu{top:auto;bottom:10px;transform:translateX(-50%);max-height:46vh;width:min(880px,96vw);padding:14px 18px}
+body.buildopen #buildmenu .cards{grid-template-columns:repeat(4,1fr)}
+body.buildopen #buildmenu .icon{height:56px!important} body.buildopen #buildmenu .icon img{height:50px!important}
+.pstat{font-size:11.5px;font-weight:700;margin:4px 0 2px;padding:3px 7px;border-radius:8px;display:inline-flex;align-items:center;gap:4px}
+.pstat.ok{background:rgba(80,220,110,.16);color:#7ee69a}.pstat.lvl{background:rgba(255,200,60,.16);color:#ffd36b}.pstat.no{background:rgba(240,70,60,.16);color:#ff8a80}
