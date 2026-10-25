@@ -195,6 +195,7 @@ class Renderer {
     if (world.W < vw) this.cam.x = (world.W - vw) / 2;
     let cx = Math.round(this.cam.x), cy = Math.round(this.cam.y);
     if (this.shake > 0) { cx += Math.round((Math.random() - 0.5) * this.shake); cy += Math.round((Math.random() - 0.5) * this.shake); this.shake *= 0.85; if (this.shake < 0.5) this.shake = 0; }
+    this.view = { cx, cy, S };
     const light = world.daylight(), dark = 1 - light, phase = world.dayPhase();
     // Himmel (Tag/Nacht)
     const sky = g.createLinearGradient(0, 0, 0, this.cv.height);
@@ -255,7 +256,7 @@ class Renderer {
     for (const c of world.clonks) { if (c.act === 'dead' || c.inside) continue; const t = world.teams[c.team]; if (t.sel !== c.id) continue; const [x, y] = [c.rx !== undefined && world.remote ? c.rx : c.x, c.ry !== undefined && world.remote ? c.ry : c.y]; g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillText(c.name, Math.round(x) + 0.5, Math.round(y) - 19.5); g.fillStyle = t.id === myTeam ? '#fff' : t.color; g.fillText(c.name, Math.round(x), Math.round(y) - 20); }
     g.restore();
     if (dark > 0.04) this.drawLighting(world, cx, cy, vw, vh, dark, myTeam);
-    this.drawMinimap(world, cx, cy, vw, vh, myTeam);
+    if (this.miniDom) this.drawMinimap(world, cx, cy, vw, vh, myTeam);
   }
   // Nacht-Beleuchtung: Dunkelheit mit Lichtquellen (Buddler, Gebäude, Feuer, Lava, Explosionen)
   drawLighting(world, cx, cy, vw, vh, dark, myTeam) {
@@ -288,14 +289,16 @@ class Renderer {
     }
   }
   drawMinimap(world, cx, cy, vw, vh, myTeam) {
-    const g = this.g, mw = this.mini.width, mh = this.mini.height;
+    const mw = this.mini.width, mh = this.mini.height, D = this.miniDom;
     if (--this.miniT <= 0) { this.miniT = 30; const mg = this.mini.getContext('2d'); mg.clearRect(0, 0, mw, mh); mg.imageSmoothingEnabled = true; mg.drawImage(this.tc, 0, 0, mw, mh); }
-    const x0 = this.cv.width - mw - 10, y0 = 10;
-    g.fillStyle = 'rgba(80,120,170,0.75)'; g.fillRect(x0 - 2, y0 - 2, mw + 4, mh + 4);
-    g.drawImage(this.mini, x0, y0);
-    for (const v of world.vehicles) { g.fillStyle = '#ccc'; g.fillRect(x0 + v.x / 8 - 1, y0 + v.y / 8 - 1, 3, 2); }
-    for (const c of world.clonks) { if (c.act === 'dead' || c.inside) continue; const t = world.teams[c.team]; g.fillStyle = t.color; g.fillRect(x0 + c.x / 8 - 1, y0 + c.y / 8 - 2, 3, 3); }
-    for (const m of world.monsters) { g.fillStyle = '#6f3'; g.fillRect(x0 + m.x / 8 - 1, y0 + m.y / 8 - 1, 2, 2); }
-    g.strokeStyle = '#fff'; g.lineWidth = 1; g.strokeRect(x0 + cx / 8 + 0.5, y0 + cy / 8 + 0.5, vw / 8, vh / 8);
+    if (D.width !== mw || D.height !== mh) { D.width = mw; D.height = mh; }
+    const g = D.getContext('2d'), light = world.daylight();
+    g.fillStyle = lerpC([120, 170, 220], [14, 18, 40], 1 - light); g.fillRect(0, 0, mw, mh);
+    g.drawImage(this.mini, 0, 0);
+    for (const v of world.vehicles) { g.fillStyle = '#ddd'; g.fillRect(v.x / 8 - 1, v.y / 8 - 1, 3, 2); }
+    for (const s of world.structs) if (s.prog >= 1) { g.fillStyle = world.teams[s.team] ? world.teams[s.team].color : '#aaa'; g.fillRect(s.x / 8 - 2, (s.y - s.h) / 8, 4, Math.max(2, s.h / 8)); }
+    for (const c of world.clonks) { if (c.act === 'dead' || c.inside) continue; const t = world.teams[c.team]; g.fillStyle = t.color; g.fillRect(c.x / 8 - 1, c.y / 8 - 2, 3, 3); if (t.id === myTeam && t.sel === c.id) { g.strokeStyle = '#fff'; g.lineWidth = 1; g.strokeRect(c.x / 8 - 2.5, c.y / 8 - 3.5, 6, 6); } }
+    for (const m of world.monsters) { g.fillStyle = '#6f3'; g.fillRect(m.x / 8 - 1, m.y / 8 - 1, 2, 2); }
+    g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 1; g.strokeRect(cx / 8 + 0.5, cy / 8 + 0.5, vw / 8, vh / 8);
   }
 }

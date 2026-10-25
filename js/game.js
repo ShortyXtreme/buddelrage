@@ -57,12 +57,19 @@ const SHOP_ALL = [
 function shopList(t) { return SHOP_ALL.filter(e => !e.res || (t.res && t.res[e.res])); }
 function shopName(k) { return k === 'clonk' ? 'Buddler (neuer Arbeiter)' : k === 'knight' ? 'Ritter (Schwert, Schild, Bogen, Rüstung)' : VEH[k] ? VEH[k].name + ' (Fahrzeug)' : ITEMS[k].name; }
 function shopPrice(k) { return k === 'clonk' ? PRICE_CLONK : k === 'knight' ? PRICE_KNIGHT : VEH[k] ? VEH[k].price : ITEMS[k].price; }
+// Zielhilfen (auch für die Flugbahn-Vorschau im Client)
+function throwVel(px, py, ax, ay) { const dx = ax - px, dy = ay - py, d = Math.hypot(dx, dy) || 1; const sp = Math.max(1.6, Math.min(3.4, 1.3 + d * 0.022)); return [dx / d * sp, dy / d * sp]; }
+function arrowVel(px, py, ax, ay, dir) { const dx = ax - px, dy = ay - py, d = Math.hypot(dx, dy); if (d < 2) return [dir * 5.6, -0.5]; return [dx / d * 5.6, dy / d * 5.6]; }
+function digAngle(c, ax, ay) { const dx = Math.abs(ax - c.x), dy = ay - (c.y - 5); return Math.max(-1.1, Math.min(1.5, Math.atan2(dy, Math.max(1, dx)))); }
 const DAY_LEN = 60 * 60 * 4; // 4 Minuten pro Tag
 const TEAM_COLORS = ['#2f5fe0', '#e03030', '#2fae3c', '#e0b818', '#a040d0', '#18b8c0'];
 const ACTS = ['walk', 'jump', 'climb', 'hangle', 'dig', 'swim', 'fight', 'tumble', 'dead', 'push'];
 const NAMES = ['Hans', 'Jörg', 'Kurt', 'Fritz', 'Otto', 'Paul', 'Karl', 'Willi', 'Bernd', 'Uwe', 'Gerd', 'Heinz', 'Rudi', 'Sepp', 'Franz', 'Toni', 'Max', 'Egon', 'Udo', 'Horst'];
 const INV_MAX = 3;
-const NOKEYS = { l: 0, r: 0, u: 0, d: 0, b: 0 };
+const NOKEYS = { l: 0, r: 0, u: 0, d: 0, b: 0, s: 0, g: 0, am: 0, ax: 0, ay: 0 };
+const BLOCK_SLOT = new Set(['sword', 'shield']);
+function actIdx(c) { return Math.max(0, Math.min(c.slot || 0, c.inv.length - 1)); }
+function actItem(c) { return c.inv.length ? c.inv[actIdx(c)] : null; }
 const invEnc = a => a.map(t => String.fromCharCode(97 + ITEM_CODES.indexOf(t))).join('');
 const invDec = s => s ? s.split('').map(ch => ITEM_CODES[ch.charCodeAt(0) - 97]) : [];
 
@@ -339,7 +346,7 @@ class World {
   hasBase(teamId) { return this.structs.some(s => s.team === teamId && BUILD[s.type].base && s.prog >= 1); }
 
   // ---------- Eingabe ----------
-  setKeys(teamId, k) { const t = this.teams[teamId]; if (t) t.keys = { l: +!!k.l, r: +!!k.r, u: +!!k.u, d: +!!k.d, b: +!!k.b }; }
+  setKeys(teamId, k) { const t = this.teams[teamId]; if (!t) return; const num = v => (typeof v === 'number' && isFinite(v)) ? Math.max(-500, Math.min(9000, Math.round(v))) : 0; t.keys = { l: +!!k.l, r: +!!k.r, u: +!!k.u, d: +!!k.d, b: +!!k.b, s: +!!k.s, g: +!!k.g, am: +!!k.am, ax: num(k.ax), ay: num(k.ay) }; }
   selClonk(t) { return this.clonks.find(c => c.id === t.sel && c.act !== 'dead'); }
   action(teamId, a, arg) {
     const t = this.teams[teamId]; if (!t || this.state !== 'run') return;
@@ -351,15 +358,20 @@ class World {
       return;
     }
     if (a === 'buy') return this.buy(t, arg);
+    if (a === 'slot' || a === 'slotd') { const c = this.selClonk(t); if (!c) return; c.slot = a === 'slot' ? Math.max(0, Math.min(INV_MAX - 1, arg | 0)) : ((c.slot || 0) + (arg > 0 ? 1 : INV_MAX - 1)) % INV_MAX; return; }
     if (a === 'research') return this.research(t, arg);
     const c = this.selClonk(t); if (!c) return;
     this.clonkAction(c, a, arg);
   }
   clonkAction(c, a, arg) {
     const t = this.teams[c.team];
+    const aim = Array.isArray(arg) && arg.length === 2 && isFinite(arg[0]) && isFinite(arg[1]) ? [+arg[0], +arg[1]] : null;
+    if (a === 'primary') return this.primary(c, aim);
+    if (a === 'interact') a = 'use';
     if (c.inside) { // im Gebäude
       if (a === 'use' || a === 'jump') this.leave(c);
       else if (a === 'throw') this.throwItem(c);
+      else if (a === 'drop') this.throwItem(c);
       else if (a === 'attack') this.attack(c);
       else if (a === 'sell') this.sell(c);
       else if (a === 'inv') { if (c.inv.length > 1) c.inv.push(c.inv.shift()); }
@@ -396,6 +408,18 @@ class World {
       case 'use': this.use(c); break;
     }
   }
+  // Hauptaktion (Linksklick / RT): Richtung Zielpunkt werfen, schlagen, schießen, feuern
+  primary(c, aim) {
+    if (c.act === 'dead') return;
+    const it = actItem(c);
+    if (c.act === 'push') { const v = this.vehById(c.veh); if (v) { if (VEH[v.type].gun) this.fireGun(v, c); else this.loadLorry(v, c); } return; }
+    if (aim && !c.inside && (c.act === 'walk' || c.act === 'fight' || c.act === 'jump' || c.act === 'swim' || c.act === 'dig') && Math.abs(aim[0] - c.x) > 2) c.dir = Math.sign(aim[0] - c.x);
+    if (c.inside) { const s = this.structById(c.inside); if (aim && s && Math.abs(aim[0] - s.x) > 2) c.dir = Math.sign(aim[0] - s.x); }
+    if (it === 'bow' && c.arrows > 0) { if (c.cd <= 0 && c.act !== 'climb' && c.act !== 'hangle' && c.act !== 'push') this.shoot(c, aim); return; }
+    if (it === 'sword') { if (c.inside) return; if (c.cd <= 0 && c.act !== 'climb' && c.act !== 'hangle') this.swingSword(c); return; }
+    if (!it || it === 'shield' || it === 'bow') { if (c.inside) return; this.attack(c, true); return; }
+    this.throwItem(c, aim);
+  }
   // Benutzen: Fahrzeug anfassen oder Gebäude betreten
   use(c) {
     if (c.act !== 'walk' && c.act !== 'fight') return;
@@ -408,7 +432,18 @@ class World {
       if (s.type === 'castle' && !c.armor && this.teams[c.team].res.weapons) { c.armor = 1; this.msg(c.name + ' erhält eine Rüstung.', c.team); }
       return;
     }
-    if (!this.teams[c.team].ai) this.msg('Hier gibt es nichts zu benutzen (Fahrzeug anfassen / Gebäude-Tür).', c.team);
+    if (this.grabNear(c)) return;
+    if (!this.teams[c.team].ai) this.msg('Hier gibt es nichts zu benutzen.', c.team);
+  }
+  // Gegenstand in der Nähe aufheben (E)
+  grabNear(c) {
+    let best = null, bd = 14;
+    for (const it of this.items) { if (it.remove || it.fuse > 0 || it.chain || it.type === 'arrow' || it.stuck) continue; const d = Math.hypot(it.x - c.x, (it.y - c.y + 4) * 1.5); if (d < bd) { bd = d; best = it; } }
+    if (!best) return false;
+    if (best.type === 'arrows') { c.arrows += 10; best.remove = true; this.snd('grab', c.x, c.y); return true; }
+    if (best.type === 'armor' && !c.armor) { c.armor = 1; best.remove = true; this.snd('grab', c.x, c.y); return true; }
+    if (c.inv.length >= INV_MAX) { if (!this.teams[c.team].ai) this.msg('Inventar voll (3 Plätze)!', c.team); return true; }
+    c.inv.push(best.type); best.remove = true; this.snd('grab', c.x, c.y); return true;
   }
   leave(c) {
     const s = this.structById(c.inside); c.inside = 0; c.act = 'walk'; c.vy = 0;
@@ -424,7 +459,7 @@ class World {
   loadLorry(v, c) {
     if (!c.inv.length) { this.msg('Nichts zum Einladen.', c.team); return; }
     if (v.inv.length >= VEH.lorry.cap) { this.msg('Lore ist voll!', c.team); return; }
-    v.inv.push(c.inv.shift()); this.snd('grab', v.x, v.y);
+    v.inv.push(c.inv.splice(actIdx(c), 1)[0]); this.snd('grab', v.x, v.y);
   }
   unloadLorry(v, c) {
     if (!v.inv.length) { this.msg('Lore ist leer.', c.team); return; }
@@ -526,13 +561,15 @@ class World {
     if (c.inside) { const s = this.structById(c.inside); if (s) { if (s.type === 'hut') return [s.x + c.dir * 16, s.y - 6]; return [s.x + c.dir * (s.w / 2 - 3), s.y - s.h - 2]; } }
     return [c.x + c.dir * 4, c.y - 8];
   }
-  throwItem(c) {
+  throwItem(c, aim) {
     if (c.act === 'dead' || c.cd > 0) return;
     if (!c.inv.length) { this.attack(c); return; }
-    const type = c.inv.shift();
+    const type = c.inv.splice(actIdx(c), 1)[0];
     const [px, py] = this.throwPos(c);
     const it = this.spawnItem(type, px, py);
-    if (!c.inside && (c.act === 'climb' || c.act === 'hangle' || c.act === 'dig')) { it.vx = c.dir * 0.4; it.vy = 0; }
+    if (!c.inside && (c.act === 'climb' || c.act === 'hangle')) { it.vx = c.dir * 0.4; it.vy = 0; }
+    else if (aim) { const v = throwVel(px, py, aim[0], aim[1]); it.vx = v[0]; it.vy = v[1]; }
+    else if (c.act === 'dig') { it.vx = c.dir * 0.4; it.vy = 0; }
     else { it.vx = c.dir * 2.5 + c.vx * 0.4; it.vy = c.inside ? -1.2 : -2.1; }
     it.armed = true; it.owner = c.id; it.pickCd = 45;
     if (type === 'tnt') { it.fuse = 150; this.snd('fuse', c.x, c.y); }
@@ -540,7 +577,7 @@ class World {
   }
   dropItem(c) {
     if (!c.inv.length || c.act === 'dead' || c.inside) return;
-    const type = c.inv.shift();
+    const type = c.inv.splice(actIdx(c), 1)[0];
     const it = this.spawnItem(type, c.x, c.y - 4); it.pickCd = 80;
     if (type === 'tnt') { it.fuse = 150; this.snd('fuse', c.x, c.y); }
   }
@@ -550,13 +587,14 @@ class World {
     if (target.dir !== -fromDir) return false;
     return !!target.block || (auto && this.rand() < 0.3);
   }
-  attack(c) {
+  attack(c, melee) {
     if (c.act === 'dead' || c.cd > 0) return;
     const hasSword = c.inv.includes('sword'), hasBow = c.inv.includes('bow') && c.arrows > 0;
     if (c.inside) { if (hasBow) this.shoot(c); else if (c.inv.length) this.throwItem(c); return; }
     if (c.act === 'push' || c.act === 'climb' || c.act === 'hangle') return;
     const foe = this.clonks.find(o => o.team !== c.team && o.act !== 'dead' && !o.inside && Math.abs(o.x - c.x) < 16 && Math.abs(o.y - c.y) < 10 && Math.sign(o.x - c.x) === c.dir)
       || this.monsters.find(o => Math.abs(o.x - c.x) < 16 && Math.abs(o.y - c.y) < 10 && Math.sign(o.x - c.x) === c.dir);
+    if (melee) { if (hasSword) this.swingSword(c); else this.strike(c); return; }
     if (hasSword && (foe || !hasBow)) this.swingSword(c);
     else if (hasBow) this.shoot(c);
     else this.strike(c);
@@ -571,13 +609,14 @@ class World {
     for (const m of this.monsters) if (Math.abs(m.x - c.x) < 15 && Math.abs(m.y - c.y) < 10 && Math.sign(m.x - c.x) === c.dir) { m.hp -= 18; m.vx = c.dir * 1.6; m.vy = -1.2; m.act = 'jump'; this.snd('hitliving', m.x, m.y); }
     for (const v of this.vehicles) if (v.team !== c.team && Math.abs(v.x - c.x) < 14 && Math.abs(v.y - c.y) < 10) v.hp -= 6;
   }
-  shoot(c) {
+  shoot(c, aim) {
     const k = this.keysFor(c);
     c.arrows--; c.cd = 38; c.bowT = 16;
     const [px, py] = this.throwPos(c);
     const it = this.spawnItem('arrow', px, py + (c.inside ? 0 : 1));
-    const up = k.u ? -1.6 : k.d ? 1.0 : -0.5;
-    it.vx = c.dir * 5.6; it.vy = up + (c.inside ? 0.3 : 0); it.armed = true; it.owner = c.id; it.pickCd = 99999;
+    if (aim) { const v = arrowVel(px, py + (c.inside ? 0 : 1), aim[0], aim[1], c.dir); it.vx = v[0]; it.vy = v[1]; }
+    else { const up = k.u ? -1.6 : k.d ? 1.0 : -0.5; it.vx = c.dir * 5.6; it.vy = up + (c.inside ? 0.3 : 0); }
+    it.armed = true; it.owner = c.id; it.pickCd = 99999;
     this.snd('bow', c.x, c.y);
   }
   strike(c) {
@@ -914,12 +953,17 @@ class World {
     if (headWater) { c.breath -= 0.16; if (c.breath <= 0) { c.breath = 0; this.hurt(c, 0.25, 'fire'); if (c.act === 'dead') return; } } else c.breath = Math.min(100, c.breath + 1);
     if (inWater && (c.act === 'walk' || c.act === 'jump' || c.act === 'hangle' || c.act === 'fight')) { if (c.act === 'jump' && c.vy > 1.5) this.snd('splash', c.x, c.y); c.act = 'swim'; }
     const hasShield = c.inv.includes('shield');
-    c.block = (k.b && hasShield && (c.act === 'walk' || c.act === 'fight')) ? 1 : 0;
+    const secBlock = k.g && hasShield && BLOCK_SLOT.has(actItem(c));
+    c.block = ((k.b || secBlock) && hasShield && (c.act === 'walk' || c.act === 'fight')) ? 1 : 0;
+    if (k.g && !secBlock) { // Graben halten (Rechtsklick / LT)
+      if ((c.act === 'walk' || c.act === 'fight') && (!c.digHold || this.tick % 15 === 0)) { c.act = 'dig'; c.digHold = 1; c.digIdle = 0; c.vx = 0; if (k.am) c.digA = digAngle(c, k.ax, k.ay); }
+    } else if (c.digHold) { c.digHold = 0; if (c.act === 'dig') c.act = 'walk'; }
     let mv = k.r - k.l;
     if (c.block && c.act === 'walk') { if (mv) c.dir = mv; mv = 0; }
     switch (c.act) {
       case 'walk': {
-        if (mv) { c.dir = mv; this.walkStep(c, mv * (c.armor ? 0.75 : 0.85)); c.anim += 0.18; } else c.anim = 0;
+        const spd = k.s ? 1.5 : 1;
+        if (mv) { c.dir = mv; this.walkStep(c, mv * (c.armor ? 0.75 : 0.85) * spd); c.anim += 0.18 * spd; } else c.anim = 0;
         c.vx = mv * 0.85;
         if (!this.boxHit(c.x, c.y + 1)) {
           let down = 0; while (down < 4 && !this.boxHit(c.x, c.y + down + 1)) down++;
@@ -987,9 +1031,12 @@ class World {
         break;
       }
       case 'dig': {
-        if (mv) c.dir = mv;
-        if (k.u) c.digA = Math.max(-1.1, c.digA - 0.03);
-        if (k.d) c.digA = Math.min(1.5, c.digA + 0.03);
+        if (c.digHold && k.am) { const dx0 = k.ax - c.x; if (Math.abs(dx0) > 3) c.dir = Math.sign(dx0); const ta = digAngle(c, k.ax, k.ay); c.digA += Math.max(-0.06, Math.min(0.06, ta - c.digA)); }
+        else {
+          if (mv) c.dir = mv;
+          if (k.u) c.digA = Math.max(-1.1, c.digA - 0.03);
+          if (k.d) c.digA = Math.min(1.5, c.digA + 0.03);
+        }
         const dx = c.dir * Math.cos(c.digA), dy = Math.sin(c.digA);
         const n = this.digCircle(c.x + dx * 3, c.y - 5 + dy * 3, 5.6, c);
         const nx = c.x + dx * 0.33, ny = c.y + dy * 0.33;
@@ -998,7 +1045,7 @@ class World {
         else if (!this.boxHit(nx, ny - 1)) { c.x = nx; c.y = ny - 1; ok = true; }
         if (!ok) {
           const m = this.matAt(c.x + dx * 8, c.y - 5 + dy * 8);
-          if (!DIGGABLE[m] && SOLID[m]) { c.act = 'walk'; if (!c.ai && !this.teams[c.team].ai) this.msg(MAT_NAMES[m] + ' ist zu hart zum Graben!', c.team); }
+          if (!DIGGABLE[m] && SOLID[m]) { c.act = 'walk'; if (!c.ai && !this.teams[c.team].ai && this.tick - (c.hardT || -999) > 150 && (c.hardT = this.tick)) this.msg(MAT_NAMES[m] + ' ist zu hart zum Graben!', c.team); }
         }
         if (n === 0) c.digIdle++; else c.digIdle = 0;
         if (c.digIdle > 40) c.act = 'walk';
@@ -1152,7 +1199,8 @@ class World {
       const k = this.keysFor(pc), mv = k.r - k.l;
       if (mv) v.dir = mv;
       if (ground || inWater) v.vx = mv * (inWater ? 0.3 : 0.62);
-      if (d.gun) { if (k.u) v.ang = Math.min(d.amax, v.ang + 0.02); if (k.d) v.ang = Math.max(d.amin, v.ang - 0.02); }
+      if (d.gun && k.am) { const tx = k.ax - v.x, ty = (v.y - 6) - k.ay; if (Math.abs(tx) > 4 && !mv) v.dir = Math.sign(tx); const ta = Math.max(d.amin, Math.min(d.amax, Math.atan2(ty, Math.max(1, Math.abs(tx))))); v.ang += Math.max(-0.03, Math.min(0.03, ta - v.ang)); }
+      else if (d.gun) { if (k.u) v.ang = Math.min(d.amax, v.ang + 0.02); if (k.d) v.ang = Math.max(d.amin, v.ang - 0.02); }
     } else if (ground) v.vx *= 0.8;
     if (Math.abs(v.vx) < 0.02) v.vx = 0;
     if (v.vx) {
@@ -1286,7 +1334,7 @@ class World {
     for (const f of this.fires) fl.push(f.x, f.y, f.k);
     return {
       c: this.clonks.map(c => [c.id, c.team, r1(c.x), r1(c.y), c.dir, ACTS.indexOf(c.act), Math.ceil(c.hp), r1(c.anim), invEnc(c.inv), Math.round(c.breath), c.name, c.punch, r1(c.digA),
-        (c.armor ? 1 : 0) | (c.knight ? 2 : 0) | (c.block ? 4 : 0) | (c.bowT > 0 ? 8 : 0) | (c.fire > 0 ? 16 : 0) | (c.blockT > 0 ? 32 : 0), c.arrows, c.inside, c.swing, c.veh]),
+        (c.armor ? 1 : 0) | (c.knight ? 2 : 0) | (c.block ? 4 : 0) | (c.bowT > 0 ? 8 : 0) | (c.fire > 0 ? 16 : 0) | (c.blockT > 0 ? 32 : 0), c.arrows, c.inside, c.swing, c.veh, c.slot || 0]),
       i: this.items.map(i => [i.id, ITEM_CODES.indexOf(i.type), r1(i.x), r1(i.y), i.fuse, i.stuck ? 1 : 0, r1(i.vx), r1(i.vy), i.landed ? 1 : 0]),
       m: this.monsters.map(m => [m.id, r1(m.x), r1(m.y), m.dir, Math.ceil(m.hp), r1(m.anim), m.bite || 0, m.fire > 0 ? 1 : 0]),
       s: this.structs.map(s => [s.id, s.type, s.x, s.y, s.team, Math.round(s.prog * 100) / 100, Math.ceil(s.hp), s.fire > 0 ? 1 : 0]),
@@ -1302,7 +1350,7 @@ class World {
       const c = old.get(a[0]) || { rx: a[2], ry: a[3] };
       const fl = a[13] || 0;
       Object.assign(c, { id: a[0], team: a[1], x: a[2], y: a[3], dir: a[4], act: ACTS[a[5]], hp: a[6], anim: a[7], inv: invDec(a[8]), breath: a[9], name: a[10], punch: a[11], digA: a[12],
-        armor: fl & 1, knight: fl & 2, block: fl & 4, bowT: fl & 8 ? 1 : 0, fire: fl & 16 ? 1 : 0, blockT: fl & 32 ? 1 : 0, arrows: a[14], inside: a[15], swing: a[16], veh: a[17] });
+        armor: fl & 1, knight: fl & 2, block: fl & 4, bowT: fl & 8 ? 1 : 0, fire: fl & 16 ? 1 : 0, blockT: fl & 32 ? 1 : 0, arrows: a[14], inside: a[15], swing: a[16], veh: a[17], slot: a[18] || 0 });
       return c;
     });
     const oi = new Map(this.items.map(c => [c.id, c]));

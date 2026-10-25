@@ -1,0 +1,174 @@
+// BuddelRage – Menüs: Laden, Forschung, Bauen, Pause, Einstellungen, Hilfe, Credits
+'use strict';
+const MODALS = ['shop', 'buildmenu', 'research', 'pausemenu', 'help', 'settings', 'credits'];
+function openMenu(id) {
+  if (input.listen) input.listen = null;
+  for (const m of MODALS) $(m).style.display = 'none';
+  $(id).style.display = 'block'; $('backdrop').style.display = 'block'; G.menu = id; G.menuSel = 0;
+  if ((id === 'pausemenu' || id === 'help' || id === 'settings') && G.role === 'single') G.paused = true;
+  if (G.world) { releaseAll(); pushKeys(true); }
+  if (id === 'shop') renderShop(); else if (id === 'research') renderResearch(); else if (id === 'buildmenu') renderBuild();
+  else if (id === 'settings') renderSettings(); else if (id === 'help') renderHelp(); else if (id === 'credits') renderCredits();
+  else { $('btnrestart').style.display = G.role === 'single' ? 'block' : 'none'; menuHL(); }
+  cv.classList.remove('ingame');
+}
+function closeAllMenus() {
+  input.listen = null;
+  for (const m of MODALS) $(m).style.display = 'none';
+  $('backdrop').style.display = 'none'; G.menu = null; if (G.role === 'single') G.paused = false;
+  if (G.world) cv.classList.add('ingame');
+}
+function menuOpts() { return G.menu ? Array.from($(G.menu).querySelectorAll('.opt')).filter(e => e.offsetParent) : []; }
+function menuHL() { const o = menuOpts(); if (G.menuSel >= o.length) G.menuSel = Math.max(0, o.length - 1); o.forEach((e, i) => e.classList.toggle('hl', i === G.menuSel)); const h = o[G.menuSel]; if (h && h.scrollIntoView && G.menuKb) h.scrollIntoView({ block: 'nearest' }); }
+function menuMove(d) { const o = menuOpts(); if (!o.length) return; G.menuKb = true; G.menuSel = (G.menuSel + d + o.length) % o.length; menuHL(); }
+function menuPick() { const o = menuOpts()[G.menuSel]; if (o) o.click(); }
+function head(title, sub) { return '<div class="phead"><div><h2>' + title + '</h2>' + (sub ? '<div class="sub">' + sub + '</div>' : '') + '</div><button class="x" onclick="closeAllMenus()" title="Schließen (Esc)">✕</button></div>'; }
+function numBadge(i) { return i < 9 ? i + 1 : i === 9 ? 0 : ''; }
+function keepSel(fn) { const s = G.menuSel; fn(); G.menuSel = s; menuHL(); }
+
+// ---------- Laden ----------
+const SHOP_DESC = { flint: 'Explodiert beim Aufprall', superflint: 'Große Explosion beim Aufprall', tnt: 'Lunte – zündet nach 2,5 s, sehr stark', rock: 'Wurfgeschoss & Katapult-Munition', clonk: 'Neuer Arbeiter für dein Team', lorry: 'Sammelt Gegenstände ein (25 Plätze)', catapult: 'Schleudert Munition im hohen Bogen', cannon: 'Schießt flach und hart', sword: 'Nahkampf-Waffe', shield: 'Blocken: Rechtsklick halten', bow: 'Fernkampf, braucht Pfeile', arrows: '+10 Pfeile', armor: 'Nimmt 40 % weniger Schaden', knight: 'Schwert, Schild, Bogen & Rüstung' };
+function shopTitle(k) { return k === 'clonk' ? 'Buddler' : k === 'knight' ? 'Ritter' : VEH[k] ? VEH[k].name : ITEMS[k].name; }
+function ownedCount(w, t, k) {
+  const own = w.clonks.filter(c => c.team === t.id && c.act !== 'dead');
+  if (k === 'clonk') return own.length; if (k === 'knight') return own.filter(c => c.knight).length;
+  if (VEH[k]) return w.vehicles.filter(v => v.team === t.id && v.type === k).length;
+  if (k === 'arrows') return own.reduce((s, c) => s + (c.arrows || 0), 0);
+  if (k === 'armor') return own.filter(c => c.armor).length;
+  return own.reduce((s, c) => s + c.inv.filter(x => x === k).length, 0);
+}
+function renderShop() {
+  const w = G.world; if (!w || G.myTeam < 0) return;
+  const t = w.teams[G.myTeam], c = myClonk();
+  const near = c && w.nearBase(c), hasBase = w.hasBase(t.id);
+  const v = c && c.act === 'push' ? w.vehicles.find(o => o.id === c.veh && o.type === 'lorry') : null;
+  const inv = c ? c.inv.concat(v ? v.inv : []) : [];
+  let h = head('Laden', hasBase ? 'Waren landen im Inventar oder vor der Hütte · Fahrzeuge neben der Basis' : '<span class="lockinfo">Keine fertige Hütte/Burg – Einkauf nicht möglich</span>');
+  h += '<div class="cards">';
+  SHOP_ALL.forEach((e, i) => {
+    const p = shopPrice(e.k), locked = e.res && !t.res[e.res], poor = t.money < p;
+    const cls = locked ? 'locked dis' : (poor || !hasBase) ? 'dis' : '';
+    const ow = ownedCount(w, t, e.k), unit = e.k === 'arrows' ? ' Pfeile' : '';
+    h += '<div class="card opt ' + cls + '" data-buy="' + e.k + '" title="' + shopName(e.k) + '"><span class="num">' + numBadge(i) + '</span><div class="icon"><img src="' + entIcon(e.k, t.color) + '" style="height:' + (VEH[e.k] ? 40 : e.k === 'clonk' || e.k === 'knight' ? 54 : 44) + 'px"></div><h3>' + shopTitle(e.k) + '</h3><p>' + SHOP_DESC[e.k] + '</p>' +
+      '<div class="foot">' + (locked ? '<span class="lockinfo">' + icon('lock', 'ico-s') + ' ' + RES_BY[e.res].name + '</span>' : '<span class="price' + (poor ? ' no' : '') + '">' + icon('coin', 'ico-s') + p + '</span>') + '<span class="owned">' + (ow ? 'Besitz: ' + ow + unit : '') + '</span></div></div>';
+  });
+  h += '</div>';
+  const val = inv.reduce((s, x) => s + ITEMS[x].sell, 0);
+  h += '<div class="shopfoot"><span class="moneybig">' + icon('coin') + t.money + '</span><span class="muted small">' + (inv.length ? inv.length + ' Objekte im Inventar' + (v ? ' + Lore' : '') + ' · Wert ' + val : 'Nichts zu verkaufen') + '</span>' +
+    '<button class="btn sm primary opt' + (near && inv.length ? '' : ' dis') + '" id="sellbtn">' + icon('sell', 'ico-s') + ' Verkaufen ' + bindCap('sell') + '</button></div>' + (near ? '' : '<div class="muted small" style="margin-top:6px">Verkaufen geht nur an der eigenen Hütte oder Burg.</div>');
+  keepSel(() => { $('shop').innerHTML = h; });
+  for (const el of $('shop').querySelectorAll('[data-buy]')) el.onclick = () => { const k = el.dataset.buy, e = SHOP_ALL.find(x => x.k === k); if (e.res && !t.res[e.res]) { toast('Erst erforschen: ' + RES_BY[e.res].name, 'warn'); playSnd('error'); return; } uiSnd(); act('buy', k); setTimeout(() => { if (G.menu === 'shop') renderShop(); }, 120); };
+  $('sellbtn').onclick = () => { act('sell'); setTimeout(() => { if (G.menu === 'shop') renderShop(); }, 120); };
+}
+
+// ---------- Forschung ----------
+function renderResearch() {
+  const w = G.world; if (!w || G.myTeam < 0) return;
+  const t = w.teams[G.myTeam];
+  let h = head('Forschung', t.rq ? 'Aktuell: <b>' + RES_BY[t.rq].name + '</b> · ' + Math.floor(t.rp * 100) + '%' : 'Kostet Geld und Zeit · braucht Hütte oder Burg · ein Projekt gleichzeitig');
+  h += '<div class="cards">';
+  RESEARCH.forEach((r, i) => {
+    const done = t.res[r.k], cur = t.rq === r.k, reqOk = !r.req || r.req.every(q => t.res[q]);
+    const dis = done || !reqOk || (t.rq && !cur) || (t.money < r.cost && !cur);
+    let st;
+    if (done) st = '<span class="okinfo">✔ erforscht</span>';
+    else if (cur) st = '<span class="runinfo">läuft · ' + Math.floor(t.rp * 100) + '%</span>';
+    else if (!reqOk) st = '<span class="lockinfo">' + icon('lock', 'ico-s') + ' ' + r.req.filter(q => !t.res[q]).map(q => RES_BY[q].name).join(', ') + '</span>';
+    else st = '<span class="price' + (t.money < r.cost ? ' no' : '') + '">' + icon('coin', 'ico-s') + r.cost + '</span><span class="owned">' + r.time + ' s</span>';
+    const ik = { lorry: 'lorry', tower: 'tower', tnt: 'tnt', weapons: 'sword', catapult: 'catapult', castle: 'castle', cannon: 'cannon', knight: 'knight' }[r.k];
+    h += '<div class="card opt ' + (dis ? 'dis' : '') + (!reqOk && !done ? ' locked' : '') + '" data-res="' + r.k + '"><span class="num">' + numBadge(i) + '</span><div class="icon"><img src="' + entIcon(ik, t.color) + '" style="height:' + (BUILD[ik] ? 50 : 40) + 'px"></div><h3>' + r.name + '</h3><p>' + r.desc + '</p>' +
+      (cur ? '<div class="bar thin"><i style="width:' + (t.rp * 100).toFixed(1) + '%"></i></div>' : '') + '<div class="foot">' + st + '</div></div>';
+  });
+  h += '</div><div class="shopfoot"><span class="moneybig">' + icon('coin') + t.money + '</span><span class="muted small">' + (w.hasBase(t.id) ? '' : 'Ohne Hütte/Burg ruht die Forschung.') + '</span></div>';
+  keepSel(() => { $('research').innerHTML = h; });
+  for (const el of $('research').querySelectorAll('[data-res]')) el.onclick = () => { uiSnd(); act('research', el.dataset.res); setTimeout(() => { if (G.menu === 'research') renderResearch(); }, 120); };
+}
+
+// ---------- Bauen ----------
+function renderBuild() {
+  const w = G.world; if (!w || G.myTeam < 0) return;
+  const t = w.teams[G.myTeam];
+  const rows = [['hut', 'Hütte', BUILD.hut.price, 'Heimatbasis: Kaufen, Verkaufen, Forschen'], ['bridge', 'Holzbrücke', PRICE_BRIDGE, '40 Pixel in Blickrichtung – brennbar!'], ['tower', 'Wachturm', BUILD.tower.price, 'Betretbar: von oben werfen & schießen, Heilung'], ['castle', 'Burg', BUILD.castle.price, 'Stein-Basis mit Laden, Rüstung & schneller Heilung']];
+  let h = head('Bauen', 'Gebäude entstehen als Baustelle vor deinem Buddler – Buddler in der Nähe bauen sie auf') + '<div class="cards">';
+  rows.forEach(([k, n, p, d], i) => {
+    const B = BUILD[k], lock = B && B.res && !t.res[B.res], poor = t.money < p;
+    h += '<div class="card opt ' + (lock ? 'locked dis' : poor ? 'dis' : '') + '" data-build="' + k + '"><span class="num">' + (i + 1) + '</span><div class="icon" style="height:84px"><img src="' + entIcon(k, t.color) + '" style="' + (k === 'bridge' ? 'width:70px' : 'height:76px') + '"></div><h3>' + n + '</h3><p>' + d + '</p><div class="foot">' +
+      (lock ? '<span class="lockinfo">' + icon('lock', 'ico-s') + ' ' + RES_BY[B.res].name + '</span>' : '<span class="price' + (poor ? ' no' : '') + '">' + icon('coin', 'ico-s') + p + '</span>') + '</div></div>';
+  });
+  h += '</div>';
+  keepSel(() => { $('buildmenu').innerHTML = h; });
+  for (const el of $('buildmenu').querySelectorAll('[data-build]')) el.onclick = () => { const k = el.dataset.build, B = BUILD[k]; if (B && B.res && !t.res[B.res]) { toast('Erst erforschen: ' + RES_BY[B.res].name, 'warn'); return; } uiSnd(); act('build', k); closeAllMenus(); };
+}
+
+// ---------- Einstellungen ----------
+G.setTab = 'audio';
+function renderSettings() {
+  const tab = G.setTab;
+  let h = head('Einstellungen') + '<div class="tabs">' + [['audio', 'Ton & Musik'], ['ctl', 'Steuerung'], ['view', 'Anzeige']].map(([k, n]) => '<button class="tab' + (tab === k ? ' on' : '') + '" data-tab="' + k + '">' + n + '</button>').join('') + '</div>';
+  const range = (id, lbl, v) => '<div class="setrow"><label for="' + id + '">' + lbl + '</label><input type="range" id="' + id + '" min="0" max="100" value="' + Math.round(v * 100) + '"><span class="val" id="' + id + 'v">' + Math.round(v * 100) + '%</span></div>';
+  const sw = (id, lbl, v) => '<div class="setrow"><label>' + lbl + '</label><label class="switch"><input type="checkbox" id="' + id + '"' + (v ? ' checked' : '') + '><i></i></label></div>';
+  if (tab === 'audio') h += range('s_sfx', 'Effekte', settings.sfx) + range('s_music', 'Musik', settings.music) + sw('s_musicon', 'Hintergrundmusik (ruhig, prozedural erzeugt)', settings.musicOn) + sw('s_muted', 'Alles stumm', settings.muted) + '<div class="muted small" style="margin-top:8px">Die Musik startet nach dem ersten Klick oder Tastendruck.</div>';
+  else if (tab === 'ctl') {
+    h += '<div class="muted small" style="margin-bottom:6px">Feld anklicken und neue Taste oder Maustaste drücken · <kbd class="k">Entf</kbd> löscht · <kbd class="k">Esc</kbd> bricht ab</div><div class="scroll">';
+    let grp = '';
+    for (const a of ACTIONS) {
+      if (a.g !== grp) { grp = a.g; h += '<div class="ctlgrp">' + grp + '</div>'; }
+      const b = binds[a.k];
+      h += '<div class="bindrow"><span>' + a.n + '</span>' + [0, 1].map(i => { const L = input.listen && input.listen.action === a.k && input.listen.idx === i; return '<button class="chip' + (L ? ' listen' : '') + '" data-bind="' + a.k + '" data-i="' + i + '">' + (L ? 'Taste drücken…' : b[i] ? keyCap(b[i]) : '<span class="muted small">frei</span>') + '</button>'; }).join('') + '</div>';
+    }
+    h += '<div class="ctlgrp">Fest</div><div class="bindrow"><span>Pause / Menü schließen</span>' + keyCap('Escape') + '<span></span></div><div class="bindrow"><span>Inventarplatz wechseln</span>' + keyCap('WheelUp') + keyCap('WheelDown') + '</div></div>';
+    h += sw('s_traj', 'Flugbahn-Vorschau beim Zielen', settings.traj) + '<button class="btn sm" id="s_reset" style="margin-top:10px">Standardbelegung wiederherstellen</button>';
+  } else {
+    h += sw('s_hints', 'Hinweise & Tastensymbole im Spiel anzeigen', settings.hints) +
+      '<div class="setrow"><label>Touch-Steuerung</label><select id="s_touch" style="width:auto">' + [['auto', 'Automatisch'], ['on', 'Immer an'], ['off', 'Aus']].map(([k, n]) => '<option value="' + k + '"' + (settings.touch === k ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></div>' +
+      '<div class="setrow"><label>Tutorial</label><button class="btn sm" id="s_tut">Erneut zeigen</button></div>';
+  }
+  $('settings').innerHTML = h;
+  for (const b of $('settings').querySelectorAll('[data-tab]')) b.onclick = () => { G.setTab = b.dataset.tab; uiSnd(); renderSettings(); };
+  const bindR = (id, key) => { const el = $(id); if (!el) return; el.oninput = () => { settings[key] = el.value / 100; $(id + 'v').textContent = el.value + '%'; saveSettings(); Music.apply(); }; el.onchange = () => { if (key === 'sfx') uiSnd(); }; };
+  bindR('s_sfx', 'sfx'); bindR('s_music', 'music');
+  const bindS = (id, key, fn) => { const el = $(id); if (el) el.onchange = () => { settings[key] = el.checked; saveSettings(); Music.apply(); if (fn) fn(); }; };
+  bindS('s_musicon', 'musicOn', () => { if (settings.musicOn) Music.start(); }); bindS('s_muted', 'muted'); bindS('s_traj', 'traj'); bindS('s_hints', 'hints', () => { HUD.sig = {}; });
+  if ($('s_touch')) $('s_touch').onchange = () => { settings.touch = $('s_touch').value; saveSettings(); updateTouchUI(); };
+  if ($('s_tut')) $('s_tut').onclick = () => { settings.tutDone = false; saveSettings(); if (G.world && G.role === 'single') { closeAllMenus(); tutStart(); } else toast('Das Tutorial startet beim nächsten Einzelspiel.', 'info'); };
+  if ($('s_reset')) $('s_reset').onclick = () => { resetBinds(); toast('Standardbelegung wiederhergestellt.', 'good'); refreshKeyTexts(); renderSettings(); };
+  for (const b of $('settings').querySelectorAll('[data-bind]')) b.onclick = e => { e.stopPropagation(); const a = b.dataset.bind, i = +b.dataset.i; setTimeout(() => startListen(a, Math.min(i, binds[a].length)), 0); };
+}
+
+// ---------- Hilfe ----------
+G.helpTab = 'kb';
+function renderHelp() {
+  const tab = G.helpTab;
+  let h = head('Hilfe & Steuerung') + '<div class="tabs">' + [['kb', 'Tastatur & Maus'], ['pad', 'Gamepad'], ['touch', 'Touch'], ['goal', 'Spielziel & Tipps']].map(([k, n]) => '<button class="tab' + (tab === k ? ' on' : '') + '" data-htab="' + k + '">' + n + '</button>').join('') + '</div>';
+  if (tab === 'kb') {
+    const B = a => bindCap(a);
+    h += '<div class="kbdviz"><div class="grp"><div class="rowk">' + B('up') + '</div><div class="rowk">' + B('left') + B('down') + B('right') + '</div><small>Laufen · Klettern</small></div>' +
+      '<div class="grp"><div class="rowk">' + B('jump') + '</div><small>Springen</small></div><div class="grp"><div class="rowk">' + B('sprint') + '</div><small>Sprinten</small></div>' +
+      '<div class="grp"><div class="rowk">' + B('primary') + B('secondary') + '</div><small>Aktion · Graben/Blocken</small></div><div class="grp"><div class="rowk">' + B('interact') + B('drop') + '</div><small>Benutzen · Ablegen</small></div>' +
+      '<div class="grp"><div class="rowk">' + B('slot1') + B('slot2') + B('slot3') + '</div><small>Inventar (3 Plätze)</small></div></div>';
+    h += '<div class="helpgrid">';
+    let grp = '';
+    const items = ACTIONS.map(a => ({ a, cap: bindCap(a.k, true) }));
+    const col = list => '<div class="ctl">' + list.map(({ a, cap }) => { let s = ''; if (a.g !== grp) { grp = a.g; s += '<div class="ctlgrp">' + grp + '</div>'; } return s + '<div class="keys">' + cap + '</div><div class="d">' + a.n + '</div>'; }).join('') + '</div>';
+    h += col(items.slice(0, 12)); grp = ''; h += col(items.slice(12).concat([{ a: { g: 'Menüs', n: 'Pause' }, cap: keyCap('Escape') }, { a: { g: 'Menüs', n: 'Inventarplatz wechseln' }, cap: keyCap('WheelUp') + keyCap('WheelDown') }]));
+    h += '</div><div class="muted small" style="margin-top:10px">Die Maus zielt: Würfe, Pfeile, Graben und Geschütze folgen dem Mauszeiger. Alle Tasten lassen sich unter Einstellungen › Steuerung neu belegen.</div>';
+  } else if (tab === 'pad') {
+    const rows = [['LS', 'Laufen · hoch = klettern · ganz durchdrücken = sprinten'], ['RS', 'Zielen (Twin-Stick)'], ['RT', 'Aktion: werfen / schlagen / schießen / feuern'], ['LT', 'Halten: graben in Zielrichtung · mit Schwert/Schild blocken'], ['A', 'Springen · in Menüs: auswählen'], ['B', 'Graben an/aus · in Menüs: zurück'], ['X', 'Benutzen (Fahrzeug, Tür, Aufheben)'], ['Y', 'Ablegen · Lore ausladen'], ['LB', 'Inventarplatz links'], ['RB', 'Inventarplatz rechts'], ['L3', 'Nächster Buddler'], ['R3', 'Forschung'], ['Select', 'Laden'], ['Start', 'Pause (dort: Bauen über Dock/Maus)'], ['DP', 'Laufen · in Menüs navigieren']];
+    h += '<div class="ctl">' + rows.map(([b, d]) => '<div class="keys">' + padCap(b) + '</div><div class="d">' + d + '</div>').join('') + '</div><div class="muted small" style="margin-top:10px">Xbox-/PlayStation-Standardbelegung (✕ = A, ◯ = B, ▢ = X, △ = Y). Wird automatisch erkannt.</div>';
+  } else if (tab === 'touch') {
+    h += '<ul class="tips"><li><b>Linker Stick</b>: laufen, nach oben schieben = springen/klettern.</li><li><b>Ins Spielfeld tippen</b>: Aktion (werfen, schlagen, schießen) in Richtung des Fingers.</li><li><b>Ins Spielfeld lange drücken</b>: dorthin graben (Finger bewegen = Richtung).</li><li><b>Knöpfe rechts</b>: Sprung, Aktion, Graben, Benutzen, Ablegen, Inventarplatz, Buddler wechseln.</li><li><b>Oben</b>: Laden und Menü. Das Dock rechts öffnet Bauen, Forschung, Hilfe und Einstellungen.</li></ul><div class="muted small">Touch-Steuerung lässt sich unter Einstellungen › Anzeige erzwingen oder abschalten.</div>';
+  } else {
+    h += '<ul class="tips"><li><b>Goldrausch</b>: Grabe Gold, verkaufe es an der Hütte (' + bindCap('sell') + ') und erreiche das Geldziel.</li><li><b>Melee</b>: Das letzte überlebende Team gewinnt. Ritter, Katapulte und Burgen helfen.</li><li><b>Forschung</b> (' + bindCap('research') + ') schaltet Lore, Katapult, Kanone, Wachturm, Burg, Waffen, Ritter und TNT frei.</li><li><b>Bauen</b> (' + bindCap('build') + '): Gebäude entstehen als Baustelle – Buddler in der Nähe bauen sie auf.</li><li>Feuersteine explodieren beim Aufprall, TNT nach kurzer Zeit.</li><li>Lava verbrennt alles und wird mit Wasser zu Fels. Feuer breitet sich über Gras und Holz aus – ins Wasser springen löscht.</li><li>Nachts sind Monster gefährlicher. Gebäude und Feuer spenden Licht.</li><li>Du startest im Einzelspieler mit einem Buddler – weitere kaufst du im Laden.</li></ul>';
+  }
+  $('help').innerHTML = h;
+  for (const b of $('help').querySelectorAll('[data-htab]')) b.onclick = () => { G.helpTab = b.dataset.htab; uiSnd(); renderHelp(); };
+}
+function renderCredits() {
+  $('credits').innerHTML = head('Credits') + '<div class="credits">' +
+    '<p><b>BuddelRage</b> ist ein inoffizielles Fan-Spiel im Stil der Clonk-Reihe. Es enthält keine Dateien aus Clonk Rage und ist nicht mit RedWolf Design oder dem OpenClonk-Projekt verbunden.</p>' +
+    '<p><b>Texturen & Sounds</b>: OpenClonk-Team, CC-BY 3.0 (<a href="https://www.openclonk.org" target="_blank" rel="noopener">openclonk.org</a>).</p>' +
+    '<p><b>Musik</b>: prozedural im Browser erzeugt (WebAudio) – eigener Code, keine Fremddateien.</p>' +
+    '<p><b>Schriften</b>: Inter (The Inter Project Authors) und Lilita One (Juan Montoreano) – SIL Open Font License 1.1.</p>' +
+    '<p><b>Netzwerk</b>: PeerJS (MIT), Vermittlung über die PeerJS-Cloud, STUN von Google, Cloudflare und Twilio.</p>' +
+    '<p class="muted small">Details: CREDITS.md im Repository.</p></div>';
+}

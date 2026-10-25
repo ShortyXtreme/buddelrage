@@ -8,8 +8,18 @@ OpenClonk-Projekt verbunden. „Clonk“ ist eine Marke ihres Inhabers und wird 
 * **PeerJS 1.5.5** (`js/peerjs.min.js`) – © Michelle Bu, Eric Zhang u. a., MIT-Lizenz (`js/peerjs.LICENSE.txt`), https://github.com/peers/peerjs
 * Vermittlungsdienst: PeerJS-Cloud (0.peerjs.com), STUN: Google, Cloudflare, Twilio (öffentliche Dienste)
 
+## Schriften (assets/fonts/)
+* **Inter** – © The Inter Project Authors (Rasmus Andersson), SIL Open Font License 1.1 (`assets/fonts/OFL-Inter.txt`), https://github.com/rsms/inter – woff2-Dateien (latin) aus dem Paket @fontsource/inter
+* **Lilita One** – © Juan Montoreano, SIL Open Font License 1.1 (`assets/fonts/OFL-LilitaOne.txt`), https://fonts.google.com/specimen/Lilita+One – woff2 (latin) aus @fontsource/lilita-one
+
+## Musik
+Die Hintergrundmusik wird zur Laufzeit prozedural erzeugt (WebAudio, `js/audio.js`, eigener Code, ISC) – keine fremden Musikdateien.
+
+## Symbole
+UI-Symbole sind eigene SVG-Zeichnungen (`js/hud.js`); Gegenstands-Symbole werden aus den eigenen Pixel-Grafiken des Spiels erzeugt.
+
 ## Programmcode
-Der gesamte Code (js/*.js, index.html, server/server.js) wurde neu geschrieben – siehe LICENSE (ISC).
+Der gesamte Code (js/*.js, index.html, css/style.css, server/server.js) wurde neu geschrieben – siehe LICENSE (ISC).
 Spielmechaniken (Graben, Klettern, Hangeln, Feuersteine, Gold verkaufen an der Heimatbasis, Melee, Lore, Katapult, Kanone,
 Burg, Wachturm, Ritter, Forschung, Lava, Feuer, Tag/Nacht) orientieren
 sich am Spielprinzip von Clonk/OpenClonk; es wurde kein OpenClonk-Code übernommen.

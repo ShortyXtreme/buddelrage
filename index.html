@@ -4,151 +4,153 @@
 <meta charset="utf-8">
 <title>BuddelRage – ein Clonk-inspiriertes Sandbox-Spiel</title>
 <link rel="icon" href="data:,">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#111;font-family:"Trebuchet MS",Verdana,sans-serif;color:#f3e6c8}
-  canvas#game{display:block;width:100vw;height:100vh;image-rendering:pixelated}
-  .screen{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;background:radial-gradient(ellipse at center,rgba(60,40,20,.92),rgba(10,8,5,.97))}
-  .box{background:rgba(40,28,14,.9);border:2px solid #b8904a;border-radius:6px;padding:24px 32px;min-width:340px;box-shadow:0 8px 40px #000;text-align:center}
-  h1{font-size:54px;margin:0 0 4px;color:#ffcc44;text-shadow:3px 3px 0 #6a3a10,0 0 20px #a60;letter-spacing:2px}
-  .sub{color:#cdb88a;margin-bottom:22px}
-  button{display:block;width:100%;margin:8px 0;padding:11px 18px;font:bold 17px "Trebuchet MS",sans-serif;color:#fff3d0;background:linear-gradient(#8a5a26,#5a3612);border:2px solid #c99a50;border-radius:4px;cursor:pointer}
-  button:hover{background:linear-gradient(#a8702e,#6e4418)}
-  input,select{font:16px sans-serif;padding:7px;border-radius:3px;border:1px solid #a88;background:#f8f0e0;margin:4px 0}
-  .row{display:flex;gap:8px;align-items:center;justify-content:center}
-  .err{color:#ff9a7a;min-height:20px;max-width:420px;margin-top:8px}
-  .overlay{position:fixed;display:none;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(30,22,12,.95);border:2px solid #c99a50;border-radius:6px;padding:18px 26px;min-width:340px;box-shadow:0 6px 30px #000;z-index:5}
-  .overlay h2{margin:0 0 10px;color:#ffcc44}
-  #shop table{width:100%;border-collapse:collapse}
-  #shop td{padding:6px 8px;border-bottom:1px solid #5a4528}
-  #shop tr{cursor:pointer}#shop tr:hover{background:#4a3416}
-  #shop tr.dis{opacity:.45}
-  .pr{text-align:right;color:#ffd84a;font-weight:bold}
-  .key{display:inline-block;min-width:16px;padding:1px 5px;background:#e8d8b0;color:#3a2410;border-radius:3px;font-weight:bold;text-align:center;font-size:13px}
-  .sell{margin-top:10px;padding:8px;background:#3a5a20;border:1px solid #7a4;border-radius:4px;cursor:pointer}
-  .sell.dis{background:#333;border-color:#555;opacity:.7}
-  .hint{font-size:12px;color:#bba;margin-top:8px}
-  .money{margin-bottom:8px}
-  #help table td{padding:3px 10px;vertical-align:top}
-  #help td:first-child{text-align:right;white-space:nowrap}
-  .mpsec{border:1px solid rgba(230,200,140,.35);padding:8px 10px;margin:8px 0;border-radius:6px}
-  #lobbyplayers{text-align:left;font-size:18px;font-weight:bold}
-  .opt.hl, button.hl{outline:2px solid #ffe680;background:#6a4a1a}
-  #shop tr.hl,#research tr.hl{background:#6a4a1a}
-  #research table{width:100%;border-collapse:collapse} #research td{padding:5px 8px;border-bottom:1px solid #5a4528} #research tr{cursor:pointer} #research tr.dis{opacity:.55}
-  #research small{color:#cdb88a} .ok{color:#7d7} .run{color:#7bf} .lock{color:#e98;font-size:12px}
-  #help{max-height:92vh;overflow:auto;min-width:640px} #help h3{margin:10px 0 4px;color:#ffcc44;font-size:16px}
-  .opts{font-size:14px;margin-top:6px} .opts label{margin:0 8px;white-space:nowrap}
-  .credit{position:fixed;bottom:6px;left:0;right:0;text-align:center;font-size:11px;color:#998}
-  .credit a{color:#cb9}
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#14110d">
+<link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <canvas id="game"></canvas>
-<div id="hud" style="display:none"></div>
+<div id="menubg"></div>
 
-<div id="loading" class="screen"><div class="box"><h2>Lade…</h2></div></div>
-
-<div id="mainmenu" class="screen">
-  <div class="box">
-    <h1>BuddelRage</h1>
-    <div class="sub">Graben · Klettern · Gold · Feuersteine · Ritter · Burgen · Katapulte · Lava<br><small>ein Fan-Spiel im Stil der Clonk-Reihe</small></div>
-    <button id="btnsettle">⛏ Goldrausch (Siedlung, Einzelspieler)</button>
-    <button id="btnmelee">⚔ Melee gegen 1 KI-Team</button>
-    <button id="btnmelee3">⚔ Melee gegen 2 KI-Teams</button>
-    <button id="btnmp">🌐 Mehrspieler (online)</button>
-    <div class="opts"><label><input type="checkbox" id="optallres"> Alles erforscht (schneller Start)</label><label><input type="checkbox" id="optday" checked> Tag &amp; Nacht</label></div>
-    <div class="hint">Steuerung: H im Spiel · Gamepad wird automatisch erkannt</div>
+<!-- ============ HUD ============ -->
+<div id="hud" style="display:none">
+  <div id="hud-tl" class="glass">
+    <div class="row-sb"><div class="money"><span class="ico coin"></span><b id="h-money">0</b></div><div id="h-clock" class="clock"></div></div>
+    <div id="h-team" class="muted small"></div>
+    <div id="h-res" class="resbar" style="display:none"><div class="small"><span class="ico-s flask"></span> <span id="h-resname"></span> <span id="h-respct" class="muted"></span></div><div class="bar thin"><i id="h-resfill"></i></div></div>
   </div>
-  <div class="credit">Texturen &amp; Sounds: <a href="https://www.openclonk.org" target="_blank">OpenClonk</a>-Team (CC-BY 3.0) – siehe CREDITS.md. Nicht mit RedWolf Design oder dem OpenClonk-Projekt verbunden.</div>
-</div>
-
-<div id="mpmenu" class="screen">
-  <div class="box">
-    <h2>Mehrspieler</h2>
-    <div class="row">Name: <input id="mpname" maxlength="16"></div>
-    <div class="mpsec"><b>Neuen Raum erstellen</b>
-      <div class="row">Raumpasswort: <input id="mppw" type="password" maxlength="64" placeholder="mind. 4 Zeichen" autocomplete="new-password"></div>
-      <button id="btncreate">Privaten Raum erstellen</button></div>
-    <div class="mpsec"><b>Raum beitreten</b>
-      <div class="row"><input id="mplink" placeholder="Einladungslink einfügen" style="width:320px"></div>
-      <div class="row">Passwort: <input id="mpjoinpw" type="password" maxlength="64" autocomplete="off"> <button id="btnjoin" style="width:auto">Beitreten</button></div></div>
-    <div id="mpbusy" class="hint" style="display:none"></div>
-    <div id="mperr" class="err"></div>
-    <div class="hint">Peer-to-Peer über WebRTC – kein eigener Server. Es gibt keine öffentliche Raumliste.</div>
-    <button id="btnback">Zurück</button>
+  <div id="hud-clonks"></div>
+  <div id="hud-tr">
+    <div class="glass mapframe"><canvas id="minimap"></canvas></div>
+    <div id="hud-teams" class="glass"></div>
   </div>
-</div>
-
-<div id="lobby" class="screen">
-  <div class="box">
-    <div id="invitebox"><div>Einladungslink – an Mitspieler schicken (Passwort separat mitteilen):</div>
-      <div class="row"><input id="invitelink" readonly style="width:360px" onclick="this.select()"> <button id="btncopy" style="width:auto">Link kopieren</button></div></div>
-    <div id="clientinfo" style="display:none"><b>Privatraum</b> – verbunden mit dem Host.</div>
-    <ul id="lobbyplayers"></ul>
-    <div id="hostopts">
-      <div class="row">KI-Gegner: <select id="optai"><option>0</option><option selected>1</option><option>2</option><option>3</option></select>
-      Buddler/Team: <select id="optclonks"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></div>
-      <div class="row"><label><input type="checkbox" id="optmon"> Monster</label> <label><input type="checkbox" id="optallres2" checked> Alles erforscht</label> <label><input type="checkbox" id="optday2" checked> Tag &amp; Nacht</label></div>
-      <button id="btnstart">▶ Melee starten</button>
+  <div id="toasts"></div>
+  <div id="hud-bottom">
+    <div id="prompts"></div>
+    <div id="bars" class="glass">
+      <div class="barrow"><span class="ico-s heart"></span><div class="bar hp"><i id="h-hp"></i><em id="h-hpt"></em></div></div>
+      <div class="barrow" id="h-airrow"><span class="ico-s air"></span><div class="bar air"><i id="h-air"></i></div></div>
     </div>
-    <div id="waithost" style="display:none">Warte, bis der Host startet…</div>
-    <button id="btnleave">Verlassen</button>
+    <div id="hotbar"></div>
+    <div id="h-extra"></div>
+  </div>
+  <div id="dock" class="glass"></div>
+  <div id="tutorial" class="glass" style="display:none"></div>
+  <div id="spectate" class="glass" style="display:none">Zuschauer-Modus</div>
+  <div id="h-net" class="muted small"></div>
+  <div id="touch" style="display:none">
+    <div id="tjoy"><div id="tknob"></div></div>
+    <div id="tbtns">
+      <button data-t="jump" class="tb big">Sprung</button>
+      <button data-t="act" class="tb big acc">Aktion</button>
+      <button data-t="dig" class="tb">Graben</button>
+      <button data-t="use" class="tb">Benutzen</button>
+      <button data-t="drop" class="tb">Ablegen</button>
+      <button data-t="slot" class="tb">Platz ⟳</button>
+      <button data-t="next" class="tb">Buddler</button>
+    </div>
+    <div id="ttop"><button data-t="shop" class="tb sm">Laden</button><button data-t="menu" class="tb sm">☰</button></div>
   </div>
 </div>
 
-<div id="gameover" class="screen" style="background:rgba(0,0,0,.55)">
-  <div class="box"><h2 id="gameovertext"></h2><button id="againbtn">Nochmal</button><button id="menubtn">Hauptmenü</button></div>
+<!-- ============ Bildschirme ============ -->
+<div id="loading" class="screen"><div class="loader"><div class="logo">BuddelRage</div><div class="spinner"></div><div class="muted">Lade Welt…</div></div></div>
+
+<div id="mainmenu" class="screen menu-screen">
+  <div class="menu-col">
+    <div class="logo big">BuddelRage</div>
+    <div class="tagline">Graben · Klettern · Gold · Burgen · Ritter · Katapulte · Lava</div>
+    <nav class="mainnav">
+      <button id="btnsp" class="bigbtn primary"><span class="ico pick"></span><span><b>Einzelspieler</b><small>Goldrausch oder Melee gegen die KI</small></span></button>
+      <button id="btnmp" class="bigbtn"><span class="ico globe"></span><span><b>Mehrspieler</b><small>Private Räume, Peer-to-Peer</small></span></button>
+      <button id="btnset" class="bigbtn"><span class="ico gear"></span><span><b>Einstellungen</b><small>Ton, Musik, Steuerung</small></span></button>
+      <button id="btnhelpm" class="bigbtn"><span class="ico help"></span><span><b>Hilfe</b><small>Steuerung &amp; Spielziel</small></span></button>
+      <button id="btncred" class="bigbtn"><span class="ico star"></span><span><b>Credits</b><small>Lizenzen &amp; Danke</small></span></button>
+    </nav>
+  </div>
+  <div class="menu-foot">Fan-Spiel im Stil der Clonk-Reihe · Texturen &amp; Sounds: OpenClonk-Team (CC-BY 3.0) · nicht mit RedWolf Design oder OpenClonk verbunden</div>
 </div>
 
-<div id="shop" class="overlay"></div>
-<div id="buildmenu" class="overlay"></div>
-<div id="research" class="overlay"></div>
-<div id="pausemenu" class="overlay">
-  <h2>Pause</h2>
-  <button id="btnresume" class="opt">Weiter</button>
-  <button id="btnshopp" class="opt">Laden (B)</button>
-  <button id="btnbuildp" class="opt">Bauen (C)</button>
-  <button id="btnresp" class="opt">Forschung (T)</button>
-  <button id="btnhelp" class="opt">Steuerung (H)</button>
-  <button id="btnmute" class="opt">Ton an/aus</button>
-  <button id="btnrestart" class="opt">Neustart (Einzelspieler)</button>
-  <button id="btnquit" class="opt">Hauptmenü</button>
+<div id="spmenu" class="screen menu-screen">
+  <div class="panel wide">
+    <div class="phead"><h2>Einzelspieler</h2><button class="x" data-back>✕</button></div>
+    <div class="cards three">
+      <div class="card opt mode" id="btnsettle"><div class="mode-ico gold"></div><h3>Goldrausch</h3><p>Siedeln: Grabe Gold, verkaufe es und erreiche 300 Geld. Monster lauern.</p><span class="tag">Entspannt</span></div>
+      <div class="card opt mode" id="btnmelee"><div class="mode-ico sword"></div><h3>Melee · 1 KI</h3><p>Zwei Teams, eine Karte. Das letzte überlebende Team gewinnt.</p><span class="tag">Klassisch</span></div>
+      <div class="card opt mode" id="btnmelee3"><div class="mode-ico swords"></div><h3>Melee · 2 KI</h3><p>Jeder gegen jeden auf einer größeren Karte mit drei Teams.</p><span class="tag hot">Chaos</span></div>
+    </div>
+    <div class="toggles">
+      <label class="switch"><input type="checkbox" id="optallres"><i></i> Alles erforscht (schneller Start)</label>
+      <label class="switch"><input type="checkbox" id="optday" checked><i></i> Tag &amp; Nacht</label>
+    </div>
+    <div class="muted small center">Du startest mit einem Buddler – weitere gibt es im Laden.</div>
+  </div>
 </div>
-<div id="help" class="overlay">
-  <h2>Steuerung</h2>
-  <h3>Tastatur</h3>
-  <table>
-    <tr><td><span class="key">←</span> <span class="key">→</span> / <span class="key">A</span> <span class="key">D</span></td><td>Laufen (gegen Gegner laufen = Nahkampf, mit Schwert automatisch)</td></tr>
-    <tr><td><span class="key">↑</span> / <span class="key">W</span></td><td>Springen · Klettern (gegen Wand springen) · Hangeln (↑ halten) · Schwimmen · Katapult/Kanone: Winkel</td></tr>
-    <tr><td><span class="key">↓</span> / <span class="key">S</span></td><td>Herunterklettern · Loslassen · Grabwinkel · Katapult/Kanone: Winkel</td></tr>
-    <tr><td><span class="key">X</span> oder <span class="key">↓</span><span class="key">↓</span></td><td>Graben an/aus (Erde, Sand, Gold – kein Fels/Granit). ↓↓ gräbt senkrecht</td></tr>
-    <tr><td><span class="key">Leertaste</span></td><td>Werfen (Feuerstein explodiert beim Aufprall) · Lore: einladen · Katapult/Kanone: feuern</td></tr>
-    <tr><td><span class="key">F</span></td><td>Waffe: Schwerthieb (Gegner nah) oder Pfeil schießen (Bogen + Pfeile; ↑/↓ halten = höher/tiefer) · sonst Faustschlag</td></tr>
-    <tr><td><span class="key">Shift</span> (halten)</td><td>Mit Schild blocken (Schwerthiebe, Pfeile, Würfe, Bisse von vorne)</td></tr>
-    <tr><td><span class="key">R</span> / <span class="key">G</span></td><td>Benutzen: Fahrzeug anfassen/loslassen · Gebäude (Tür) betreten/verlassen</td></tr>
-    <tr><td><span class="key">E</span></td><td>Ablegen (TNT wird gezündet) · Lore: ausladen</td></tr>
-    <tr><td><span class="key">Q</span></td><td>Inventar durchwechseln (3 Plätze)</td></tr>
-    <tr><td><span class="key">Tab</span> / <span class="key">1</span>–<span class="key">9</span></td><td>Buddler wechseln</td></tr>
-    <tr><td><span class="key">B</span> / <span class="key">V</span></td><td>Laden / Verkaufen (an Hütte oder Burg; mit geschobener Lore wird deren Inhalt mitverkauft)</td></tr>
-    <tr><td><span class="key">T</span></td><td>Forschung (Lore, Katapult, Kanone, Wachturm, Burg, Waffen, Ritter, TNT)</td></tr>
-    <tr><td><span class="key">C</span></td><td>Bauen (Hütte, Holzbrücke, Wachturm, Burg)</td></tr>
-    <tr><td><span class="key">M</span> · <span class="key">H</span> · <span class="key">Esc</span></td><td>Ton · Hilfe · Pause &nbsp; (In Menüs: ↑↓ + Enter oder Zifferntasten)</td></tr>
-  </table>
-  <h3>Gamepad (Xbox/PlayStation-Standardbelegung)</h3>
-  <table>
-    <tr><td>Linker Stick / Steuerkreuz</td><td>Laufen · ↑ Springen/Klettern · ↓↓ senkrecht graben</td></tr>
-    <tr><td>A / ✕</td><td>Springen (halten = klettern/hangeln) · in Menüs: auswählen</td></tr>
-    <tr><td>B / ◯</td><td>Graben an/aus · in Menüs: schließen</td></tr>
-    <tr><td>X / ▢</td><td>Werfen · Lore einladen · Katapult/Kanone feuern</td></tr>
-    <tr><td>Y / △</td><td>Waffe (Schwert/Bogen)</td></tr>
-    <tr><td>LB / RB</td><td>Inventar wechseln / nächster Buddler</td></tr>
-    <tr><td>LT (halten) / RT</td><td>Schild blocken / Benutzen (Fahrzeug, Gebäude)</td></tr>
-    <tr><td>L3 / R3</td><td>Ablegen bzw. Lore ausladen / Forschung</td></tr>
-    <tr><td>Select / Start</td><td>Laden / Pause-Menü (dort auch Bauen &amp; Forschung)</td></tr>
-  </table>
-  <div class="hint">Gold graben und an der Hütte verkaufen, mit dem Geld forschen und bauen. Lava verbrennt alles und wird mit Wasser zu Fels. Feuer breitet sich über Gras und Holz aus – ins Wasser springen löscht. Nachts sind Monster gefährlicher.</div>
+
+<div id="mpmenu" class="screen menu-screen">
+  <div class="panel">
+    <div class="phead"><h2>Mehrspieler</h2><button class="x" id="btnback">✕</button></div>
+    <label class="field">Dein Name<input id="mpname" maxlength="16"></label>
+    <div class="split">
+      <div class="sec"><h3>Raum erstellen</h3>
+        <label class="field">Raumpasswort<input id="mppw" type="password" maxlength="64" placeholder="mind. 4 Zeichen" autocomplete="new-password"></label>
+        <button id="btncreate" class="btn primary">Privaten Raum erstellen</button></div>
+      <div class="sec"><h3>Raum beitreten</h3>
+        <label class="field">Einladungslink<input id="mplink" placeholder="Link einfügen"></label>
+        <label class="field">Passwort<input id="mpjoinpw" type="password" maxlength="64" autocomplete="off"></label>
+        <button id="btnjoin" class="btn">Beitreten</button></div>
+    </div>
+    <div id="mpbusy" class="busy" style="display:none"></div>
+    <div id="mperr" class="err"></div>
+    <div class="muted small center">Peer-to-Peer über WebRTC – kein eigener Server, keine öffentliche Raumliste.</div>
+  </div>
 </div>
+
+<div id="lobby" class="screen menu-screen">
+  <div class="panel">
+    <div class="phead"><h2>Lobby</h2><span class="pill">Privatraum</span></div>
+    <div id="invitebox"><div class="muted small">Einladungslink an Mitspieler schicken – das Passwort separat mitteilen:</div>
+      <div class="inrow"><input id="invitelink" readonly onclick="this.select()"><button id="btncopy" class="btn">Link kopieren</button></div></div>
+    <div id="clientinfo" style="display:none" class="muted">Verbunden mit dem Host.</div>
+    <h3>Spieler</h3>
+    <ul id="lobbyplayers" class="players"></ul>
+    <div id="hostopts">
+      <h3>Einstellungen</h3>
+      <div class="inrow"><label class="field inline">KI-Gegner <select id="optai"><option>0</option><option selected>1</option><option>2</option><option>3</option></select></label>
+      <label class="field inline">Buddler pro Team <select id="optclonks"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label></div>
+      <div class="toggles"><label class="switch"><input type="checkbox" id="optmon"><i></i> Monster</label><label class="switch"><input type="checkbox" id="optallres2" checked><i></i> Alles erforscht</label><label class="switch"><input type="checkbox" id="optday2" checked><i></i> Tag &amp; Nacht</label></div>
+      <button id="btnstart" class="btn primary big">▶ Melee starten</button>
+    </div>
+    <div id="waithost" style="display:none" class="busy">Warte, bis der Host startet…</div>
+    <button id="btnleave" class="btn ghost">Verlassen</button>
+  </div>
+</div>
+
+<div id="gameover" class="screen dim">
+  <div class="panel center">
+    <div id="goicon" class="goicon"></div>
+    <h2 id="gameovertext"></h2>
+    <div id="gostats" class="muted"></div>
+    <div class="inrow c"><button id="againbtn" class="btn primary">Nochmal</button><button id="menubtn" class="btn">Hauptmenü</button></div>
+  </div>
+</div>
+
+<!-- ============ Menüs (Overlays) ============ -->
+<div id="backdrop"></div>
+<div id="shop" class="modal wide"></div>
+<div id="buildmenu" class="modal"></div>
+<div id="research" class="modal wide"></div>
+<div id="pausemenu" class="modal narrow">
+  <div class="phead"><h2>Pause</h2><button class="x" data-close>✕</button></div>
+  <button id="btnresume" class="btn primary opt">Weiter</button>
+  <button id="btnsetp" class="btn opt">Einstellungen</button>
+  <button id="btnhelp" class="btn opt">Hilfe &amp; Steuerung</button>
+  <button id="btnrestart" class="btn opt">Neustart</button>
+  <button id="btnquit" class="btn ghost opt">Zum Hauptmenü</button>
+</div>
+<div id="help" class="modal wide"></div>
+<div id="settings" class="modal wide"></div>
+<div id="credits" class="modal"></div>
 
 <script src="js/assets.js"></script>
 <script src="js/peerjs.min.js"></script>
@@ -157,5 +159,10 @@
 <script src="js/game.js"></script>
 <script src="js/render.js"></script>
 <script src="js/main.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/input.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/menus.js"></script>
+<script src="js/boot.js"></script>
 </body>
 </html>

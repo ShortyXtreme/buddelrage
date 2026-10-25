@@ -25,7 +25,7 @@ jobs:
       - name: Statische Seite zusammenstellen
         run: |
           mkdir -p _site
-          cp -r index.html js assets README.md CREDITS.md LICENSE LICENSE-CC-BY-3.0.txt _site/
+          cp -r index.html js css assets README.md CREDITS.md LICENSE LICENSE-CC-BY-3.0.txt _site/
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
