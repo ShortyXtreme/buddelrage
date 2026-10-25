@@ -43,8 +43,10 @@ function newSeed() { return (Math.random() * 1e9) | 0; }
 function startSingle(mode) {
   const cfg = mode === 'settle'
     ? { mode, W: 1800, H: 640, seed: newSeed(), teams: [{ name: 'Siedler' }], clonks: 1, money: 40, goal: 300, monsters: true, monsterCount: 4 }
-    : { mode: 'melee', W: 1700, H: 620, seed: newSeed(), teams: [{ name: 'Du' }, { name: 'KI Rot', ai: true }], clonks: 1, money: 40, monsters: false };
-  if (mode === 'melee3') { cfg.teams.push({ name: 'KI Grün', ai: true }); cfg.W = 2300; }
+    : { mode: 'melee', W: 1700, H: 620, seed: newSeed(), teams: [{ name: 'Du' }, { name: 'KI Rot', ai: true, diff: $('spdiff1').value }], clonks: 1, money: 40, monsters: false };
+  if (mode === 'melee3') { cfg.teams.push({ name: 'KI Grün', ai: true, diff: $('spdiff2').value }); cfg.W = 2300; }
+  const cn = cleanName($('spcname').value, ''); $('spcname').value = cn; try { localStorage.setItem('br_cname', cn); } catch (e) {}
+  cfg.teams[0].cname = cn; cfg.teams[0].helper = $('opthelper').checked;
   cfg.allResearch = $('optallres').checked; cfg.daynight = $('optday').checked; cfg.lava = true;
   if (mode !== 'settle') cfg.money = cfg.allResearch ? 120 : 60;
   G.role = 'single'; G.myTeam = 0; G.spectate = false; G.spMode = mode;
@@ -55,7 +57,7 @@ function launchWorld(cfg, remote, map) {
   G.cfg = cfg; G.msgs = []; G.demo = null; G.acc = 0;
   const w = new World(cfg, remote);
   if (!remote) w.setup();
-  else { w.teams = cfg.teams.map((tc, i) => ({ id: i, name: tc.name, color: tc.color || TEAM_COLORS[i % 6], ai: !!tc.ai, money: 0, sel: -1, elim: false, keys: {}, res: {}, rq: '', rp: 0 })); if (map) w.loadMap(map); }
+  else { w.teams = cfg.teams.map((tc, i) => ({ id: i, name: cleanName(tc.name, 'Team'), color: tc.color || TEAM_COLORS[i % 6], ai: !!tc.ai, diff: AI_DIFF[tc.diff] ? tc.diff : 'normal', helper: !tc.ai && !!tc.helper, stat: '', money: 0, sel: -1, elim: false, keys: {}, res: {}, rq: '', rp: 0 })); if (map) w.loadMap(map); }
   G.world = w; R.attach(w); R.miniDom = $('minimap'); R.resize();
   const me = w.teams[G.myTeam]; const f = w.clonks.find(c => me && c.id === me.sel) || w.clonks[0];
   if (f) { R.cam.x = f.x - cv.width / R.scale / 2; R.cam.y = f.y - cv.height / R.scale / 2; }
@@ -76,7 +78,7 @@ function menuBack() { if (G.menu) { closeAllMenus(); return; } if ($('lobby').st
 // ---------- Hintergrund-Demo im Hauptmenü (KI gegen KI) ----------
 function startDemo() {
   try {
-    const cfg = { mode: 'melee', W: 1500, H: 560, seed: newSeed(), teams: [{ name: 'A', ai: true }, { name: 'B', ai: true }], clonks: 3, money: 80, monsters: false, allResearch: true, daynight: true, lava: true, dayStart: 0.32 };
+    const cfg = { mode: 'melee', W: 1500, H: 560, seed: newSeed(), teams: [{ name: 'A', ai: true, diff: 'hard' }, { name: 'B', ai: true, diff: 'normal' }], clonks: 3, money: 80, monsters: false, allResearch: true, daynight: true, lava: true, dayStart: 0.32 };
     const w = new World(cfg, false); w.setup(); w.goal = 1e9; G.demo = w; G.demoT = 0; R.attach(w); R.miniDom = null; R.resize();
     R.cam.x = 200; R.cam.y = w.surf[700] - 160;
   } catch (e) { G.demo = null; console.warn('Demo', e); }
@@ -114,7 +116,7 @@ function onNet(m) {
     case 'chunks': if (G.world && G.role === 'client') for (const [ci, d] of m.c) G.world.applyChunk(ci, d); break;
     case 'in': if (G.role === 'host' && G.world) { const ti = G.world.teams.findIndex(t => t.pid === m.from); if (ti < 0) return; if (m.k) G.world.setKeys(ti, m.k); if (m.a) G.world.action(ti, m.a, m.arg); } break;
     case 'late': if (G.role === 'host' && G.world) { netSend({ t: 'start', cfg: G.cfg, to: m.id }); netSend({ t: 'map', m: G.world.fullMap(), to: m.id }); addMsg(m.name + ' schaut zu.'); } break;
-    case 'left': if (G.role === 'host' && G.world) { const t = G.world.teams.find(t => t.pid === m.id); if (t) { t.ai = true; addMsg(t.name + ' hat das Spiel verlassen – KI übernimmt.'); } } break;
+    case 'left': if (G.role === 'host' && G.world) { const t = G.world.teams.find(t => t.pid === m.id); if (t && !t.ai) { G.world.aiTakeover(t, G.cfg.takeover || 'normal'); addMsg(t.name + ' hat das Spiel verlassen – KI (' + aiDiffName(t.diff) + ') übernimmt.'); } } break;
     case 'hostleft': toMenu(); toast('Der Host hat das Spiel verlassen.', 'warn'); break;
   }
 }
@@ -122,18 +124,27 @@ function showLobby() {
   showScreen('lobby');
   $('invitebox').style.display = net.host ? 'block' : 'none'; $('clientinfo').style.display = net.host ? 'none' : 'block';
   if (net.host) $('invitelink').value = net.link || '';
-  $('lobbyplayers').innerHTML = net.players.map((p, i) => '<li><i style="background:' + TEAM_COLORS[i % 6] + '"></i>' + escapeHtml(p.name) + '<small>' + (p.id === net.hostId ? 'Host' : '') + (p.id === net.id ? (p.id === net.hostId ? ' · ' : '') + 'du' : '') + '</small></li>').join('');
-  $('hostopts').style.display = net.host ? 'block' : 'none';
+  $('lobbyplayers').innerHTML = net.players.map((p, i) => '<li><i style="background:' + TEAM_COLORS[i % 6] + '"></i>' + escapeHtml(p.name) + (p.cname ? ' <span class="muted">· Buddler „' + escapeHtml(p.cname) + '“</span>' : '') + '<small>' + (p.id === net.hostId ? 'Host' : '') + (p.id === net.id ? (p.id === net.hostId ? ' · ' : '') + 'du' : '') + '</small></li>').join('');
+  $('hostopts').style.display = net.host ? 'block' : 'none'; renderAiDiffs();
   $('waithost').style.display = net.host ? 'none' : 'block';
 }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+// Lobby: pro KI-Gegner eine Schwierigkeitsauswahl
+function renderAiDiffs() {
+  const box = $('aidiffs'); if (!box) return; const n = +$('optai').value;
+  const old = [...box.querySelectorAll('select')].map(s => s.value);
+  let saved = []; try { saved = JSON.parse(localStorage.getItem('br_lobbydiffs') || '[]'); } catch (e) {}
+  box.innerHTML = Array.from({ length: n }, (_, k) => '<label class="field inline">KI ' + (k + 1) + ' <select data-k="' + k + '">' + AI_LEVELS.map(l => '<option value="' + l + '">' + aiDiffName(l) + '</option>').join('') + '</select></label>').join('');
+  box.querySelectorAll('select').forEach((s, k) => { s.value = old[k] || saved[k] || 'normal'; s.onchange = () => { try { localStorage.setItem('br_lobbydiffs', JSON.stringify([...box.querySelectorAll('select')].map(x => x.value))); } catch (e) {} }; });
+}
 function hostStart() {
   const ai = +$('optai').value, cl = +$('optclonks').value, mon = $('optmon').checked;
-  const teams = net.players.map((p, i) => ({ name: p.name, pid: p.id, color: TEAM_COLORS[i % 6] }));
-  for (let k = 0; k < ai; k++) teams.push({ name: 'KI ' + (k + 1), ai: true, color: TEAM_COLORS[teams.length % 6] });
+  const diffs = [...$('aidiffs').querySelectorAll('select')].map(s => s.value), helper = $('opthelper2').checked;
+  const teams = net.players.map((p, i) => ({ name: p.name, pid: p.id, color: TEAM_COLORS[i % 6], cname: p.cname || '', helper }));
+  for (let k = 0; k < ai; k++) teams.push({ name: 'KI ' + (k + 1), ai: true, diff: diffs[k] || 'normal', color: TEAM_COLORS[teams.length % 6] });
   if (teams.length < 2) { alert('Mindestens 2 Teams nötig (KI-Gegner hinzufügen oder auf Mitspieler warten).'); return; }
   const allRes = $('optallres2').checked;
-  const cfg = { mode: 'melee', W: Math.min(3000, 1100 + teams.length * 380), H: 620, seed: newSeed(), teams, clonks: cl, money: allRes ? 120 : 60, monsters: mon, monsterCount: 3, allResearch: allRes, daynight: $('optday2').checked, lava: true };
+  const cfg = { mode: 'melee', W: Math.min(3000, 1100 + teams.length * 380), H: 620, seed: newSeed(), teams, clonks: cl, money: allRes ? 120 : 60, monsters: mon, monsterCount: 3, allResearch: allRes, daynight: $('optday2').checked, lava: true, takeover: $('opttakeover').value };
   G.role = 'host'; G.myTeam = teams.findIndex(t => t.pid === net.id); G.spectate = false;
   launchWorld(cfg, false);
   netSend({ t: 'start', cfg }); netSend({ t: 'map', m: G.world.fullMap() });

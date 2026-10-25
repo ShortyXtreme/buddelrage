@@ -148,7 +148,12 @@ function updateHUD() {
   // Uhr
   if (w.cfg.daynight !== false) { const p = w.dayPhase(), hh = Math.floor(p * 24), mm = Math.floor((p * 24 - hh) * 6) * 10, day = w.daylight() > 0.5; setHTML('h-clock', icon(day ? 'sun' : 'moon', 'ico-s') + (day ? 'Tag ' : 'Nacht ') + String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0')); $('h-clock').className = 'clock' + (day ? '' : ' night'); } else setHTML('h-clock', '');
   // Teams
-  if (w.teams.length > 1) setHTML('hud-teams', w.teams.map(t => { const alive = w.clonks.filter(c => c.team === t.id && c.act !== 'dead').length; return '<div class="' + (t.elim ? 'el' : '') + '"><i style="background:' + t.color + '"></i>' + escapeHtml(t.name.slice(0, 14)) + '<span class="muted" style="margin-left:auto">' + (t.elim ? '✝' : alive) + '</span></div>'; }).join('')); else $('hud-teams').style.display = 'none';
+  if (w.teams.length > 1) setHTML('hud-teams', w.teams.map(t => {
+    const alive = w.clonks.filter(c => c.team === t.id && c.act !== 'dead').length;
+    const tag = t.ai ? '<span class="dtag d-' + (t.diff || 'normal') + '">KI · ' + aiDiffName(t.diff) + '</span>' : t.helper ? '<span class="dtag d-help">Helfer</span>' : '';
+    const sub = t.ai && !t.elim && t.stat ? '<div class="tstat">' + escapeHtml(t.stat) + '</div>' : '';
+    return '<div class="trow' + (t.elim ? ' el' : '') + '"><div class="tline"><i style="background:' + t.color + '"></i>' + escapeHtml(t.name.slice(0, 14)) + tag + '<span class="muted" style="margin-left:auto">' + (t.elim ? '✝' : alive) + '</span></div>' + sub + '</div>';
+  }).join('')); else $('hud-teams').style.display = 'none';
   // Unten: Leisten, Hotbar, Hinweise
   const c = myClonk();
   $('hud-bottom').style.visibility = c ? 'visible' : 'hidden';

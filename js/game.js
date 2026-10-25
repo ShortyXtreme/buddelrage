@@ -68,6 +68,9 @@ const NAMES = ['Hans', 'Jörg', 'Kurt', 'Fritz', 'Otto', 'Paul', 'Karl', 'Willi'
 const INV_MAX = 3;
 const NOKEYS = { l: 0, r: 0, u: 0, d: 0, b: 0, s: 0, g: 0, am: 0, ax: 0, ay: 0 };
 const BLOCK_SLOT = new Set(['sword', 'shield']);
+// Namen säubern (für HUD/Netz): keine Steuerzeichen/HTML-Zeichen, max. 16 Zeichen
+function cleanName(s, def) { const r = String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f-\u009f<>&"'`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16).trim(); return r || def; }
+function newStats() { return { gold: 0, earned: 0, built: 0, builtList: [], research: 0, kills: 0, deaths: 0, bought: 0, stuckEv: 0, maxStuck: 0, paths: 0, bonus: 0 }; }
 function actIdx(c) { return Math.max(0, Math.min(c.slot || 0, c.inv.length - 1)); }
 function actItem(c) { return c.inv.length ? c.inv[actIdx(c)] : null; }
 const invEnc = a => a.map(t => String.fromCharCode(97 + ITEM_CODES.indexOf(t))).join('');
@@ -153,6 +156,12 @@ class World {
   bg(x, y) { return y < this.surf[x] ? MAT.SKY : MAT.TUNNEL; }
   matAt(x, y) { x = Math.round(x); y = Math.round(y); if (x < 0 || x >= this.W || y >= this.H) return MAT.GRANITE; if (y < 0) return MAT.SKY; return this.mat[y * this.W + x]; }
   solid(x, y) { x = Math.round(x); y = Math.round(y); if (x < 0 || x >= this.W || y >= this.H) return true; if (y < 0) return false; return SOLID[this.mat[y * this.W + x]] === 1; }
+  // Wie viel echte Wand neben dem Körper ist (gegen Festhalten an einzelnen Pixeln)
+  wallSupport(x, y, dir) {
+    const xi = Math.round(x), yi = Math.round(y), e = dir > 0 ? xi + 3 : xi - 4; let n = 0;
+    for (let yy = yi - 9; yy <= yi; yy++) if (this.solid(e, yy) || this.solid(e + dir, yy) || this.solid(e + 2 * dir, yy)) n++;
+    return n;
+  }
   boxHit(x, y) {
     const xi = Math.round(x), yi = Math.round(y);
     for (let yy = yi - 9; yy <= yi; yy++) for (let xx = xi - 3; xx <= xi + 2; xx++) if (this.solid(xx, yy)) return true;
@@ -162,6 +171,7 @@ class World {
     const i = y * this.W + x;
     if (this.mat[i] === m) return;
     this.mat[i] = m;
+    if (this.nav) this.nav.mark(x, y);
     this.colorPixel(x, y);
     const cx = (x / CH) | 0, cy = (y / CH) | 0, ci = cy * this.cw + cx;
     this.renderDirty.add(ci);
@@ -295,7 +305,7 @@ class World {
     const cfg = this.cfg;
     this.generate(cfg.teams.length);
     cfg.teams.forEach((tc, ti) => {
-      const team = { id: ti, name: tc.name, color: tc.color || TEAM_COLORS[ti % 6], ai: !!tc.ai, pid: tc.pid || null, money: cfg.money != null ? cfg.money : 50, sel: -1, keys: { ...NOKEYS }, elim: false, aiT: 0, nameIdx: ti * 5, res: {}, rq: '', rp: 0 };
+      const team = { id: ti, name: cleanName(tc.name, 'Team ' + (ti + 1)), color: tc.color || TEAM_COLORS[ti % 6], ai: !!tc.ai, diff: AI_LEVELS.includes(tc.diff) ? tc.diff : 'normal', helper: !tc.ai && !!(tc.helper != null ? tc.helper : cfg.helpers), cname: tc.ai ? '' : cleanName(tc.cname, ''), cnum: 0, pid: tc.pid || null, money: cfg.money != null ? cfg.money : 50, sel: -1, keys: { ...NOKEYS }, elim: false, aiT: 0, nameIdx: ti * 5, res: {}, rq: '', rp: 0, stat: '', stats: newStats() };
       if (cfg.allResearch) for (const r of RESEARCH) team.res[r.k] = 1;
       this.teams.push(team);
       const bx = this.bases[ti];
@@ -312,7 +322,7 @@ class World {
   }
   spawnClonk(team, x, y) {
     const t = this.teams[team];
-    const c = { id: this.id(), team, x, y, vx: 0, vy: 0, dir: 1, act: 'jump', hp: 100, breath: 100, inv: [], anim: 0, digA: 0, gold: 0, fightT: 0, cd: 0, tumbleT: 0, deadT: 0, name: NAMES[(t.nameIdx++) % NAMES.length], aiKeys: { ...NOKEYS }, punch: 0, digIdle: 0, armor: 0, knight: 0, arrows: 0, block: 0, inside: 0, fire: 0, swing: 0, bowT: 0, veh: 0, blockT: 0 };
+    const c = { id: this.id(), team, x, y, vx: 0, vy: 0, dir: 1, act: 'jump', hp: 100, breath: 100, inv: [], anim: 0, digA: 0, gold: 0, fightT: 0, cd: 0, tumbleT: 0, deadT: 0, name: t.cname ? (t.cnum++ ? cleanName(t.cname.slice(0, 13) + ' ' + t.cnum, t.cname) : t.cname) : NAMES[(t.nameIdx++) % NAMES.length], aiKeys: { ...NOKEYS }, punch: 0, digIdle: 0, armor: 0, knight: 0, arrows: 0, block: 0, inside: 0, fire: 0, swing: 0, bowT: 0, veh: 0, blockT: 0 };
     while (this.boxHit(c.x, c.y) && c.y > 2) c.y--;
     this.clonks.push(c); return c;
   }
@@ -505,7 +515,7 @@ class World {
     if (!c.inv.length && !lor.length) { this.msg('Nichts zu verkaufen.', c.team); return; }
     let sum = 0; for (const ty of c.inv) sum += ITEMS[ty].sell; for (const ty of lor) sum += ITEMS[ty].sell;
     c.inv = []; if (v && v.type === 'lorry') v.inv = [];
-    t.money += sum; this.snd('cash', c.x, c.y); this.msg('+' + sum + ' Geld', c.team);
+    t.money += sum; if (t.stats) { t.stats.earned += sum; } this.snd('cash', c.x, c.y); this.msg('+' + sum + ' Geld', c.team);
     this.checkGoal();
   }
   buy(t, what) {
@@ -634,8 +644,13 @@ class World {
     if (c.act === 'dead' || dmg <= 0 || c.inside) return;
     if (c.armor && src !== 'fire') dmg *= 0.6;
     c.hp -= dmg;
-    if (c.hp <= 0) { this.kill(c); return; }
+    if (c.hp <= 0) { this.creditKill(c, src); this.kill(c); return; }
     if (dmg >= 3 && (c.hurtSnd || 0) < this.tick) { this.snd('hurt', c.x, c.y); c.hurtSnd = this.tick + 25; }
+  }
+  creditKill(c, src) {
+    let k = null; if (src && typeof src === 'object') k = src; else if (typeof src === 'number') k = this.clonks.find(o => o.id === src);
+    if (k && k.team !== c.team && this.teams[k.team] && this.teams[k.team].stats) this.teams[k.team].stats.kills++;
+    if (this.teams[c.team].stats) this.teams[c.team].stats.deaths++;
   }
   kill(c) {
     if (c.act === 'push') this.release(c);
@@ -789,7 +804,7 @@ class World {
     this.tick++;
     this.simMaterials();
     this.updFires();
-    for (const t of this.teams) if (t.ai && !t.elim) this.aiTeam(t);
+    for (const t of this.teams) if ((t.ai || t.helper) && !t.elim) this.aiTeam(t);
     for (const c of this.clonks) this.updClonk(c);
     for (const v of this.vehicles) this.updVehicle(v);
     for (const it of this.items) this.updItem(it);
@@ -797,13 +812,13 @@ class World {
     for (const s of this.structs) if (s.prog < 1) {
       const B = BUILD[s.type];
       const builders = this.clonks.filter(c => c.team === s.team && c.act === 'walk' && !c.inside && Math.abs(c.x - s.x) < s.w / 2 + 8 && Math.abs(c.y - s.y) < 12).length;
-      if (builders) { s.prog = Math.min(1, s.prog + Math.min(3, builders) / B.time); if (s.prog >= 1) { this.snd('build', s.x, s.y); this.msg(B.name + ' fertig gebaut!', s.team); } }
+      if (builders) { s.prog = Math.min(1, s.prog + Math.min(3, builders) / B.time); if (s.prog >= 1) { this.snd('build', s.x, s.y); this.msg(B.name + ' fertig gebaut!', s.team); const st = this.teams[s.team].stats; if (st) { st.built++; st.builtList.push(s.type); } } }
     }
     // Forschung
     for (const t of this.teams) if (t.rq) {
       if (!this.hasBase(t.id)) continue;
       const r = RES_BY[t.rq]; t.rp += 1 / (r.time * 60);
-      if (t.rp >= 1) { t.res[t.rq] = 1; this.msg('Forschung abgeschlossen: ' + r.name + '!', t.id); this.ev({ e: 'snd', n: 'ding', x: 0, y: 0, team: t.id }); t.rq = ''; t.rp = 0; }
+      if (t.rp >= 1) { t.res[t.rq] = 1; if (t.stats) t.stats.research++; this.msg('Forschung abgeschlossen: ' + r.name + '!', t.id); this.ev({ e: 'snd', n: 'ding', x: 0, y: 0, team: t.id }); t.rq = ''; t.rp = 0; }
     }
     this.clonks = this.clonks.filter(c => !c.remove);
     this.items = this.items.filter(i => !i.remove);
@@ -811,7 +826,7 @@ class World {
     this.vehicles = this.vehicles.filter(v => !v.remove);
     if (this.structs.some(s => s.remove)) { this.structs = this.structs.filter(s => !s.remove); this.checkEnd(); }
     if (this.cfg.monsters && this.tick % 1500 === 0 && this.monsters.length < (this.cfg.monsterCount || 4) + (this.daylight() < 0.3 ? 2 : 0)) this.spawnMonster();
-    if (this.tick % 120 === 0) for (const t of this.teams) if (t.ai && !t.elim) t.money += 1;
+    if (this.tick % 120 === 0) for (const t of this.teams) if (t.ai && !t.elim && (AI_DIFF[t.diff] || {}).bonus) { t.money += 1; t.stats.bonus++; } // dokumentierter kleiner Bonus nur für „Schwer“
     for (const t of this.teams) if (t.sel === -1 || !this.selClonk(t)) { const n = this.clonks.find(o => o.team === t.id && o.act !== 'dead'); t.sel = n ? n.id : -1; }
     if (this.tick % 60 === 0) this.checkEnd();
   }
@@ -884,7 +899,8 @@ class World {
   keysFor(c) {
     const t = this.teams[c.team];
     if (t.ai || c.ai) return c.aiKeys;
-    return t.sel === c.id ? t.keys : NOKEYS;
+    if (t.sel === c.id) return t.keys;
+    return t.helper ? c.aiKeys : NOKEYS;
   }
   walkStep(c, dx) {
     const nx = c.x + dx;
@@ -900,7 +916,7 @@ class World {
       for (let s = 0; s < steps; s++) {
         const nx = c.x + c.vx / steps;
         if (this.boxHit(nx, c.y)) {
-          if (control && Math.sign(c.vx) === c.dir && c.vy > -2.2 && !this.boxHit(c.x, c.y + 2)) {
+          if (control && Math.sign(c.vx) === c.dir && c.vy > -2.2 && !this.boxHit(c.x, c.y + 2) && this.wallSupport(c.x, c.y, c.dir) >= 3) {
             c.act = 'climb'; c.vx = 0; c.vy = 0; c.x = Math.round(c.x); return;
           }
           if (c.act === 'tumble') c.vx *= -0.3; else c.vx = 0;
@@ -990,8 +1006,15 @@ class World {
         break;
       }
       case 'climb': {
-        if (!this.boxHit(c.x + c.dir, c.y)) { c.act = 'jump'; c.vy = 0; c.vx = 0; break; }
+        if (this.wallSupport(c.x, c.y, c.dir) < 2) { c.act = 'jump'; c.vy = 0; c.vx = 0; break; } // nur ein loses Pixel: loslassen
+        if (!this.boxHit(c.x + c.dir, c.y)) {
+          // Wand weicht leicht zurück (unebene Schachtwand): nachrutschen statt abzufallen
+          let snap = 0; for (let d = 2; d <= 3; d++) if (this.boxHit(c.x + c.dir * d, c.y)) { snap = d - 1; break; }
+          if (snap) c.x += c.dir * snap; else { c.act = 'jump'; c.vy = 0; c.vx = 0; break; }
+        }
         if (k.u) {
+          // kleine Wandbeule über dem Kopf: 1–2 px von der Wand weg ausweichen
+          if (this.boxHit(c.x, c.y - 0.6)) for (const d of [1, 2]) { const nx = c.x - c.dir * d; if (!this.boxHit(nx, c.y - 0.6) && !this.boxHit(nx, c.y)) { c.x = nx; break; } }
           if (!this.boxHit(c.x, c.y - 0.6)) {
             c.y -= 0.6; c.anim += 0.12;
             if (!this.boxHit(c.x + c.dir * 2, c.y - 4)) {
@@ -1084,6 +1107,7 @@ class World {
     }
     if (c.gold >= 36) {
       c.gold -= 36;
+      const tst = this.teams[c.team].stats; if (tst) tst.gold++;
       if (c.inv.length < INV_MAX) { c.inv.push('gold'); this.snd('grab', c.x, c.y); if (!this.teams[c.team].ai) this.msg('Gold gefunden!', c.team); }
       else {
         const lor = this.vehicles.find(v => v.type === 'lorry' && v.inv.length < VEH.lorry.cap && Math.abs(v.x - c.x) < 40 && Math.abs(v.y - c.y) < 30);
@@ -1267,65 +1291,7 @@ class World {
     if (m.bite > 0) m.bite--;
   }
 
-  // ---------- KI ----------
-  aiTeam(t) {
-    t.aiT++;
-    const own = this.clonks.filter(c => c.team === t.id && c.act !== 'dead');
-    if (!own.length && t.money >= PRICE_CLONK) this.buy(t, t.res.knight && t.money >= PRICE_KNIGHT ? 'knight' : 'clonk');
-    if (t.aiT % 600 === 300 && !t.rq) {
-      for (const k of ['weapons', 'tower', 'castle', 'knight', 'tnt']) { const r = RES_BY[k]; if (!t.res[k] && (!r.req || r.req.every(q => t.res[q])) && t.money >= r.cost + 40) { this.research(t, k); break; } }
-    }
-    if (t.res.knight && t.money >= PRICE_KNIGHT + 30 && own.length < 5 && t.aiT % 900 === 0) this.buy(t, 'knight');
-    for (const c of own) this.aiClonk(c, t);
-  }
-  aiClonk(c, t) {
-    c.aiTick = (c.aiTick || 0) + 1;
-    if (c.inside) { if (c.aiTick % 120 === 0) this.leave(c); return; }
-    if (c.act === 'push') { this.release(c); return; }
-    if (c.aiTick % 6) return;
-    const k = { ...NOKEYS };
-    const enemies = this.clonks.filter(o => o.team !== c.team && o.act !== 'dead' && !o.inside);
-    let target = null, bd = 1e9;
-    for (const o of enemies) { const d = Math.hypot(o.x - c.x, (o.y - c.y) * 1.5); if (d < bd) { bd = d; target = o; } }
-    const ammo = c.inv.filter(x => THROWABLE.has(x)).length;
-    const hasSword = c.inv.includes('sword'), hasBow = c.inv.includes('bow') && c.arrows > 0;
-    const hut = this.structs.find(s => BUILD[s.type].base && s.team === t.id && s.prog >= 1);
-    let goal = target;
-    if (!ammo && !hasSword && hut && t.money >= 10) {
-      goal = { x: hut.x, y: hut.y };
-      if (this.nearBase(c)) {
-        if (t.res.weapons && t.money >= 45 && c.inv.length < INV_MAX) { t.money -= 15; c.inv.push('sword'); if (c.inv.length < INV_MAX) { t.money -= 12; c.inv.push('shield'); } }
-        while (c.inv.length < INV_MAX && t.money >= 10) { t.money -= 10; c.inv.push(t.money >= 40 && this.rand() < 0.3 ? 'superflint' : 'flint'); }
-        goal = target;
-      }
-    }
-    if (c.inv.includes('gold') && hut && this.nearBase(c)) this.sell(c);
-    if (!goal) { c.aiKeys = k; return; }
-    const dx = goal.x - c.x, dy = goal.y - c.y;
-    if (target && goal === target && c.cd === 0 && (c.act === 'walk' || c.act === 'jump' || c.act === 'swim' || c.act === 'fight')) {
-      const adx = Math.abs(dx);
-      if (hasSword && adx < 15 && Math.abs(dy) < 9 && this.rand() < 0.5) { c.dir = Math.sign(dx) || c.dir; this.attack(c); }
-      else if (hasBow && adx > 30 && adx < 170 && Math.abs(dy) < 30 && this.rand() < 0.25) { c.dir = Math.sign(dx); this.shoot(c); c.cd = 70; }
-      else if (ammo && adx > 30 && adx < 150 && dy > -40 && dy < 50 && this.rand() < 0.3) {
-        c.dir = Math.sign(dx); let g = 0; while (!THROWABLE.has(c.inv[0]) && g++ < INV_MAX) c.inv.push(c.inv.shift());
-        this.throwItem(c); c.cd = 90;
-      }
-    }
-    if (c.inv.includes('shield') && target && Math.abs(target.x - c.x) < 18 && (target.swing > 0 || this.rand() < 0.3)) k.b = 1;
-    if (Math.abs(dx) > 5) { if (dx > 0) k.r = 1; else k.l = 1; }
-    if (c.act === 'climb' || c.act === 'swim') k.u = 1;
-    if (c.act === 'hangle') { if (dx > 0) k.r = 1; else k.l = 1; }
-    if (c.act === 'dig') { if (dy < -20) k.u = 1; else if (dy > 20) k.d = 1; c.digT = (c.digT || 0) + 1; if (c.digT > 60) { c.act = 'walk'; c.digT = 0; } }
-    const moved = Math.abs(c.x - (c.lastX || 0)) + Math.abs(c.y - (c.lastY || 0));
-    c.lastX = c.x; c.lastY = c.y;
-    if (c.act === 'walk' && Math.abs(dx) > 8 && moved < 0.5 && !k.b) {
-      c.stuckT = (c.stuckT || 0) + 1;
-      if (c.stuckT % 3 === 1) this.clonkAction(c, 'jump');
-      else if (c.stuckT > 4) { const m = this.matAt(c.x + Math.sign(dx) * 6, c.y - 5); if (DIGGABLE[m]) { c.act = 'dig'; c.dir = Math.sign(dx); c.digA = dy > 20 ? 0.8 : dy < -20 ? -0.6 : 0; c.digIdle = 0; c.digT = 0; } c.stuckT = 0; }
-    } else c.stuckT = 0;
-    if (c.act === 'walk' && dy > 50 && Math.abs(dx) < 20 && this.rand() < 0.2) { c.act = 'dig'; c.digA = 1.4; c.digIdle = 0; c.digT = 0; }
-    c.aiKeys = k;
-  }
+  // ---------- KI: siehe js/ai.js ----------
 
   // ---------- Netzwerk ----------
   snap() {
@@ -1339,7 +1305,7 @@ class World {
       m: this.monsters.map(m => [m.id, r1(m.x), r1(m.y), m.dir, Math.ceil(m.hp), r1(m.anim), m.bite || 0, m.fire > 0 ? 1 : 0]),
       s: this.structs.map(s => [s.id, s.type, s.x, s.y, s.team, Math.round(s.prog * 100) / 100, Math.ceil(s.hp), s.fire > 0 ? 1 : 0]),
       v: this.vehicles.map(v => [v.id, VEH_CODES.indexOf(v.type), r1(v.x), r1(v.y), v.dir, v.team, Math.ceil(v.hp), Math.round(v.ang * 100) / 100, invEnc(v.inv), v.fire > 0 ? 1 : 0, v.pusher, v.cd]),
-      t: this.teams.map(t => [t.money, t.sel, t.elim ? 1 : 0, Object.keys(t.res).join(','), t.rq, Math.round(t.rp * 1000) / 1000]),
+      t: this.teams.map(t => [t.money, t.sel, t.elim ? 1 : 0, Object.keys(t.res).join(','), t.rq, Math.round(t.rp * 1000) / 1000, t.ai ? 1 : 0, t.diff || '', t.stat || '', t.helper ? 1 : 0]),
       f: fl, b: this.burntNew && this.burntNew.length ? this.burntNew.splice(0) : undefined,
       st: this.state, w: this.winner, tk: this.tick,
     };
@@ -1360,7 +1326,7 @@ class World {
     this.structs = s.s.map(a => { const B = BUILD[a[1]]; return { id: a[0], type: a[1], x: a[2], y: a[3], team: a[4], prog: a[5], hp: a[6], fire: a[7], w: B.w, h: B.h }; });
     const ov = new Map(this.vehicles.map(c => [c.id, c]));
     this.vehicles = (s.v || []).map(a => { const v = ov.get(a[0]) || { rx: a[2], ry: a[3] }; Object.assign(v, { id: a[0], type: VEH_CODES[a[1]], x: a[2], y: a[3], dir: a[4], team: a[5], hp: a[6], ang: a[7], inv: invDec(a[8]), fire: a[9], pusher: a[10], cd: a[11] }); return v; });
-    s.t.forEach((a, i) => { const t = this.teams[i]; if (t) { t.money = a[0]; t.sel = a[1]; t.elim = !!a[2]; t.res = {}; if (a[3]) for (const k of a[3].split(',')) t.res[k] = 1; t.rq = a[4]; t.rp = a[5]; } });
+    s.t.forEach((a, i) => { const t = this.teams[i]; if (t) { t.money = a[0]; t.sel = a[1]; t.elim = !!a[2]; t.res = {}; if (a[3]) for (const k of a[3].split(',')) t.res[k] = 1; t.rq = a[4]; t.rp = a[5]; t.ai = !!a[6]; t.diff = a[7] || ''; t.stat = a[8] || ''; t.helper = !!a[9]; } });
     const fs = [], f = s.f || [];
     for (let k = 0; k < f.length; k += 3) fs.push({ x: f[k], y: f[k + 1], k: f[k + 2] });
     if (s.b) for (const x of s.b) this.markBurnt(x);

@@ -11,6 +11,24 @@ Seite öffnen (oder lokal `index.html`) → „Einzelspieler“ → Siedeln / Me
 Im Einzelspieler startet jedes Team (auch die KI) mit **einem Buddler**; weitere kauft man im Laden. Im Mehrspieler stellt der Host die Startzahl in der Lobby ein (Standard 3).
 Beim ersten Start führt ein kurzes Tutorial durch die Steuerung (in den Einstellungen wiederholbar).
 
+## KI-Teams, Schwierigkeit und Buddler-Name
+* **Drei Stufen pro KI-Team:** Leicht / Mittel / Schwer – im Einzelspieler-Menü (KI Rot, bei „Melee · 2 KI“ auch KI Grün)
+  und in der Lobby (eine Auswahl pro KI-Gegner, dazu die Stufe für die KI-Übernahme bei Verbindungsabbruch). Die letzte Wahl wird gespeichert.
+  * *Leicht:* denkt/reagiert langsam, wirft ungenau, blockt selten, kauft wenig, greift erst nach ~5 Minuten und nur bei großer Übermacht an.
+  * *Mittel:* ausgewogen; forscht (Waffen, Lore, Wachturm, Burg, Ritter, TNT), baut Wachturm und Burg, nutzt Loren.
+  * *Schwer:* schnelle Reaktion, Würfe/Pfeile mit Vorhalt, Schildblock gegen anfliegende Geschosse, effizientere Wirtschaft,
+    Katapult/Kanone, koordinierte Angriffe in Gruppen.
+  * Keine Schummelei: Die KI nutzt dieselben Aktionen wie Spieler. Einzige Ausnahme: **Schwer** erhält +1 Geld alle 2 Sekunden
+    (früher bekam jede KI diesen Bonus; jetzt nur noch Schwer).
+* Die KI **arbeitet wie ein Spieler**: Gold abbauen → zur Hütte tragen oder per Lore holen → verkaufen → Buddler, Waffen,
+  Feuersteine kaufen → forschen → Gebäude bauen → verteidigen/angreifen. Status steht in der Teamübersicht (z. B. „baut Gold ab“, „forscht: Burg“).
+* **Wegsuche:** grobes Navigationsraster (5 px) mit A* über Laufen/Springen/Klettern/Hangeln/Schwimmen/Graben (Erde/Sand kosten mehr,
+  Fels/Granit/Lava gesperrt), gestufte Steckenbleib-Erkennung (neu planen → freigraben → Ziel sperren → Treppe nach oben graben).
+* **KI-Helfer:** Schalter „Eigene Buddler arbeiten selbstständig“ – nicht ausgewählte eigene Buddler arbeiten selbst (geben nie Geld aus).
+* **Buddler-Name:** im Einzelspieler- und Mehrspieler-Menü einstellbar (max. 16 Zeichen, Sonderzeichen werden entfernt, wird gespeichert),
+  steht über dem Buddler und in der Buddlerliste, wird im Mehrspieler synchronisiert. Weitere Buddler heißen „Name 2“, „Name 3“ …
+* Details, Quellen und Testergebnisse: [AI_NOTES.md](AI_NOTES.md).
+
 ## Mehrspieler (Peer-to-Peer über WebRTC)
 1. **Host:** „Mehrspieler“ → Namen und **Raumpasswort** (mind. 4 Zeichen) eingeben → „Privaten Raum erstellen“.
 2. In der Lobby erscheint ein **Einladungslink** (`…/buddelrage/#raum=<32 Zeichen Geheimnis>`) → „Link kopieren“
@@ -98,6 +116,6 @@ Tippen in die Welt = Aktion zu dieser Stelle, lange drücken = dorthin graben. I
 * Ohne TURN-Server klappt die P2P-Verbindung bei manchen NAT-/Firewall-Kombinationen nicht. Die PeerJS-Cloud ist ein kostenloser Dienst ohne Garantie.
 * Gamepad: es wird das erste verbundene Gamepad für den lokalen Spieler genutzt (kein Splitscreen).
 * Touch-Steuerung ist eine einfache Grundversion (kein Zielen mit Wurfbahn per Finger, außer Tippen auf das Ziel).
-* KI nutzt Schwert, Schild, Bogen, Ritter und Forschung, aber keine Fahrzeuge und baut keine Gebäude.
+* Die KI-Wegsuche nutzt ein grobes Raster; in sehr zerklüfteten Höhlen braucht ein KI-Buddler manchmal einige Sekunden, um sich freizugraben.
 
 Credits und Lizenzen: siehe CREDITS.md.

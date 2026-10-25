@@ -173,7 +173,17 @@ select option{background:#222;color:#eee}
 .mapframe{padding:5px;line-height:0}
 #minimap{border-radius:9px;image-rendering:pixelated;max-width:min(300px,34vw)}
 #hud-teams{padding:8px 12px;font-size:12px;font-weight:600;min-width:150px}
-#hud-teams div{display:flex;align-items:center;gap:7px;margin:3px 0}
+#hud-teams .trow{margin:4px 0}
+#hud-teams .tline{display:flex;align-items:center;gap:7px}
+#hud-teams .tstat{font-size:10.5px;font-weight:500;opacity:.72;margin:1px 0 0 17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
+#hud-teams .dtag{font-size:9.5px;font-weight:700;padding:1px 5px;border-radius:6px;background:rgba(255,255,255,.12);letter-spacing:.02em}
+#hud-teams .d-easy{background:rgba(95,212,122,.22);color:#9ff0b2}
+#hud-teams .d-normal{background:rgba(232,176,44,.22);color:#ffd77a}
+#hud-teams .d-hard{background:rgba(224,64,44,.25);color:#ff9d8f}
+#hud-teams .d-help{background:rgba(90,160,255,.22);color:#a9cdff}
+.spopts{flex-wrap:wrap;gap:10px;margin:6px 0 2px}
+.spopts .field.inline{flex:1;min-width:150px}
+#aidiffs:empty{display:none}
 #hud-teams i{width:10px;height:10px;border-radius:3px}
 #hud-teams .el{opacity:.45;text-decoration:line-through}
 #toasts{position:absolute;left:50%;top:14px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;width:min(560px,70vw)}

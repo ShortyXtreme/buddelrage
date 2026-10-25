@@ -79,7 +79,13 @@
       <div class="card opt mode" id="btnmelee"><div class="mode-ico sword"></div><h3>Melee · 1 KI</h3><p>Zwei Teams, eine Karte. Das letzte überlebende Team gewinnt.</p><span class="tag">Klassisch</span></div>
       <div class="card opt mode" id="btnmelee3"><div class="mode-ico swords"></div><h3>Melee · 2 KI</h3><p>Jeder gegen jeden auf einer größeren Karte mit drei Teams.</p><span class="tag hot">Chaos</span></div>
     </div>
+    <div class="inrow spopts">
+      <label class="field inline">Name deines Buddlers<input id="spcname" maxlength="16" placeholder="z. B. Hans" autocomplete="off"></label>
+      <label class="field inline">KI Rot <select id="spdiff1" class="diffsel"></select></label>
+      <label class="field inline" title="Nur bei Melee · 2 KI">KI Grün <small class="muted">(2 KI)</small> <select id="spdiff2" class="diffsel"></select></label>
+    </div>
     <div class="toggles">
+      <label class="switch"><input type="checkbox" id="opthelper"><i></i> Eigene Buddler arbeiten selbstständig (KI-Helfer)</label>
       <label class="switch"><input type="checkbox" id="optallres"><i></i> Alles erforscht (schneller Start)</label>
       <label class="switch"><input type="checkbox" id="optday" checked><i></i> Tag &amp; Nacht</label>
     </div>
@@ -90,7 +96,8 @@
 <div id="mpmenu" class="screen menu-screen">
   <div class="panel">
     <div class="phead"><h2>Mehrspieler</h2><button class="x" id="btnback">✕</button></div>
-    <label class="field">Dein Name<input id="mpname" maxlength="16"></label>
+    <div class="inrow"><label class="field inline">Dein Name (Team)<input id="mpname" maxlength="16"></label>
+    <label class="field inline">Name deines Buddlers<input id="mpcname" maxlength="16" placeholder="z. B. Hans" autocomplete="off"></label></div>
     <div class="split">
       <div class="sec"><h3>Raum erstellen</h3>
         <label class="field">Raumpasswort<input id="mppw" type="password" maxlength="64" placeholder="mind. 4 Zeichen" autocomplete="new-password"></label>
@@ -118,7 +125,9 @@
       <h3>Einstellungen</h3>
       <div class="inrow"><label class="field inline">KI-Gegner <select id="optai"><option>0</option><option selected>1</option><option>2</option><option>3</option></select></label>
       <label class="field inline">Buddler pro Team <select id="optclonks"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label></div>
-      <div class="toggles"><label class="switch"><input type="checkbox" id="optmon"><i></i> Monster</label><label class="switch"><input type="checkbox" id="optallres2" checked><i></i> Alles erforscht</label><label class="switch"><input type="checkbox" id="optday2" checked><i></i> Tag &amp; Nacht</label></div>
+      <div class="inrow" id="aidiffs"></div>
+      <div class="inrow"><label class="field inline" title="Wenn ein Mitspieler die Verbindung verliert, übernimmt eine KI sein Team">KI bei Verbindungsabbruch <select id="opttakeover" class="diffsel"></select></label></div>
+      <div class="toggles"><label class="switch"><input type="checkbox" id="optmon"><i></i> Monster</label><label class="switch"><input type="checkbox" id="opthelper2"><i></i> KI-Helfer für eigene Buddler</label><label class="switch"><input type="checkbox" id="optallres2" checked><i></i> Alles erforscht</label><label class="switch"><input type="checkbox" id="optday2" checked><i></i> Tag &amp; Nacht</label></div>
       <button id="btnstart" class="btn primary big">▶ Melee starten</button>
     </div>
     <div id="waithost" style="display:none" class="busy">Warte, bis der Host startet…</div>
@@ -157,6 +166,7 @@
 <script src="js/netconfig.js"></script>
 <script src="js/net.js"></script>
 <script src="js/game.js"></script>
+<script src="js/ai.js"></script>
 <script src="js/render.js"></script>
 <script src="js/main.js"></script>
 <script src="js/audio.js"></script>

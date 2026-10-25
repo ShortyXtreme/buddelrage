@@ -253,7 +253,7 @@ class Renderer {
     g.globalAlpha = 1;
     // Namen
     g.font = '5px monospace'; g.textAlign = 'center';
-    for (const c of world.clonks) { if (c.act === 'dead' || c.inside) continue; const t = world.teams[c.team]; if (t.sel !== c.id) continue; const [x, y] = [c.rx !== undefined && world.remote ? c.rx : c.x, c.ry !== undefined && world.remote ? c.ry : c.y]; g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillText(c.name, Math.round(x) + 0.5, Math.round(y) - 19.5); g.fillStyle = t.id === myTeam ? '#fff' : t.color; g.fillText(c.name, Math.round(x), Math.round(y) - 20); }
+    for (const c of world.clonks) { if (c.act === 'dead' || c.inside) continue; const t = world.teams[c.team]; const sel = t.sel === c.id; if (!sel && t.id !== myTeam) continue; const [x, y] = [c.rx !== undefined && world.remote ? c.rx : c.x, c.ry !== undefined && world.remote ? c.ry : c.y]; g.globalAlpha = sel ? 1 : 0.55; g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillText(c.name, Math.round(x) + 0.5, Math.round(y) - 19.5); g.fillStyle = t.id === myTeam ? '#fff' : t.color; g.fillText(c.name, Math.round(x), Math.round(y) - 20); g.globalAlpha = 1; }
     g.restore();
     if (dark > 0.04) this.drawLighting(world, cx, cy, vw, vh, dark, myTeam);
     if (this.miniDom) this.drawMinimap(world, cx, cy, vw, vh, myTeam);

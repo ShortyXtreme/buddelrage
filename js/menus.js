@@ -139,7 +139,7 @@ function renderSettings() {
 G.helpTab = 'kb';
 function renderHelp() {
   const tab = G.helpTab;
-  let h = head('Hilfe & Steuerung') + '<div class="tabs">' + [['kb', 'Tastatur & Maus'], ['pad', 'Gamepad'], ['touch', 'Touch'], ['goal', 'Spielziel & Tipps']].map(([k, n]) => '<button class="tab' + (tab === k ? ' on' : '') + '" data-htab="' + k + '">' + n + '</button>').join('') + '</div>';
+  let h = head('Hilfe & Steuerung') + '<div class="tabs">' + [['kb', 'Tastatur & Maus'], ['pad', 'Gamepad'], ['touch', 'Touch'], ['goal', 'Spielziel & Tipps'], ['ai', 'KI & Namen']].map(([k, n]) => '<button class="tab' + (tab === k ? ' on' : '') + '" data-htab="' + k + '">' + n + '</button>').join('') + '</div>';
   if (tab === 'kb') {
     const B = a => bindCap(a);
     h += '<div class="kbdviz"><div class="grp"><div class="rowk">' + B('up') + '</div><div class="rowk">' + B('left') + B('down') + B('right') + '</div><small>Laufen · Klettern</small></div>' +
@@ -157,6 +157,14 @@ function renderHelp() {
     h += '<div class="ctl">' + rows.map(([b, d]) => '<div class="keys">' + padCap(b) + '</div><div class="d">' + d + '</div>').join('') + '</div><div class="muted small" style="margin-top:10px">Xbox-/PlayStation-Standardbelegung (✕ = A, ◯ = B, ▢ = X, △ = Y). Wird automatisch erkannt.</div>';
   } else if (tab === 'touch') {
     h += '<ul class="tips"><li><b>Linker Stick</b>: laufen, nach oben schieben = springen/klettern.</li><li><b>Ins Spielfeld tippen</b>: Aktion (werfen, schlagen, schießen) in Richtung des Fingers.</li><li><b>Ins Spielfeld lange drücken</b>: dorthin graben (Finger bewegen = Richtung).</li><li><b>Knöpfe rechts</b>: Sprung, Aktion, Graben, Benutzen, Ablegen, Inventarplatz, Buddler wechseln.</li><li><b>Oben</b>: Laden und Menü. Das Dock rechts öffnet Bauen, Forschung, Hilfe und Einstellungen.</li></ul><div class="muted small">Touch-Steuerung lässt sich unter Einstellungen › Anzeige erzwingen oder abschalten.</div>';
+  } else if (tab === 'ai') {
+    h += '<ul class="tips"><li><b>Drei Stufen</b> pro KI-Team (Einzelspieler-Menü bzw. Lobby): <b>Leicht</b> – langsam, ungenau, passiv, greift erst spät an. <b>Mittel</b> – ausgewogen, forscht, baut Wachturm und Burg, nutzt Loren. <b>Schwer</b> – reagiert schnell, zielt mit Vorhalt, blockt mit dem Schild, wirtschaftet effizient, nutzt Fahrzeuge und greift koordiniert an.</li>' +
+      '<li>Die KI <b>arbeitet wie ein Spieler</b>: Gold abbauen und an der Hütte verkaufen, Buddler, Waffen und Feuersteine kaufen, forschen, bauen, verteidigen. Ihr Weg wird mit einer Wegsuche geplant (Laufen, Springen, Klettern, Hangeln, Schwimmen, Graben); bleibt ein Buddler hängen, gräbt er sich frei oder eine Treppe nach oben.</li>' +
+      '<li>Was ein KI-Team gerade tut, steht in der <b>Teamübersicht</b> oben rechts (z. B. „baut Gold ab“, „forscht: Burg“, „greift an“).</li>' +
+      '<li><b>Fair</b>: Die KI sieht und kann nicht mehr als ein Spieler. Einzige Ausnahme: <b>Schwer</b> erhält wie das bisherige Grundeinkommen +1 Geld alle 2 Sekunden.</li>' +
+      '<li><b>KI-Helfer</b> (Schalter im Menü): Deine nicht ausgewählten Buddler arbeiten selbstständig (Gold abbauen, verkaufen, beim Bauen helfen, sich wehren). Sie geben nie Geld aus.</li>' +
+      '<li>Verliert im Mehrspieler jemand die Verbindung, übernimmt eine KI mit der in der Lobby gewählten Stufe sein Team.</li>' +
+      '<li><b>Buddler-Name</b>: Im Einzelspieler-Menü bzw. Mehrspieler-Menü kannst du deinem Buddler einen Namen geben (max. 16 Zeichen). Er steht über dem Buddler und in der Buddlerliste; weitere gekaufte Buddler heißen „Name 2“, „Name 3“ … Leer lassen = zufällige Namen.</li></ul>';
   } else {
     h += '<ul class="tips"><li><b>Goldrausch</b>: Grabe Gold, verkaufe es an der Hütte (' + bindCap('sell') + ') und erreiche das Geldziel.</li><li><b>Melee</b>: Das letzte überlebende Team gewinnt. Ritter, Katapulte und Burgen helfen.</li><li><b>Forschung</b> (' + bindCap('research') + ') schaltet Lore, Katapult, Kanone, Wachturm, Burg, Waffen, Ritter und TNT frei.</li><li><b>Bauen</b> (' + bindCap('build') + '): Gebäude entstehen als Baustelle – Buddler in der Nähe bauen sie auf.</li><li>Feuersteine explodieren beim Aufprall, TNT nach kurzer Zeit.</li><li>Lava verbrennt alles und wird mit Wasser zu Fels. Feuer breitet sich über Gras und Holz aus – ins Wasser springen löscht.</li><li>Nachts sind Monster gefährlicher. Gebäude und Feuer spenden Licht.</li><li>Du startest im Einzelspieler mit einem Buddler – weitere kaufst du im Laden.</li></ul>';
   }

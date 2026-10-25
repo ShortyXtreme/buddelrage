@@ -95,11 +95,11 @@ function p2pClose() {
 }
 
 // ---------- Host ----------
-function hostPlayers() { return [{ id: 1, name: P2P.hostName }].concat([...P2P.conns.values()].filter(c => c.auth).map(c => ({ id: c.id, name: c.name }))); }
+function hostPlayers() { return [{ id: 1, name: P2P.hostName, cname: P2P.hostCname || '' }].concat([...P2P.conns.values()].filter(c => c.auth).map(c => ({ id: c.id, name: c.name, cname: c.cname || '' }))); }
 function hostBroadcastPlayers() { const m = { t: 'players', players: hostPlayers(), hostId: 1 }; const s = JSON.stringify(m); for (const c of P2P.conns.values()) if (c.auth) pSend(c.conn, s); onNet(m); }
-async function p2pCreate(name, pw, onErr) {
+async function p2pCreate(name, pw, onErr, cname) {
   p2pClose(); P2P.closing = false;
-  P2P.isHost = true; P2P.hostName = name; P2P.onErr = onErr;
+  P2P.isHost = true; P2P.hostName = name; P2P.hostCname = cleanName(cname || '', ''); P2P.onErr = onErr;
   P2P.secret = randSecret(24); // 32 Zeichen, 192 Bit
   P2P.salt = randSecret(16);
   P2P.key = await pwKey(P2P.salt, pw);
@@ -142,7 +142,7 @@ async function hostOnMsg(c, m) {
       return;
     }
     if (hostPlayers().length >= NETCFG.maxPlayers) { pSend(c.conn, JSON.stringify({ t: 'err', s: 'Raum ist voll (max. 6).' })); setTimeout(() => c.conn.close(), 500); return; }
-    c.auth = true; c.id = P2P.nextId++; c.name = String(m.name || 'Spieler').slice(0, 16);
+    c.auth = true; c.id = P2P.nextId++; c.name = cleanName(String(m.name || ''), 'Spieler'); c.cname = cleanName(String(m.cname || ''), '');
     P2P.conns.set(c.id, c);
     pSend(c.conn, JSON.stringify({ t: 'joined', code: 'Privatraum', id: c.id, host: false, players: hostPlayers(), hostId: 1 }));
     hostBroadcastPlayers();
@@ -160,7 +160,7 @@ function hostSend(o) {
 }
 
 // ---------- Client ----------
-async function p2pJoin(secret, name, pw, onErr) {
+async function p2pJoin(secret, name, pw, onErr, cname) {
   p2pClose(); P2P.closing = false;
   P2P.isHost = false; P2P.secret = secret; P2P.onErr = onErr;
   const pid = await peerIdFor(secret);
@@ -171,7 +171,7 @@ async function p2pJoin(secret, name, pw, onErr) {
     const conn = peer.connect(pid, { reliable: true, serialization: 'raw' }); P2P.hostConn = conn;
     const to = setTimeout(() => { if (!joined && !gotErr && peer === P2P.peer) onErr('Zeitüberschreitung – Host nicht erreichbar.'); }, 25000);
     conn.on('data', d => pRecv(conn, d, async m => {
-      if (m.t === 'chal') { const k = await pwKey(String(m.salt), pw); pSend(conn, JSON.stringify({ t: 'auth', r: await sha256(k + '|' + m.nonce), name })); return; }
+      if (m.t === 'chal') { const k = await pwKey(String(m.salt), pw); pSend(conn, JSON.stringify({ t: 'auth', r: await sha256(k + '|' + m.nonce), name, cname: cname || '' })); return; }
       if (m.t === 'err') { gotErr = true; clearTimeout(to); onErr(m.s); return; }
       if (m.t === 'joined') { joined = true; clearTimeout(to); }
       if (!joined) return;
