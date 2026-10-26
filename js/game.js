@@ -73,9 +73,9 @@ const RESEARCH = [
   { k: 'tnt', name: 'Sprengstoff', cost: 50, time: 22, desc: 'TNT im Laden' },
   { k: 'weapons', name: 'Waffenschmiede', cost: 80, time: 30, desc: 'Schwert, Schild, Bogen, Pfeile, Rüstung' },
   { k: 'catapult', name: 'Katapult', cost: 70, time: 30, req: ['lorry'], desc: 'Fahrzeug: schleudert Steine & Feuersteine' },
-  { k: 'castle', name: 'Burg', cost: 120, time: 45, req: ['tower'], desc: 'Gebäude: Heimatbasis, Laden, Rüstung, Heilung' },
+  { k: 'castle', name: 'Burg', cost: 90, time: 38, req: ['tower'], desc: 'Gebäude: Heimatbasis, Laden, Rüstung, Heilung' },
   { k: 'cannon', name: 'Kanone', cost: 125, time: 45, req: ['catapult', 'weapons'], desc: 'Fahrzeug: schießt flach und hart' },
-  { k: 'knight', name: 'Ritter', cost: 105, time: 38, req: ['castle', 'weapons'], desc: 'Ritter mit Schwert, Schild, Bogen & Rüstung kaufen' },
+  { k: 'knight', name: 'Ritter', cost: 75, time: 30, req: ['castle', 'weapons'], desc: 'Ritter mit Schwert, Schild, Bogen & Rüstung kaufen' },
   { k: 'balloon', name: 'Ballonbau', cost: 45, time: 18, desc: 'Ballon im Laden: schwebt langsam nach oben (raus aus Gruben)' },
 ];
 const RES_BY = Object.fromEntries(RESEARCH.map(r => [r.k, r]));
@@ -480,6 +480,8 @@ class World {
     if (a === 'slot' || a === 'slotd') { const c = this.selClonk(t); if (!c) return; if (a === 'slot') { const n = Math.max(0, Math.min(INV_MAX + GEAR_SEL.length - 1, arg | 0)); if (n >= INV_MAX && !hasG(c, GEAR_SEL[n - INV_MAX])) { if (!t.ai) this.msg('Kein ' + ITEMS[GEAR_SEL[n - INV_MAX]].name + ' – im Laden kaufen.', teamId); return; } c.slot = n; } else { const L = selSlots(c), k = L.indexOf(c.slot || 0); c.slot = L[((k < 0 ? 0 : k) + (arg > 0 ? 1 : L.length - 1)) % L.length]; } return; }
     if (a === 'autosell') { if (!Array.isArray(arg) || !SELLABLE.includes(arg[0])) return; if (!t.autoSell) t.autoSell = { ...AUTO_SELL_DEFAULT }; t.autoSell[arg[0]] = arg[1] ? 1 : 0; return; }
     if (a === 'sellone') { const c = this.selClonk(t); if (c) this.sellOne(c, arg); return; }
+    if (a === 'cup') { if (this.castleUpgrade) this.castleUpgrade(t, typeof arg === 'number' ? arg : 0); return; }
+    if (a === 'cammo') { if (this.castleAmmo) this.castleAmmo(t, arg); return; }
     if (a === 'research') return this.research(t, arg);
     const c = this.selClonk(t); if (!c) return;
     this.clonkAction(c, a, arg);
@@ -1020,6 +1022,7 @@ class World {
     for (const it of this.items) this.updItem(it);
     for (const m of this.monsters) this.updMonster(m);
     if (this.updFauna) this.updFauna();
+    if (this.castleTick) this.castleTick();
     for (const s of this.structs) if (s.prog < 1) {
       const B = BUILD[s.type];
       const builders = this.clonks.filter(c => this.ally(c.team, s.team) && (c.act === 'walk' || (s.lv && c.act === 'dig')) && !c.inside && Math.abs(c.x - s.x) < s.w / 2 + (s.lv ? 14 : 8) && Math.abs(c.y - s.y) < (s.lv ? 30 : 12)).length;
@@ -1594,7 +1597,8 @@ class World {
       i: this.items.map(i => [i.id, ITEM_CODES.indexOf(i.type), r1(i.x), r1(i.y), i.fuse, i.stuck ? 1 : 0, r1(i.vx), r1(i.vy), i.landed ? 1 : 0]),
       m: this.monsters.map(m => [m.id, r1(m.x), r1(m.y), m.dir, Math.ceil(m.hp), r1(m.anim), m.bite > 0 ? m.bite : m.wind > 0 ? -m.wind : 0, m.fire > 0 ? 1 : 0]),
       a: this.animals.map(a => [a.id, ANIMAL_KINDS.indexOf(a.k), r1(a.x), r1(a.y), a.dir, r1(a.anim), (a.flee > 0 ? 1 : 0) | (a.flop ? 2 : 0) | (a.bite > 0 ? 4 : 0) | (a.perch ? 8 : 0) | (a.gold ? 16 : 0)]),
-      s: this.structs.map(s => [s.id, s.type, s.x, s.y, s.team, Math.round(s.prog * 100) / 100, Math.ceil(s.hp), s.fire > 0 ? 1 : 0, s.lv ? 1 : 0]),
+      s: this.structs.map(s => [s.id, s.type, s.x, s.y, s.team, Math.round(s.prog * 100) / 100, Math.ceil(s.hp), s.fire > 0 ? 1 : 0, s.lv ? 1 : 0, s.up | 0, s.upT > 0 ? Math.ceil(s.upT / 60) : 0, s.arrows | 0, s.bolts | 0, s.walls ? s.walls.map(q => [q.x, q.y, Math.ceil(q.hp), q.br ? 1 : 0, q.d]) : 0, s.bDir || 0]),
+      cs: (this.cshots || []).map(p => [r1(p.x), r1(p.y), r1(p.vx), r1(p.vy), p.k]),
       v: this.vehicles.map(v => [v.id, VEH_CODES.indexOf(v.type), r1(v.x), r1(v.y), v.dir, v.team, Math.ceil(v.hp), Math.round(v.ang * 100) / 100, invEnc(v.inv), v.fire > 0 ? 1 : 0, v.pusher, v.cd]),
       t: this.teams.map(t => [t.money, t.sel, t.elim ? 1 : 0, Object.keys(t.res).join(','), t.rq, Math.round(t.rp * 1000) / 1000, t.ai ? 1 : 0, t.diff || '', t.stat || '', t.helper ? 1 : 0, t.hdiff || '', SELLABLE.filter(k => (t.autoSell || AUTO_SELL_DEFAULT)[k]).join(',')]),
       f: fl, b: this.burntNew && this.burntNew.length ? this.burntNew.splice(0) : undefined,
@@ -1617,7 +1621,8 @@ class World {
     this.monsters = s.m.map(a => { const m = om.get(a[0]) || { rx: a[1], ry: a[2] }; Object.assign(m, { id: a[0], x: a[1], y: a[2], dir: a[3], hp: a[4], anim: a[5], bite: a[6] > 0 ? a[6] : 0, wind: a[6] < 0 ? -a[6] : 0, fire: a[7] }); return m; });
     const oa = new Map(this.animals.map(c => [c.id, c]));
     this.animals = (s.a || []).map(a => { const o = oa.get(a[0]) || { rx: a[2], ry: a[3] }; Object.assign(o, { id: a[0], k: ANIMAL_KINDS[a[1]], x: a[2], y: a[3], dir: a[4], anim: a[5], flee: a[6] & 1, flop: a[6] & 2, bite: a[6] & 4 ? 1 : 0, perch: a[6] & 8, gold: a[6] & 16 ? 1 : 0 }); return o; });
-    this.structs = s.s.map(a => { const B = BUILD[a[1]]; return { id: a[0], type: a[1], x: a[2], y: a[3], team: a[4], prog: a[5], hp: a[6], fire: a[7], lv: a[8] || 0, w: B.w, h: B.h }; });
+    this.structs = s.s.map(a => { const B = BUILD[a[1]]; return { id: a[0], type: a[1], x: a[2], y: a[3], team: a[4], prog: a[5], hp: a[6], fire: a[7], lv: a[8] || 0, w: B.w, h: B.h, up: a[9] || 0, upT: (a[10] || 0) * 60, arrows: a[11] || 0, bolts: a[12] || 0, walls: a[13] ? a[13].map(q => ({ x: q[0], y: q[1], hp: q[2], br: q[3], d: q[4] })) : null, bDir: a[14] || 0 }; });
+    this.cshots = (s.cs || []).map(a => ({ x: a[0], y: a[1], vx: a[2], vy: a[3], k: a[4] }));
     const ov = new Map(this.vehicles.map(c => [c.id, c]));
     this.vehicles = (s.v || []).map(a => { const v = ov.get(a[0]) || { rx: a[2], ry: a[3] }; Object.assign(v, { id: a[0], type: VEH_CODES[a[1]], x: a[2], y: a[3], dir: a[4], team: a[5], hp: a[6], ang: a[7], inv: invDec(a[8]), fire: a[9], pusher: a[10], cd: a[11] }); return v; });
     s.t.forEach((a, i) => { const t = this.teams[i]; if (t) { t.money = a[0]; t.sel = a[1]; t.elim = !!a[2]; t.res = {}; if (a[3]) for (const k of a[3].split(',')) t.res[k] = 1; t.rq = a[4]; t.rp = a[5]; t.ai = !!a[6]; t.diff = a[7] || ''; t.stat = a[8] || ''; t.helper = !!a[9]; t.hdiff = a[10] || 'normal'; if (a[11] != null) { t.autoSell = {}; for (const k of String(a[11]).split(',')) if (k) t.autoSell[k] = 1; } } });

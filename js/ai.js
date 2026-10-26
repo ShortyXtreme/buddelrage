@@ -284,6 +284,9 @@ Object.assign(World.prototype, {
     let pend = 0;
     if (!B.site && !B.buildId && n >= 3) for (const k of D.builds) { const Bd = BUILD[k]; if (Bd.res && !t.res[Bd.res]) continue; if (this.structs.some(s => this.ally(s.team, t.id) && s.type === k && !s.remove)) continue; if ((B.unbuild[k] || 0) > this.tick) continue; pend = Bd.price; break; }
     B.keep = save + pend; // Rücklage, die beim Ausrüsten nicht angetastet wird
+    // Burg-Munition nachfüllen (billig, wichtig für die Verteidigung)
+    const cs = this.castleOf ? this.castleOf(t.id) : null, cupMax = D.k === 'hard' ? 3 : D.k === 'normal' ? 2 : 1;
+    if (cs && (cs.up | 0) >= 2) for (const k in CAMMO) { const A = CAMMO[k]; if ((cs.up | 0) < A.lvl) continue; const low = (cs[k] | 0) < (B.defend ? A.max - A.add : A.add); if (low && free >= A.price + (B.defend ? 0 : R)) { this.castleAmmo(t, k, cs.id); return; } }
     // 2) Forschung nach Plan (Bauordnung)
     if (!t.rq) for (const k of D.research) {
       const r = RES_BY[k]; if (t.res[k]) continue;
@@ -299,6 +302,8 @@ Object.assign(World.prototype, {
       if (k === 'tower' && n < 3) continue;
       if (m >= Bd.price + (k === 'castle' ? 0 : R)) { this.aiPlanSite(t, B, k); return; } // Burg: Sparziel reicht, keine zusätzliche Reserve
     }
+    // Burg-Ausbau: Leicht höchstens Mauern, Mittel bis Schützentürme, Schwer bis Balliste
+    if (cs && !(cs.upT > 0) && (cs.up | 0) < cupMax && n >= 3) { const U = CUP[cs.up | 0]; if (free >= U.price + R + (B.defend ? 0 : 20)) { this.castleUpgrade(t, cs.id); return; } }
     // Sparziel: nächste geplante Forschung bzw. nächstes Gebäude (sonst frisst der Buddler-Kauf alles auf)
     let goal = 0;
     if (n >= 3 && !B.defend) {

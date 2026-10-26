@@ -128,7 +128,7 @@ Der Ordner `server/` ist nur noch ein optionaler lokaler Webserver (`cd server &
 für den Mehrspieler wird er nicht mehr gebraucht. Lokal geht auch `python3 -m http.server`.
 
 ## Neue Spielelemente
-* **Forschung [T]**: Lore → Katapult → Kanone, Wachturm → Burg, Waffenschmiede (Schwert, Schild, Bogen, Pfeile, Rüstung), Ritter, Sprengstoff (TNT). Kostet Geld und Zeit (Lore 35/18 s, Wachturm 60/27 s, Sprengstoff 50/22 s, Waffenschmiede 80/30 s, Katapult 70/30 s, Burg 120/45 s, Kanone 125/45 s, Ritter 105/38 s, Ballonbau 45/18 s), braucht Hütte/Burg, ein Projekt gleichzeitig. Option „Alles erforscht“ im Hauptmenü/in der Lobby.
+* **Forschung [T]**: Lore → Katapult → Kanone, Wachturm → Burg, Waffenschmiede (Schwert, Schild, Bogen, Pfeile, Rüstung), Ritter, Sprengstoff (TNT). Kostet Geld und Zeit (Lore 35/18 s, Wachturm 60/27 s, Sprengstoff 50/22 s, Waffenschmiede 80/30 s, Katapult 70/30 s, Burg 90/38 s, Kanone 125/45 s, Ritter 75/30 s, Ballonbau 45/18 s), braucht Hütte/Burg, ein Projekt gleichzeitig. Option „Alles erforscht“ im Hauptmenü/in der Lobby.
 * **Fahrzeuge** (im Laden [B]): *Lore* sammelt herumliegende Objekte ein (25 Plätze), wird geschoben, an der Basis mit [V] verkauft (nur markierte Sorten, der Rest bleibt in der Lore); beim Graben mit vollem Inventar landet Gold in einer nahen Lore. *Katapult* (Bogenwurf) und *Kanone* (flach, Steine werden zu Kanonenkugeln) feuern Steine, Gold, Feuersteine, TNT – aus dem Inventar des Schiebenden.
 * **Gebäude** [C] als Baustelle: *Hütte*, *Wachturm* (betretbar, man wirft/schießt von oben, sicher, Heilung), *Burg* (Stein, Heimatbasis mit Laden/Verkauf/Forschung, viel Struktur, schnelle Heilung, gibt Rüstung beim Betreten). Gebäude können brennen (Holz) und gesprengt werden.
 * **Ritter** (Laden): Schwert, Schild, Bogen + 15 Pfeile, Rüstung (−40 % Schaden). Nahkampf automatisch beim Gegeneinanderlaufen oder gezielt mit Linksklick/[F]; Blocken mit Schild (Schwert wählen, Rechtsklick halten) gegen Hiebe, Pfeile, Würfe und Bisse von vorne.
@@ -136,6 +136,15 @@ für den Mehrspieler wird er nicht mehr gebraucht. Lokal geht auch `python3 -m h
 * **Feuer**: Gras, Holzbrücken, Holzhütten, Türme, Katapulte brennen; Feuer breitet sich aus, Explosionen und Lava entzünden, Wasser löscht.
 * **Tag & Nacht** (4 Minuten pro Tag): Himmel, Sterne, Sonne/Mond, Dunkelheit mit Lichtquellen (Buddler, Gebäude, Feuer, Lava, Explosionen).
 * **Gamepad** (Gamepad-API, Standardbelegung) – siehe unten und Hilfe [H].
+
+## Burg-Ausbau und Munition
+Eine fertige Burg lässt sich im Laden (Box „🏰 Burg-Ausbau“) in drei Stufen ausbauen. Bezahlt wird aus der (Team-)Kasse, jede Stufe braucht Bauzeit:
+1. **Mauern & Tor** (80 Geld, 15 s): Burg +300 Struktur, zwei Steinmauern links und rechts. Gegner und feindliche Fahrzeuge kommen nicht durch, dein Team (und Verbündete) geht durchs Tor. Anrennen (Ritter/Schwert) und Explosionen beschädigen die Mauern. Ein **Reparaturtrupp** flickt Burg und Mauern, sobald 5 s lang kein Gegner in der Nähe ist. Eingestürzte Mauern stehen ab 40 % wieder.
+2. **Schützentürme** (110 Geld, 20 s): Zwei Bogenschützen auf den Türmen schießen selbst auf Gegner (Reichweite 230, 11 Schaden). Sie verbrauchen den **Pfeilvorrat** der Burg.
+3. **Balliste** (150 Geld, 25 s): ein schweres Bolzengeschütz auf dem Bergfried (Reichweite 380, 30 Schaden plus Wegschleudern, 45 gegen Fahrzeuge). Es zielt bevorzugt auf Ritter und Belagerungsgerät und verbraucht **Ballistenbolzen**.
+
+**Munition muss gekauft werden:** Pfeilvorrat +20 für 12 (max. 60, ab Stufe 2), Ballistenbolzen +4 für 16 (max. 12, ab Stufe 3). Ist der Vorrat leer, schweigen die Schützen bzw. die Balliste (rote Markierung an der Burg und eine Meldung). Über der eigenen Burg stehen Stufe, Ausbauzeit und Vorrat („Burg 2/3 · Pfeile 40“). Am Sprite sieht man Wehrgänge und Fallgitter, die Mauern samt HP-Balken, Schützen auf den Türmen und die Balliste (mit eingelegtem Bolzen, wenn geladen). Während des Ausbaus steht ein Gerüst.
+Die **KI** baut aus (Leicht bis Stufe 1, Mittel bis 2, Schwer bis 3), sobald genug Geld da ist, und füllt die Munition auf, bei Angriffen mit Vorrang. Im Team nutzt sie die gemeinsame Kasse. Ausbau und Vorrat werden im Mehrspieler synchronisiert, überstehen den Host-Wechsel und werden gespeichert; alte Spielstände laden als Burg ohne Ausbau.
 
 ## Tiere, Enterhaken, Ballon, Notausgang
 * **Tiere** (Schalter „Tiere“ im Einzelspieler-Menü bzw. in der Lobby, Standard an; Anzahl wächst mit der Kartengröße,

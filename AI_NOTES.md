@@ -215,3 +215,8 @@ Nicht gebaut trotz Forschung: Team wurde vorher eliminiert/belagert oder hatte z
 - Waffen/Schild/Bogen/Haken liegen in c.gear (aiSlot wählt Slot 3+i), Rüstung c.armor. aiArm kauft Feuersteine nur, solange inv + Schwert + Schild < 3 (Platz für Gold wie früher).
 - KI verkauft fest Gold/Steine (+ Lore), behält Werkzeug und Waffen; Spieler-Automatik (t.autoSell) gilt nicht für die KI.
 - Rechtsklick-Blocken (secBlock) nur für Menschen; KI blockt über k.b.
+
+## Burg-Ausbau und Munition (Okt. 2026)
+- `aiSpend` (Lead-KI des Teams, gemeinsame Kasse): **Munition** wird vor der Forschung nachgekauft, wenn der Vorrat unter dem Nachkauf-Schritt liegt (im Verteidigungsfall: bis kurz vor voll). Außerhalb einer Verteidigung bleibt die Forschungsreserve R unangetastet.
+- **Ausbau** nach den Gebäuden, sobald das Team ≥ 3 Buddler hat und `Geld ≥ Preis + R (+20 ohne Verteidigung)`. Höchststufe: Leicht 1, Mittel 2, Schwer 3.
+- Schützen und Balliste zielen selbst (`castleFoes`, mit Sichtlinie, Balliste bevorzugt Ritter, schiebende Gegner und Fahrzeuge). Die KI muss die Burg dafür nicht besetzen.

@@ -424,3 +424,11 @@ input[type=range]:focus-visible{box-shadow:none;outline:2px solid var(--acc);out
 .schip.eqc{border-style:dashed}
 .schip.dis{opacity:.45;pointer-events:none}
 .schip:focus-visible,.schip.focus{outline:2px solid var(--acc)}
+
+/* Burg-Ausbau */
+.cuprow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
+.card.cup{padding:8px 10px;min-height:0}
+.card.cup h3{font-size:13px;margin:0 0 4px}
+.card.cup p{font-size:11px;margin:0 0 6px}
+.card.cup.done{border-color:rgba(120,220,120,.35)}
+@media (max-width:700px){.cuprow{grid-template-columns:1fr}}

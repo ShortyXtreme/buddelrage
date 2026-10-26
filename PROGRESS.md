@@ -84,3 +84,17 @@ Backup: /workspace/clonk-game.bak8 (= Zip 5000b67…)
 - läuft: r8/raid4.sh (raidH_*), danach Zip
 - 21:36 Raids final (raidH_*): Ritter-Überfall 20 Seeds leicht 9 / mittel 7 / schwer 11 (Release 2: 11/10/15; mit alter Wirtschaft + neuem Code 11/9/12 → Rückgang = teurere Forschung, Ritter seltener erforscht nach 3 min). Bewaffnete Buddler 12 Seeds: 0/12/10 (R2: 4/8/9).
 - [x] Zip gebaut (sha256 im Bericht)
+
+## Nachjustierung (Start 26.10.2026 21:40) – Backup /workspace/clonk-game.bak9
+- Ritter-Forschung 105/38 → 75/30 s, Burg 120/45 → 90/38 s
+- Überfälle nach Preissenkung (raidI): Ritter 20 Seeds leicht 9 / mittel 9 / schwer 13; Buddler 12 Seeds 0/10/8.
+- Burg-Ausbau (Steuerung): Recherche (OpenClonk, Kingdom Two Crowns, Stronghold, AoE II, Tower Defense) → 3 Stufen in js/castle.js: 1 Mauern & Tor (80/15 s, +300 Struktur, 2 Mauern, Reparaturtrupp), 2 Schützentürme (110/20 s, Pfeilvorrat), 3 Balliste (150/25 s, Bolzen). Munition: Pfeile +20/12 (max 60), Bolzen +4/16 (max 12). Snapshot, mergeLive, Save/Load (alte Stände ohne Ausbau), Render (Wehrgang, Fallgitter, Mauern, Schützen, Balliste, Gerüst, Beschriftung), Laden-Box, KI (aiSpend: Munition vor Forschung, Ausbau bis Stufe 1/2/3).
+- 21:50 test/castleup.js grün (Sperre, Stufen, Mauer blockt Feind/Verbündete gehen durch, ohne Munition kein Schuss, Kauf, Treffer, kein Eigenbeschuss, Balliste vs. Kanone, Snapshot, Save/Load, Alt-Save, Mauer bricht/repariert). ERRS [].
+- 21:55 mpgear (3 Tabs, TURN) um Burg-Ausbau erweitert: Anna/Bert bauen aus und kaufen Munition aus der Teamkasse, alle Tabs gleich, Schüsse beim Client sichtbar, Zustand nach Host-Wechsel erhalten. Verbündete KI kaufte selbst Munition. ERRS [].
+- 21:57 Überfälle mit Code (raidJ, ohne Burg nach 3 min = wie raidI): 9/9/13, Buddler 0/10/8. Mit vorgegebener Burg (UPG, Mittel, 20 Seeds): Stufe 1 9, Stufe 2 17, Stufe 3 18. Mauer-Schaden durch Anrennen gesenkt (Ritter 0,3 → 0,12/Tick), Stufe 1 läuft neu. Screenshots test/shots10/.
+- läuft: raidK_* (KI-Forschungsreihenfolge Ritter früher)
+- 22:00 Mauer-Stufe 1 neu (raidU1b): 9/20 Angreifer tot, aber Basis gehalten 17/20 (ohne Burg 15/20). Forschungsreihenfolge (Ritter vor Burg / Waffen→Ritter) und billigere Waffenschmiede (65/25 s) getestet: kein Gewinn bzw. schlechter (raidK/raidW) → nicht übernommen.
+- 22:30 Mit Burg Stufe 2 (UPG=2): Ritter leicht 16/20, mittel 17/20, schwer 20/20; Buddler 11/11/12 von 12. Stufe 3 mittel 18/20.
+- 22:30 KI-Sims aisim3 (alle Stufen) + settlesim (Goldziel ai/helper) ERRS [], Goldziel wie vorher erreichbar.
+- 22:33 Regression reg4 alle Exit 0 / ERRS []: castleup, gear, mpgear, sptest, smoke2, mpteam, feat2, ui2, helpchk, mpfeat, aiui. mpgear Erdklumpen-Kauf robuster (Wiederholung), Lauf 4: 361→224 px auf allen Tabs; Burg-Zustand nach Host-Wechsel gleich.
+- nächster Schritt: Zip bauen

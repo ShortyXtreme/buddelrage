@@ -194,9 +194,9 @@ function drawMonster(g, m, x, y) {
   if (m.hp < 39.5 && m.hp > 0) { const bx = Math.round(x) - 7, by = Math.round(y) - 16; R('rgba(0,0,0,.6)', bx, by, 14, 2); R(m.hp > 20 ? '#9be35a' : '#ff7a4a', bx, by, Math.max(1, Math.round(14 * m.hp / 40)), 2); }
 }
 function drawStruct(g, s, col) {
-  if (s.type === 'tower') drawTower(g, s, col); else if (s.type === 'castle') drawCastle(g, s, col); else drawHut(g, s, col);
+  if (s.type === 'tower') drawTower(g, s, col); else if (s.type === 'castle') { drawCastle(g, s, col); if (s.prog >= 1 && s.up > 0) drawCastleUp(g, s, col); } else drawHut(g, s, col);
   if (s.fire > 0) for (let k = 0; k < 4; k++) drawFlame(g, s.x + (k - 1.5) * s.w / 4, s.y - s.h * (0.3 + 0.5 * ((k * 7) % 3) / 3), 6, s.id + k);
-  if (s.prog >= 1 && s.hp < BUILD[s.type].hp) { const x = Math.round(s.x - s.w / 2), y = Math.round(s.y - s.h - 6); g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(x, y, s.w, 2); g.fillStyle = '#e44'; g.fillRect(x, y, Math.max(0, s.w * s.hp / BUILD[s.type].hp), 2); }
+  if (s.prog >= 1 && s.hp < structMax(s)) { const x = Math.round(s.x - s.w / 2), y = Math.round(s.y - s.h - 6); g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(x, y, s.w, 2); g.fillStyle = '#e44'; g.fillRect(x, y, Math.max(0, s.w * s.hp / structMax(s)), 2); }
 }
 // Bauvorschau: grün = sofort, gelb = Planieren nötig, rot = unmöglich
 function buildPreviewInfo(world, type) {
@@ -259,6 +259,36 @@ function drawCastle(g, s, col) {
   R('#2a1c10', -6, -16, 12, 16); R('#3e2814', -6, -18, 12, 2); for (let k = -5; k < 6; k += 3) R('#6a6a6a', k, -16, 1, 16);
   R('#2a2a40', -15, -24, 4, 5); R('#ffd060', -14, -23, 2, 3); R('#2a2a40', 11, -24, 4, 5); R('#ffd060', 12, -23, 2, 3);
   R('#555', -1, -62, 1, 28); R(col, 0, -62, 11, 6); R(shade(col, 0.7), 0, -58, 11, 2);
+}
+// Burg-Ausbau: Mauern, Schützen, Balliste, Gerüst während des Ausbaus
+function drawCastleUp(g, s, col) {
+  const x = Math.round(s.x), y = Math.round(s.y), L = castleLevel(s);
+  const R = (cl, xx, yy, w, h) => { g.fillStyle = cl; g.fillRect(x + xx, y + yy, w, h); };
+  if (L >= 1) {
+    R('#4a4844', -32, -44, 12, 2); R('#4a4844', 20, -44, 12, 2); R('#6a5a3a', -25, -31, 50, 1); // Wehrgänge (Hoardings)
+    R('#3a3a3a', -6, -16, 12, 1); for (let k = -4; k < 6; k += 3) R('#888', k, -15, 1, 4); // Fallgitter
+    for (const wl of s.walls || []) {
+      const wx = Math.round(wl.x), wy = Math.round(wl.y);
+      const W = (cl, xx, yy, w, h) => { g.fillStyle = cl; g.fillRect(wx + xx, wy + yy, w, h); };
+      if (wl.br) { W('#6e6b66', -4, -5, 8, 5); W('#8d8a84', -3, -7, 3, 2); W('#5e5b56', 1, -6, 2, 1); continue; }
+      W('#8d8a84', -3, -WALL_H, 6, WALL_H + 1); for (let k = 0; k < WALL_H; k += 5) { W('#a8a59e', -3, -WALL_H + k, 6, 1); W('#5e5b56', (k % 10 ? -1 : 1), -WALL_H + k + 1, 1, 4); }
+      W('#8d8a84', -4, -WALL_H - 3, 2, 3); W('#8d8a84', 2, -WALL_H - 3, 2, 3); W(col, -1, -WALL_H - 2, 2, 2);
+      if (wl.hp < WALL_HP) { W('rgba(0,0,0,.6)', -5, -WALL_H - 7, 10, 1); W('#e44', -5, -WALL_H - 7, Math.max(0, 10 * wl.hp / WALL_HP), 1); }
+    }
+  }
+  if (L >= 2) for (const ox of [-26, 26]) { // Bogenschützen auf den Türmen
+    R('#2f5a2a', ox - 1, -54, 3, 5); R('#e8c8a0', ox - 1, -56, 3, 2); R('#3d6b32', ox - 1, -57, 3, 1); R('#8a5a26', ox + (ox < 0 ? -2 : 2), -55, 1, 4);
+    if (!(s.arrows > 0)) R('#e44', ox, -61, 1, 3);
+  }
+  if (L >= 3) { // Balliste auf dem Bergfried
+    const d = s.bDir || 1;
+    R('#6a4a26', -5, -37, 10, 2); R('#6a4a26', -1, -40, 2, 3); R('#8a6a3a', -6 * d - (d < 0 ? 1 : 0), -42, 12, 1); R('#5a3a16', d > 0 ? 5 : -7, -44, 2, 5);
+    if (s.bolts > 0) R('#d0d4da', d > 0 ? 6 : -9, -42, 3, 1);
+  }
+  if (s.upT > 0) { // Gerüst
+    const k = s.up; R('#9a7040', -34, -50, 1, 50); R('#9a7040', 33, -50, 1, 50); for (let yy = -48; yy < 0; yy += 10) R('#b08050', -34, yy, 68, 1);
+    if (k === 1) { R('#7a7670', -36, -6, 4, 6); R('#7a7670', 32, -6, 4, 6); }
+  }
 }
 function drawHut(g, s, col) {
   const x = Math.round(s.x), y = Math.round(s.y);
@@ -352,6 +382,7 @@ class Renderer {
     const vis = (x, y, m) => x > cx - m && x < cx + vw + m && y > cy - m && y < cy + vh + m;
     for (const s of world.structs) { if (!vis(s.x, s.y, 80)) continue; const t = world.teams[s.team]; drawStruct(g, s, t ? t.color : '#888'); }
     if (typeof G !== 'undefined' && G.buildPrev) drawBuildPreview(g, world, G.buildPrev);
+    for (const p of world.cshots || []) { const a = Math.atan2(p.vy, p.vx), L = p.k ? 9 : 5; g.strokeStyle = p.k ? '#d0d4da' : '#ddd'; g.lineWidth = p.k ? 1.5 : 1; g.beginPath(); g.moveTo(p.x - Math.cos(a) * L, p.y - Math.sin(a) * L); g.lineTo(p.x, p.y); g.stroke(); g.fillStyle = p.k ? '#7a5a2a' : '#c33'; g.fillRect(Math.round(p.x - Math.cos(a) * L) - 1, Math.round(p.y - Math.sin(a) * L) - 1, 2, 2); }
     for (const it of world.items) { const [x, y] = L(it); if (!vis(x, y, 10)) continue; if (it.stuck) g.globalAlpha = 0.85; ITEM_DRAW[it.type](g, Math.round(x), Math.round(y) + 1, it); g.globalAlpha = 1; }
     for (const m of world.monsters) { const [x, y] = L(m); if (!vis(x, y, 20)) continue; drawMonster(g, m, x, y); if (m.fire > 0) drawFlame(g, x, y - 5, 5, m.id); }
     for (const a of world.animals || []) { const [x, y] = L(a); if (!vis(x, y, 16)) continue; drawAnimal(g, a, x, y); }
@@ -382,6 +413,7 @@ class Renderer {
     g.globalAlpha = 1;
     // Namen
     g.font = '5px monospace'; g.textAlign = 'center';
+    for (const st of world.structs) { if (st.type !== 'castle' || st.prog < 1 || !(st.up > 0) || !vis(st.x, st.y, 80)) continue; if (myTeam >= 0 && !world.ally(st.team, myTeam)) continue; const Lv = castleLevel(st); let tx = 'Burg ' + Lv + '/3'; if (st.upT > 0) tx += ' · Ausbau ' + Math.ceil(st.upT / 60) + 's'; if (st.up >= 2) tx += ' · Pfeile ' + (st.arrows | 0); if (st.up >= 3) tx += ' · Bolzen ' + (st.bolts | 0); g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillText(tx, st.x + 0.5, st.y - 66.5); g.fillStyle = (st.up >= 2 && !(st.arrows > 0)) || (st.up >= 3 && !(st.bolts > 0)) ? '#ff9a8a' : '#ffe2a0'; g.fillText(tx, st.x, st.y - 67); }
     for (const c of world.clonks) { if (c.act === 'dead' || c.inside) continue; const t = world.teams[c.team]; const sel = t.sel === c.id; if (!sel && t.id !== myTeam) continue; const [x, y] = [c.rx !== undefined && world.remote ? c.rx : c.x, c.ry !== undefined && world.remote ? c.ry : c.y]; g.globalAlpha = sel ? 1 : 0.55; g.fillStyle = 'rgba(0,0,0,0.5)'; const ny = c.bl ? 37 : 20; g.fillText(c.name, Math.round(x) + 0.5, Math.round(y) - ny + 0.5); g.fillStyle = t.id === myTeam ? '#fff' : t.color; g.fillText(c.name, Math.round(x), Math.round(y) - ny); g.globalAlpha = 1; }
     g.restore();
     if (dark > 0.04) this.drawLighting(world, cx, cy, vw, vh, dark, myTeam);
