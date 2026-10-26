@@ -39,3 +39,17 @@ Backup: /workspace/clonk-game.bak5 · Testserver: python3 -m http.server 8099 (i
 - 19:55 Abschluss-Tests nach frnd-Änderung: feat2, fpsbig (Riesig 60,25 fps mit Tieren), castlecheck 40 Seeds alle Größen 100 %, mp3 (3 Tabs, 2 Host-Wechsel), mp4, pinch, wipfthrow, sprite, aiui, ui1, ui2, touch, buildui, mpui, p2p – alle ERRS [] / Exit 0. Zip wird gebaut (nicht hochgeladen, kein Push).
 - 19:58 Abschluss-Tests nach frnd-Änderung: feat2, mp3 (3 Tabs, zweifacher Host-Wechsel), mp4, pinch, wipfthrow, sprite, aiui, ui1, ui2, touch, buildui, mpui, p2p: alle ERRS []/Exit 0. fpsbig mit Tieren: Mittel 60,25 fps, Riesig 60,25 fps (schlechtester Frame 19 ms). castlecheck 40 Seeds alle Größen 100 %. Sims r6: ERRS [], ~0,5–1,3 ms/Tick.
 - 20:00 Zip gebaut (nicht hochgeladen, nichts gepusht).
+
+# Fortschritt (Team-Lobby) – Start 26.10.2026 12:00
+Backup: /workspace/clonk-game.bak6
+- 12:10 Team-Seiten (side) in World: ally()/friendly(), kein Eigenbeschuss zwischen Verbündeten, gemeinsame Hütten/Burgen (betreten, verkaufen, einkaufen, mitbauen), Sieg pro Seite. KI: Gegner = nicht verbündet, verteidigt verbündete Basen, hilft bei Baustellen von Verbündeten.
+- 12:15 js/lobby.js: Team-Lobby (Teams/Farben/Namen, Beitreten, Host verschiebt, „+ KI“ mit Stufe, Freunde gegen KI, Jeder gegen jeden, Startprüfung). net: 'lobby'/'lteam'.
+- 12:20 KI-Helfer mit Stufe (SP/MP-Auswahl, Pause-Menü, Aktion 'helper'), Übernahme beim Tod (bester eigener Buddler, Meldung).
+- 12:25 Monster → Wildschwein (friedlich, max. 2 Anstürme, flieht, lässt Gold fallen, keine Nacht-Extras); Speicherversion 2 (v1 wird umgewandelt). KI wehrt sich gegen Tiere (Wildschwein: kämpfen/ausweichen, Hai: Wasser verlassen), Gelegenheitsjagd mit Abklingzeit.
+- Offen: Fahrzeug-Physik, Goldziel-Einstellung, schönere Einstellungs-Screens, Tests.
+- 12:40 Fahrzeug-Physik: vFit/vRest/vSlope (Stufen bis 5 px, alle Spalten, Neigung, Hangabtrieb, zu steil → zurückrollen, Entklemmen), Darstellung mit Neigung/geglättetem y. test/vehtest.js ROUGH=1: alle 18 Fahrten (Mittel+Riesig, 3 Typen, 3 Seeds) erreichen das Ziel, clip 0 (alt: Katapult blieb hängen, clip 38578).
+- 12:50 Rettung (js/rescue.js), Musik neu (js/audio.js: Menü 116 / Tag 124 / Nacht 112 / Kampf 132 BPM), Vögel klauen Gold (fauna.js goldOpen/birdTheft/birdDropGold, Snapshot-Bit 16, Nugget im Schnabel/Krallen, KI schießt Dieb).
+- 13:00 Einstellungs-Screens neu (js/ui.js: Segment-Pillen über unsichtbaren <select>, Ein-Zeilen-Beschreibung, Kartenvorschau, Schalter mit Untertitel, Schieberegler mit Füllung, Tastatur/Gamepad), Goldziel (100–1000/Eigenes) mit HUD-Balken, SP-Schalter Wildschweine, Lobby-Teamkarten mit Farbtupfern und Stufen-Pillen.
+- 13:10 Tests: birdtest, boartest, musictest, allysim, allycoop, mpteam (3 Tabs), sptest, rescuetest, vehtest, shots7 (Screenshots Desktop/Handy). Alte MP-Tests auf neue Lobby umgestellt (lobbyAct). mp.js/mp2.js/mptick.js sind veraltet (#lobbycode gibt es seit Längerem nicht mehr).
+- 13:15 Abschluss-Tests (letzter Stand): birdtest, boartest, smoke2, sptest, mpteam (3 Tabs, ALLERRS 0), rescuetest (2/2 Eingeklemmte gerettet, 3. Fall befreit sich selbst), ui2 (Blocken/Schwingen ok), fpsbig (Riesig 60,25 fps), castlecheck 10/20 Seeds alle Größen 100 %, Screenshots shots7 neu (ERRS []). Alles Exit 0, keine Konsolenfehler.
+- 13:15 Zip gebaut: /workspace/buddelrage-site.zip (nicht hochgeladen, nichts gepusht).

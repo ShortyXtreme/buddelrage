@@ -23,10 +23,10 @@ Der gesamte Code (js/*.js, index.html, css/style.css, server/server.js) wurde ne
 Spielmechaniken (Graben, Klettern, Hangeln, Feuersteine, Gold verkaufen an der Heimatbasis, Melee, Lore, Katapult, Kanone,
 Burg, Wachturm, Ritter, Forschung, Lava, Feuer, Tag/Nacht) orientieren
 sich am Spielprinzip von Clonk/OpenClonk; es wurde kein OpenClonk-Code übernommen.
-Figuren, Ritter, Monster, Hütte, Wachturm, Burg, Fahrzeuge, Waffen, Feuer und Gegenstände sind eigene, prozedural gezeichnete
+Figuren, Ritter, Wildschweine, Hütte, Wachturm, Burg, Fahrzeuge, Waffen, Feuer und Gegenstände sind eigene, prozedural gezeichnete
 Pixel-Grafik. Lava wird prozedural eingefärbt (keine Lava-Textur).
 Neu und ebenfalls eigene, prozedural gezeichnete Pixel-Grafik bzw. eigener Code: Tiere (Wipf, Vogel, Fisch, Fledermaus, Hai),
-das neu gestaltete Monster, Enterhaken mit Seil, Ballon, Notausgang-Effekt, Chat-Sprechblasen und Emote-Rad.
+das Wildschwein (ersetzt das frühere Monster), der Gold-Dieb-Vogel, Enterhaken mit Seil, Ballon, Notausgang-Effekt, Chat-Sprechblasen und Emote-Rad.
 Die Geräusche „Ballon platzt“ und „Chat-Ping“ werden zur Laufzeit per WebAudio synthetisiert (keine Dateien).
 Emotes sind Unicode-Emojis und werden mit der Emoji-Schrift des jeweiligen Systems dargestellt (es wird keine Emoji-Grafik mitgeliefert).
 

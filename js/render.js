@@ -116,6 +116,7 @@ function drawAnimal(g, a, x, y) {
   if (a.k === 'bird') {
     R('#2a2a34', -2, -1, 4, 2); R('#2a2a34', 2, -2, 1, 1); R('#e0a030', 3, -2, 1, 1);
     const wy = [-3, -2, 0, -2][f]; R('#3a3a48', -1, wy, 2, 1); R('#3a3a48', -2, wy + (wy < -1 ? 1 : -1), 1, 1);
+    if (a.gold) { R('#6a4a10', -1, 1, 1, 1); R('#f5c823', -1, 2, 3, 2); R('#fff2a0', 0, 2, 1, 1); } // Goldnugget in den Krallen
   } else if (a.k === 'bat') {
     R('#3a2a40', -1, -1, 3, 2); R('#5a4060', 1, -2, 1, 1);
     const up = f % 2; R('#3a2a40', -4, -2 + up * 2, 3, 1); R('#3a2a40', 2, -2 + up * 2, 3, 1); R('#d04040', 1, -1, 1, 1);
@@ -156,56 +157,40 @@ function drawFlame(g, x, y, s, seed, n) {
     g.fillStyle = 'rgba(255,210,60,0.95)'; g.fillRect(fx, Math.round(y) - h + 1, 1, h);
   }
 }
-// Monster: geduckte, stachelige Bestie mit glühenden Augen, Krallen und Zähnen (prozedurale Pixelkunst)
-// Animationen: Laufen (4 Phasen, Beine + Kopfwippen), Ausholen vor dem Biss (duckt sich, Augen glühen, Maul öffnet), Biss (Sprung nach vorn, Maul weit auf), Treffer-Blitz
+// Wildschwein: friedlicher Pflanzenfresser (prozedurale Pixelkunst) – grast, trabt, stürmt kurz los, wenn es angegriffen wird, flieht dann
+// Snapshot: bite > 0 = Ansturm, wind > 0 = Flucht
 function drawMonster(g, m, x, y) {
   const now = performance.now();
   if (m.hpSeen !== undefined && m.hp < m.hpSeen - 0.5) m.flashT = now + 160;
   m.hpSeen = m.hp;
   const flash = m.flashT > now && ((now / 40) | 0) % 2 === 0;
-  const wind = m.wind > 0 ? Math.min(1, (16 - m.wind) / 10 + 0.3) : 0, bite = m.bite > 0 ? m.bite / 10 : 0;
-  const f = Math.floor(m.anim * 1.4) % 4, step = [0, 1, 0, -1][f], bob = f % 2 ? 0 : -1;
-  const crouch = wind ? 1 : 0, lunge = bite > 0.4 ? 2 : 0, open = bite > 0 ? 3 : wind ? 1 : 0;
+  const chg = m.bite > 0, flee = m.wind > 0, moving = chg || flee || (m.anim % 6.283) !== (m.animSeen || 0); m.animSeen = m.anim % 6.283;
+  const f = Math.floor(m.anim * (chg || flee ? 2.2 : 1.2)) % 4, step = [0, 1, 0, -1][f], bob = f % 2 ? 0 : -1;
+  const graze = !chg && !flee && Math.sin(m.anim * 0.35 + m.id) > 0.55; // Kopf gesenkt zum Grasen
   g.save(); g.translate(Math.round(x), Math.round(y)); if (m.dir < 0) g.scale(-1, 1);
-  const C = flash ? { d: '#fff', b: '#fff', l: '#fff', s: '#ffd0d0', belly: '#fff', claw: '#fff' } : { d: '#1f3d16', b: '#3e7a24', l: '#5fa634', s: '#7a2f5a', belly: '#9ab86a', claw: '#e6dcc0' };
+  const C = flash ? { o: '#fff', d: '#fff', b: '#fff', l: '#fff', snout: '#ffd0d0', tusk: '#fff' } : { o: '#24160c', d: '#4a3020', b: '#6b4a30', l: '#8a6644', snout: '#c08a78', tusk: '#f2ead0' };
   const R = (cl, xx, yy, w, h) => { g.fillStyle = cl; g.fillRect(xx, yy, w, h); };
-  g.translate(lunge, crouch);
-  const O = flash ? '#fff' : '#12240c'; // Umriss
-  // Schwanz (wippt, mit Stachelspitze)
-  const tw = Math.round(Math.sin(m.anim * 0.9) * 1);
-  R(O, -13, -9 + tw, 5, 3); R(C.d, -12, -8 + tw, 4, 2); R(C.b, -9, -8 + tw, 3, 2); R(C.s, -14, -10 + tw, 2, 1); R(C.s, -14, -9 + tw, 1, 1);
-  // Hinterbeine (kräftige Schenkel, Krallen)
-  const s1 = step, s2 = -step;
-  R(O, -8 + s1, -5, 4, 5); R(C.d, -7 + s1, -5, 2, 4); R(C.claw, -8 + s1, -1, 3, 1);
-  R(O, -4 + s2, -5, 4, 5); R(C.d, -3 + s2, -5, 2, 4); R(C.claw, -4 + s2, -1, 3, 1);
-  // Körper: buckelig, Schultern höher als Hüfte
-  R(O, -10, -9 + bob, 15, 6); R(O, -4, -12 + bob, 9, 4);
-  R(C.d, -9, -9 + bob, 13, 5); R(C.b, -8, -10 + bob, 11, 5); R(C.b, -4, -12 + bob, 8, 3); R(C.l, -3, -12 + bob, 5, 1); R(C.l, -7, -10 + bob, 4, 1);
-  R(C.belly, -6, -5 + bob, 9, 1); R(C.d, -2, -7 + bob, 1, 2); R(C.d, -5, -7 + bob, 1, 1); // Schuppen/Rippen
-  // Rückenstacheln (größer an den Schultern)
-  for (const [sx, h, yo] of [[-8, 2, 0], [-6, 2, 0], [-4, 3, -2], [-2, 4, -2], [0, 4, -2], [2, 3, -2]]) { R(C.s, sx, -10 + bob + yo - h, 1, h); R(flash ? '#fff' : '#d070b0', sx, -10 + bob + yo - h, 1, 1); }
-  // Vorderbeine mit langen Krallen
-  R(O, 0 + s2, -5, 4, 5); R(C.d, 1 + s2, -5, 2, 4); R(C.claw, 1 + s2, -1, 3, 1); R(C.claw, 4 + s2, -2, 1, 1);
-  R(O, 3 + s1, -5, 4, 5); R(C.d, 4 + s1, -5, 2, 4); R(C.claw, 4 + s1, -1, 3, 1); R(C.claw, 7 + s1, -2, 1, 1);
-  // Kopf (groß, nach vorn gereckt; wippt beim Laufen, hebt sich zum Biss)
-  const hy = -12 + bob - (bite > 0 ? 1 : 0) + (wind ? 1 : 0);
-  R(O, 3, hy - 1, 9, 7); R(C.d, 4, hy, 7, 5); R(C.b, 4, hy - 1, 7, 3); R(C.l, 5, hy - 1, 4, 1);
-  R(C.s, 4, hy - 3, 1, 2); R(C.s, 7, hy - 3, 1, 2); R(flash ? '#fff' : '#d070b0', 4, hy - 3, 1, 1); R(flash ? '#fff' : '#d070b0', 7, hy - 3, 1, 1); // Hörner
-  R(O, 9, hy + 1, 4, 2); R(C.b, 10, hy + 1, 3, 1); R(O, 12, hy + 1, 1, 1); // Schnauze + Nüster
-  // Augenhöhle mit glühender Pupille, finstere Braue
-  R('#0a0a06', 6, hy + 1, 3, 2); R(O, 5, hy, 4, 1);
-  const eye = flash ? '#f88' : wind || bite ? '#ff3a20' : '#ffd23a';
-  R(eye, 7, hy + 1, 2, 1); R(flash ? '#fff' : '#fff8c0', 8, hy + 1, 1, 1);
-  if (!flash) { g.fillStyle = wind || bite ? 'rgba(255,60,30,.45)' : 'rgba(255,210,60,.22)'; g.fillRect(5, hy, 5, 4); }
-  // Maul: Oberkiefer mit Zahnreihe, Unterkiefer klappt auf
-  R(C.d, 8, hy + 3, 5, 1); R('#fff', 9, hy + 4, 1, 1); R('#fff', 11, hy + 4, 1, 1); R('#fff', 12, hy + 4, 1, 1);
-  if (open) { R('#3a0808', 8, hy + 4, 5, open); R('#c03030', 9, hy + 3 + open, 3, 1); R(O, 8, hy + 4 + open, 5, 1); R(C.d, 8, hy + 4 + open, 4, 1); R('#fff', 10, hy + 3 + open, 1, 1); R('#fff', 12, hy + 3 + open, 1, 1); }
-  else { R(O, 8, hy + 5, 4, 1); R(C.d, 8, hy + 4, 3, 1); R('#fff', 10, hy + 4, 1, 1); }
+  if (chg) g.translate(1, 0);
+  // Ringelschwanz
+  R(C.o, -9, -8 + bob, 2, 1); R(C.d, -10, -9 + bob, 1, 2);
+  // Beine (kurz, dunkle Hufe)
+  for (const [lx, s] of [[-7, step], [-4, -step], [1, -step], [4, step]]) { R(C.o, lx + s * 0.5, -4, 2, 4); R(C.d, lx + s * 0.5, -4, 1, 3); R('#1a1008', lx + s * 0.5, -1, 2, 1); }
+  // Körper: rundlich, borstiger Rücken
+  R(C.o, -9, -10 + bob, 16, 7); R(C.d, -8, -10 + bob, 14, 6); R(C.b, -8, -9 + bob, 13, 4); R(C.l, -6, -10 + bob, 8, 1);
+  for (let k = -7; k <= 3; k += 2) R(C.o, k, -11 + bob, 1, 1); // Borstenkamm
+  R(C.l, -6, -5 + bob, 9, 1); // Bauch
+  // Kopf mit Rüssel, Hauern, Ohr und Auge
+  const hy = -9 + bob + (graze ? 3 : 0) + (chg ? 1 : 0);
+  R(C.o, 5, hy - 1, 6, 6); R(C.d, 6, hy - 1, 4, 5); R(C.b, 6, hy, 4, 3);
+  R(C.o, 5, hy - 2, 2, 1); R(C.d, 6, hy - 3, 1, 2); // Ohr
+  R(C.o, 10, hy + 1, 3, 3); R(C.snout, 11, hy + 1, 2, 2); R(C.o, 12, hy + 2, 1, 1); // Rüssel
+  R(C.tusk, 10, hy + 3, 1, 2); R(C.tusk, 11, hy + 4, 1, 1); // Hauer
+  R('#000', 8, hy, 1, 1); if (chg && !flash) R('#ff5a3a', 8, hy, 1, 1);
   g.restore();
-  // Warnung vor dem Biss
-  if (wind && !flash) { g.fillStyle = 'rgba(255,70,40,' + (0.6 + 0.4 * Math.sin(now / 50)).toFixed(2) + ')'; g.fillRect(Math.round(x) - 1, Math.round(y) - 20, 2, 4); g.fillRect(Math.round(x) - 1, Math.round(y) - 15, 2, 1); }
+  // Staubwölkchen beim Ansturm
+  if (chg && !flash) { g.fillStyle = 'rgba(200,180,150,.5)'; g.fillRect(Math.round(x) - m.dir * 10, Math.round(y) - 2, 3, 2); g.fillRect(Math.round(x) - m.dir * 13, Math.round(y) - 4, 2, 2); }
   // Lebensbalken, wenn verletzt
-  if (m.hp < 59.5 && m.hp > 0) { const bx = Math.round(x) - 7, by = Math.round(y) - 17 - (wind ? 6 : 0); R('rgba(0,0,0,.6)', bx, by, 14, 2); R(m.hp > 30 ? '#9be35a' : m.hp > 15 ? '#e8b02c' : '#e0402c', bx, by, Math.max(1, Math.round(14 * m.hp / 60)), 2); }
+  if (m.hp < 39.5 && m.hp > 0) { const bx = Math.round(x) - 7, by = Math.round(y) - 16; R('rgba(0,0,0,.6)', bx, by, 14, 2); R(m.hp > 20 ? '#9be35a' : '#ff7a4a', bx, by, Math.max(1, Math.round(14 * m.hp / 40)), 2); }
 }
 function drawStruct(g, s, col) {
   if (s.type === 'tower') drawTower(g, s, col); else if (s.type === 'castle') drawCastle(g, s, col); else drawHut(g, s, col);
@@ -382,7 +367,13 @@ class Renderer {
       if (c.hp < 100 || isSel) { g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(Math.round(x) - 5, Math.round(y) - 14, 10, 2); g.fillStyle = c.hp > 50 ? '#3c3' : c.hp > 25 ? '#ec3' : '#e33'; g.fillRect(Math.round(x) - 5, Math.round(y) - 14, Math.max(0, c.hp / 10), 1); g.fillStyle = t.color; g.fillRect(Math.round(x) - 5, Math.round(y) - 13, 10, 1); }
       if (c.breath < 100) { g.fillStyle = '#7cf'; g.fillRect(Math.round(x) - 5, Math.round(y) - 16, c.breath / 10, 1); }
     }
-    for (const v of world.vehicles) { const [x, y] = L(v); if (!vis(x, y, 30)) continue; const t = world.teams[v.team]; drawVehicle(g, v, t ? t.color : '#999', x, y); }
+    for (const v of world.vehicles) {
+      const [x, y0] = L(v); if (!vis(x, y0, 30)) continue; const t = world.teams[v.team];
+      v.yS = v.yS === undefined || Math.abs(v.yS - y0) > 6 ? y0 : v.yS + (y0 - v.yS) * 0.35; const y = v.yS; // Ein-Pixel-Holpern glätten
+      const ta = Math.max(-0.55, Math.min(0.55, Math.atan(world.vSlope(v)))); v.tiltR = v.tiltR === undefined ? ta : v.tiltR + (ta - v.tiltR) * 0.2; // Neigung zum Boden, weich nachgeführt
+      g.save(); g.translate(Math.round(x), Math.round(y)); g.rotate(v.tiltR); g.translate(-Math.round(x), -Math.round(y));
+      drawVehicle(g, v, t ? t.color : '#999', x, y); g.restore();
+    }
     // Feuer
     for (const f of world.fires) if (vis(f.x, f.y, 10)) drawFlame(g, f.x, f.y + 1, f.k ? 3 : 3, f.x * 3 + f.y, 2);
     // Partikel
@@ -435,7 +426,7 @@ class Renderer {
     for (const v of world.vehicles) { g.fillStyle = '#ddd'; g.fillRect(v.x / 8 - 1, v.y / 8 - 1, 3, 2); }
     for (const s of world.structs) if (s.prog >= 1) { g.fillStyle = world.teams[s.team] ? world.teams[s.team].color : '#aaa'; g.fillRect(s.x / 8 - 2, (s.y - s.h) / 8, 4, Math.max(2, s.h / 8)); }
     for (const c of world.clonks) { if (c.act === 'dead' || c.inside) continue; const t = world.teams[c.team]; g.fillStyle = t.color; g.fillRect(c.x / 8 - 1, c.y / 8 - 2, 3, 3); if (t.id === myTeam && t.sel === c.id) { g.strokeStyle = '#fff'; g.lineWidth = 1; g.strokeRect(c.x / 8 - 2.5, c.y / 8 - 3.5, 6, 6); } }
-    for (const m of world.monsters) { g.fillStyle = '#6f3'; g.fillRect(m.x / 8 - 1, m.y / 8 - 1, 2, 2); }
+    for (const m of world.monsters) { g.fillStyle = '#a87850'; g.fillRect(m.x / 8 - 1, m.y / 8 - 1, 2, 2); }
     g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 1; g.strokeRect(cx / 8 + 0.5, cy / 8 + 0.5, vw / 8, vh / 8);
   }
 }

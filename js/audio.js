@@ -1,4 +1,4 @@
-// BuddelRage – Ton: Geräusche (OpenClonk-Sounds, CC-BY) und prozedural erzeugte, ruhige Hintergrundmusik (WebAudio)
+// BuddelRage – Ton: Geräusche (OpenClonk-Sounds, CC-BY) und prozedural erzeugte, beschwingte Hintergrundmusik (WebAudio)
 'use strict';
 const SETTINGS_DEFAULT = { sfx: 0.8, music: 0.35, musicOn: true, muted: false, hints: true, traj: true, touch: 'auto', tutDone: false, zoom: 1, wheel: 'zoom' };
 const settings = Object.assign({}, SETTINGS_DEFAULT, (() => { try { return JSON.parse(localStorage.getItem('br_settings') || '{}'); } catch (e) { return {}; } })());
@@ -32,62 +32,107 @@ function playSnd(n, x, y, vmul) {
 }
 function uiSnd() { playSnd('click', 0, 0, 0.5); }
 
-// ---------- Prozedurale Ambient-Musik ----------
-// Langsame Flächenakkorde (a-Moll – F – C – G – …) mit sanftem Tiefpass und Hall, dazu vereinzelte Glockentöne
-// aus der Pentatonik. Alles wird live erzeugt – keine Musikdateien, keine Fremdlizenzen.
+// ---------- Prozedurale Musik (beschwingt) ----------
+// Kleiner Step-Sequencer in WebAudio: leichte Drums (Kick, Snare/Klatschen, Hi-Hat), hüpfender Bass, Akkord-Tupfer und
+// eingängige Melodie-Motive. Vier Stücke: Menü, Tag, Nacht (ruhiger) und Kampf (treibend); Wechsel an Taktgrenzen.
+// Alles wird live erzeugt – keine Musikdateien, keine Fremdlizenzen.
+const SCALE = { maj: [0, 2, 4, 5, 7, 9, 11], min: [0, 2, 3, 5, 7, 8, 10] };
+const TRACKS = {
+  menu: { bpm: 116, key: 60, sc: 'maj', chords: [0, 4, 5, 3], swing: 0.06,
+    kick: 'x.......x.......', snare: '....x.......x...', hat: '..x...x...x...x.', bass: [0, -1, -1, 0, -1, -1, 7, -1, 0, -1, -1, 12, -1, 7, -1, -1],
+    mel: [[[4, -1, 4, 5, 7, -1, 5, 4], [4, -1, 2, -1, 1, 2, 4, -1], [5, -1, 5, 7, 9, -1, 7, 5], [4, 2, 3, -1, 2, -1, -1, -1]],
+          [[7, -1, 9, 7, 5, -1, 4, -1], [4, 5, 4, 2, 1, -1, -1, -1], [5, 4, 5, 7, 9, 8, 7, -1], [7, -1, 5, -1, 4, -1, -1, -1]]], lead: 'tri', stab: 1 },
+  day: { bpm: 124, key: 55, sc: 'maj', chords: [0, 3, 5, 4], swing: 0.08,
+    kick: 'x.....x.x.......', snare: '....x.......x..x', hat: 'x.xxx.xxx.xxx.xx', bass: [0, -1, 12, 0, -1, 7, -1, 0, 0, -1, 12, -1, 7, -1, 5, -1],
+    mel: [[[7, 8, 9, -1, 9, 8, 7, -1], [5, -1, 7, 5, 4, -1, 2, -1], [4, 5, 7, -1, 7, 9, 11, 9], [8, -1, 7, -1, -1, 4, 5, -1]],
+          [[11, -1, 9, 11, 12, -1, 11, 9], [7, -1, 9, -1, 7, 5, 4, -1], [5, 7, 9, 7, 5, 4, 2, 4], [4, -1, 2, -1, 0, -1, -1, -1]]], lead: 'sq', stab: 1 },
+  night: { bpm: 112, key: 57, sc: 'min', chords: [0, 5, 2, 6], swing: 0.1,
+    kick: 'x.......x.....x.', snare: '............x...', hat: '..x...x...x...x.', bass: [0, -1, -1, -1, 7, -1, -1, 0, -1, -1, 12, -1, 7, -1, -1, -1],
+    mel: [[[4, -1, -1, 2, 4, -1, 6, -1], [7, -1, -1, -1, 6, 4, -1, -1], [2, -1, 4, 2, 0, -1, -1, 1], [2, -1, -1, -1, -1, -1, -1, -1]],
+          [[7, -1, 6, 7, 9, -1, 7, -1], [5, -1, 4, -1, 2, -1, -1, -1], [4, -1, 2, 4, 6, -1, 4, 2], [1, -1, 2, -1, -1, -1, -1, -1]]], lead: 'sine', stab: 0 },
+  combat: { bpm: 132, key: 50, sc: 'min', chords: [0, 6, 5, 6], swing: 0,
+    kick: 'x...x...x...x...', snare: '....x.......x.x.', hat: 'xxxxxxxxxxxxxxxx', bass: [0, 0, 12, 0, 0, 12, 0, 7, 0, 0, 12, 0, 10, 0, 7, 0],
+    mel: [[[7, -1, 7, 8, 7, -1, 5, -1], [4, -1, 4, 5, 4, -1, 2, -1], [5, -1, 5, 7, 8, -1, 7, 5], [4, -1, 2, -1, 4, 5, 6, -1]],
+          [[9, 8, 7, -1, 9, 8, 7, -1], [5, 4, 2, -1, 4, -1, 5, -1], [7, -1, 9, -1, 10, 9, 7, 5], [6, -1, 7, -1, -1, -1, -1, -1]]], lead: 'sq', stab: 1 },
+};
 const Music = {
-  ctx: null, master: null, rev: null, timer: null, next: 0, step: 0, started: false,
-  CHORDS: [[57, 60, 64, 69], [53, 57, 60, 65], [48, 55, 60, 64], [55, 59, 62, 67], [57, 60, 64, 71], [50, 57, 62, 65], [53, 60, 64, 69], [52, 55, 59, 64]],
-  PENTA: [69, 72, 74, 76, 79, 81, 84],
+  ctx: null, master: null, rev: null, timer: null, next: 0, step: 0, started: false, track: 'menu', want: 'menu', bar: 0, combatUntil: 0, noise: null,
   hz(m) { return 440 * Math.pow(2, (m - 69) / 12); },
   init() {
     if (this.ctx) return true;
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false;
     try { this.ctx = new AC(); } catch (e) { return false; }
     const c = this.ctx;
-    this.master = c.createGain(); this.master.gain.value = 0; this.master.connect(c.destination);
-    // Hall aus generiertem Rauschen
-    const len = c.sampleRate * 3.2, buf = c.createBuffer(2, len, c.sampleRate);
-    for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6); }
+    this.master = c.createGain(); this.master.gain.value = 0;
+    const comp = c.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 3; this.master.connect(comp); comp.connect(c.destination);
+    const len = c.sampleRate * 1.8, buf = c.createBuffer(2, len, c.sampleRate); // kurzer Raumhall
+    for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
     this.rev = c.createConvolver(); this.rev.buffer = buf;
-    const wet = c.createGain(); wet.gain.value = 0.55; this.rev.connect(wet); wet.connect(this.master);
-    this.dry = c.createGain(); this.dry.gain.value = 0.6; this.dry.connect(this.master); this.dry.connect(this.rev);
+    const wet = c.createGain(); wet.gain.value = 0.32; this.rev.connect(wet); wet.connect(this.master);
+    this.dry = c.createGain(); this.dry.gain.value = 0.8; this.dry.connect(this.master);
+    this.send = c.createGain(); this.send.gain.value = 1; this.send.connect(this.rev);
+    const nl = c.sampleRate * 0.5 | 0; this.noise = c.createBuffer(1, nl, c.sampleRate); const nd = this.noise.getChannelData(0); for (let i = 0; i < nl; i++) nd[i] = Math.random() * 2 - 1;
     return true;
   },
   start() { // nach erster Nutzer-Interaktion
     if (!this.init()) return;
     if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => { });
     this.started = true; this.apply();
-    if (!this.timer) { this.next = this.ctx.currentTime + 0.3; this.timer = setInterval(() => this.tick(), 400); }
+    if (!this.timer) { this.next = this.ctx.currentTime + 0.2; this.step = 0; this.timer = setInterval(() => this.tick(), 60); }
   },
-  level() { return (settings.musicOn && !settings.muted) ? 0.16 * settings.music : 0; },
+  level() { return (settings.musicOn && !settings.muted) ? 0.26 * settings.music : 0; },
   apply() {
     if (!this.ctx) return; const t = this.ctx.currentTime, v = this.level();
-    this.master.gain.cancelScheduledValues(t); this.master.gain.setTargetAtTime(v, t, v > 0 ? 1.2 : 0.4);
+    this.master.gain.cancelScheduledValues(t); this.master.gain.setTargetAtTime(v, t, v > 0 ? 0.6 : 0.3);
   },
-  pad(midi, t, dur) {
-    const c = this.ctx, g = c.createGain(), f = c.createBiquadFilter();
-    f.type = 'lowpass'; f.frequency.setValueAtTime(700, t); f.frequency.linearRampToValueAtTime(1100, t + dur * 0.5); f.frequency.linearRampToValueAtTime(650, t + dur); f.Q.value = 0.4;
-    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.06, t + dur * 0.35); g.gain.linearRampToValueAtTime(0.045, t + dur * 0.75); g.gain.linearRampToValueAtTime(0.0001, t + dur + 1.5);
-    for (const det of [-6, 5]) { const o = c.createOscillator(); o.type = 'triangle'; o.frequency.value = this.hz(midi); o.detune.value = det; o.connect(f); o.start(t); o.stop(t + dur + 1.6); }
-    f.connect(g); g.connect(this.dry);
-  },
-  bell(midi, t) {
-    const c = this.ctx, o = c.createOscillator(), o2 = c.createOscillator(), g = c.createGain();
-    o.type = 'sine'; o.frequency.value = this.hz(midi); o2.type = 'sine'; o2.frequency.value = this.hz(midi) * 2.01;
-    const g2 = c.createGain(); g2.gain.value = 0.25; o2.connect(g2); g2.connect(g); o.connect(g);
-    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.05, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 3.2);
-    g.connect(this.dry); o.start(t); o2.start(t); o.stop(t + 3.3); o2.stop(t + 3.3);
+  env(g, t, a, peak, d) { g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); },
+  kick(t, v) { const c = this.ctx, o = c.createOscillator(), g = c.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.14); this.env(g, t, 0.004, 0.5 * v, 0.22); o.connect(g); g.connect(this.dry); o.start(t); o.stop(t + 0.3); },
+  nz(t, type, f, q, peak, d, wet) { const c = this.ctx, s = c.createBufferSource(), fl = c.createBiquadFilter(), g = c.createGain(); s.buffer = this.noise; fl.type = type; fl.frequency.value = f; fl.Q.value = q; this.env(g, t, 0.002, peak, d); s.connect(fl); fl.connect(g); g.connect(this.dry); if (wet) g.connect(this.send); s.start(t, Math.random() * 0.3); s.stop(t + d + 0.05); },
+  snare(t, v) { this.nz(t, 'bandpass', 1900, 0.8, 0.22 * v, 0.13, 1); const c = this.ctx, o = c.createOscillator(), g = c.createGain(); o.type = 'triangle'; o.frequency.setValueAtTime(240, t); o.frequency.exponentialRampToValueAtTime(160, t + 0.06); this.env(g, t, 0.002, 0.12 * v, 0.07); o.connect(g); g.connect(this.dry); o.start(t); o.stop(t + 0.12); },
+  hat(t, v, open) { this.nz(t, 'highpass', 7600, 0.7, 0.07 * v, open ? 0.12 : 0.035, 0); },
+  bass(m, t, len, v) { const c = this.ctx, o = c.createOscillator(), o2 = c.createOscillator(), f = c.createBiquadFilter(), g = c.createGain(); o.type = 'square'; o2.type = 'triangle'; o.frequency.value = o2.frequency.value = this.hz(m); f.type = 'lowpass'; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(260, t + len); f.Q.value = 3; this.env(g, t, 0.005, 0.12 * v, len); const g2 = c.createGain(); g2.gain.value = 0.35; o.connect(g2); g2.connect(f); o2.connect(f); f.connect(g); g.connect(this.dry); o.start(t); o2.start(t); o.stop(t + len + 0.05); o2.stop(t + len + 0.05); },
+  lead(m, t, len, v, kind) { const c = this.ctx, o = c.createOscillator(), f = c.createBiquadFilter(), g = c.createGain(); o.type = kind === 'sq' ? 'square' : kind === 'sine' ? 'sine' : 'triangle'; o.frequency.value = this.hz(m); const vib = c.createOscillator(), vg = c.createGain(); vib.frequency.value = 5.5; vg.gain.value = 4; vib.connect(vg); vg.connect(o.detune); f.type = 'lowpass'; f.frequency.value = kind === 'sq' ? 2400 : 4000; this.env(g, t, 0.01, (kind === 'sq' ? 0.05 : 0.09) * v, len * 1.6); o.connect(f); f.connect(g); g.connect(this.dry); g.connect(this.send); o.start(t); vib.start(t); o.stop(t + len * 1.7 + 0.05); vib.stop(t + len * 1.7 + 0.05); },
+  stab(ms, t, v) { const c = this.ctx, f = c.createBiquadFilter(), g = c.createGain(); f.type = 'lowpass'; f.frequency.value = 1500; this.env(g, t, 0.004, 0.035 * v, 0.16); for (const m of ms) { const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = this.hz(m); o.connect(f); o.start(t); o.stop(t + 0.25); } f.connect(g); g.connect(this.dry); g.connect(this.send); },
+  pad(ms, t, d, v) { const c = this.ctx, f = c.createBiquadFilter(), g = c.createGain(); f.type = 'lowpass'; f.frequency.value = 900; g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.03 * v, t + 0.4); g.gain.linearRampToValueAtTime(0.0001, t + d); for (const m of ms) { const o = c.createOscillator(); o.type = 'triangle'; o.frequency.value = this.hz(m); o.connect(f); o.start(t); o.stop(t + d + 0.1); } f.connect(g); g.connect(this.dry); g.connect(this.send); },
+  deg(T, d) { const sc = SCALE[T.sc], o = Math.floor(d / 7); return T.key + sc[((d % 7) + 7) % 7] + 12 * o; },
+  // Stimmung: Menü / Tag / Nacht / Kampf (Gegner nah am eigenen Buddler oder gerade getroffen)
+  mood() {
+    const w = G.world; if (!w) return 'menu';
+    const me = G.myTeam >= 0 ? w.teams[G.myTeam] : null, c = me && w.clonks.find(o => o.id === me.sel && o.act !== 'dead'), now = performance.now();
+    if (c) {
+      const near = w.clonks.some(o => o.act !== 'dead' && !o.inside && !w.ally(o.team, c.team) && Math.abs(o.x - c.x) < 130 && Math.abs(o.y - c.y) < 60) || w.monsters.some(m => m.bite > 0 && Math.abs(m.x - c.x) < 90) || c.invT > 0;
+      if (near) this.combatUntil = now + 9000;
+    }
+    if (now < this.combatUntil) return 'combat';
+    return w.cfg.daynight !== false && w.daylight && w.daylight() < 0.35 ? 'night' : 'day';
   },
   tick() {
-    if (!this.ctx || this.level() === 0) { if (this.ctx) this.next = Math.max(this.next, this.ctx.currentTime + 0.5); return; }
-    const c = this.ctx, BAR = 9;
-    while (this.next < c.currentTime + 1.5) {
-      const ch = this.CHORDS[this.step % this.CHORDS.length], t = this.next;
-      this.pad(ch[0] - 12, t, BAR); for (let i = 1; i < ch.length; i++) this.pad(ch[i], t + i * 0.12, BAR);
-      const nb = 2 + ((Math.random() * 3) | 0);
-      for (let k = 0; k < nb; k++) { const n = this.PENTA[(Math.random() * this.PENTA.length) | 0]; this.bell(n, t + 1 + Math.random() * (BAR - 2)); }
-      this.next += BAR; this.step++;
+    if (!this.ctx) return;
+    if (this.level() === 0) { this.next = Math.max(this.next, this.ctx.currentTime + 0.2); return; }
+    const c = this.ctx, ahead = document.hidden ? 1.3 : 0.25;
+    if (this.next < c.currentTime - 0.5) this.next = c.currentTime + 0.05; // nach Pause/Hintergrund nicht nachholen
+    this.want = this.mood();
+    while (this.next < c.currentTime + ahead) {
+      const s16 = this.step % 16;
+      if (s16 === 0) { if (this.want !== this.track) { this.track = this.want; this.bar = 0; } else this.bar++; }
+      const T = TRACKS[this.track], sd = 60 / T.bpm / 4, t = this.next + (s16 % 2 ? T.swing * sd * 2 : 0);
+      const barIn4 = this.bar % 4, phrase = Math.floor(this.bar / 8) % 2, breakdown = this.bar % 16 === 15;
+      const root = this.deg(T, T.chords[barIn4]), chord = [0, 2, 4].map(k => this.deg(T, T.chords[barIn4] + k));
+      const v = this.track === 'night' ? 0.75 : 1;
+      if (!breakdown) {
+        if (T.kick[s16] === 'x') this.kick(t, v);
+        if (T.snare[s16] === 'x') this.snare(t, this.track === 'night' ? 0.5 : 1);
+        if (barIn4 === 3 && s16 >= 12 && this.track !== 'night' && (this.bar % 8 === 7)) this.snare(t, 0.55); // kleiner Fill
+      }
+      if (T.hat[s16] === 'x') this.hat(t, (s16 % 4 === 2 ? 1 : 0.6) * v, s16 === 14 && this.track === 'day');
+      const b = T.bass[s16]; if (b >= 0 && !(breakdown && s16 > 0)) this.bass(root - 12 + b, t, sd * (T.bass[(s16 + 1) % 16] < 0 ? 1.8 : 0.9), v);
+      if (s16 === 0) { if (T.stab) this.pad(chord.map(m => m), t, sd * 16, 0.7 * v); else this.pad(chord, t, sd * 16, 1); }
+      if (T.stab && (s16 === 2 || s16 === 6 || s16 === 10 || s16 === 14) && !breakdown) this.stab(chord.map(m => m + 12), t, v); // Offbeat-Tupfer
+      if (s16 % 2 === 0 && this.bar >= 2) { // Melodie in Achteln, Motiv A/B im Wechsel, ab und zu eine Oktave höher
+        const note = T.mel[phrase][barIn4][s16 / 2];
+        if (note >= 0) { let len = sd * 2; let k = s16 / 2 + 1; while (k < 8 && T.mel[phrase][barIn4][k] < 0 && len < sd * 6) { len += sd * 2; k++; } this.lead(this.deg(T, note) + (this.bar % 32 >= 24 ? 12 : 0), t, len, v, T.lead); }
+      }
+      this.next += sd; this.step++;
     }
   }
 };

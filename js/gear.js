@@ -169,7 +169,7 @@ Object.assign(World.prototype, {
     if ((c.escCd || 0) > this.tick) return 'Notausgang erst in ' + Math.ceil((c.escCd - this.tick) / 60) + ' s wieder möglich.';
     const xi = Math.max(0, Math.min(this.W - 1, Math.round(c.x)));
     if (c.y < this.surf[xi] + 16) return 'Notausgang nur unter der Erde möglich.';
-    if (this.clonks.some(o => o.team !== c.team && o.act !== 'dead' && !o.inside && Math.hypot(o.x - c.x, o.y - c.y) < 70)) return 'Gegner in der Nähe – kein Notausgang!';
+    if (this.clonks.some(o => !this.ally(o.team, c.team) && o.act !== 'dead' && !o.inside && Math.hypot(o.x - c.x, o.y - c.y) < 70)) return 'Gegner in der Nähe – kein Notausgang!';
     return '';
   },
   escape(c) {

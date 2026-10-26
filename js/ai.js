@@ -154,7 +154,8 @@ Object.assign(World.prototype, {
     if (!t.brain) t.brain = { roles: new Map(), claims: new Map(), unbuild: {}, site: null, buildId: 0, attack: false, defend: false, threat: [], lastPlan: -999, stat: '', rally: 0, itemClaims: new Map(), gun: 0 };
     return t.brain;
   },
-  aiDiff(t) { return AI_DIFF[t.diff] || AI_DIFF.normal; },
+  aiDiff(t) { return AI_DIFF[!t.ai && t.helper && t.hdiff ? t.hdiff : t.diff] || AI_DIFF.normal; }, // Helfer-KI eines Spielers: eigene Stufe
+  aiAllyBases(tid) { return this.structs.filter(s => this.ally(s.team, tid) && BUILD[s.type].base && s.prog >= 1 && !s.remove); },
   // Haupteinstieg pro Team und Tick
   aiTeam(t) {
     this.aiInit();
@@ -171,7 +172,7 @@ Object.assign(World.prototype, {
   aiForget(c) { const A = c.ai; if (A) { const t = this.teams[c.team], B = t && t.brain; if (B) { B.claims.delete(c.id); for (const [k, v] of B.itemClaims) if (v === c.id) B.itemClaims.delete(k); } } c.ai = null; c.aiKeys = { ...NOKEYS }; },
   aiStat(t, s) { const B = this.aiBrain(t); B.stat = s; t.stat = s; },
   aiBases(tid) { return this.structs.filter(s => s.team === tid && BUILD[s.type].base && s.prog >= 1 && !s.remove); },
-  aiHome(c) { let best = null, bd = 1e9; for (const s of this.aiBases(c.team)) { const d = Math.abs(s.x - c.x) + Math.abs(s.y - c.y) * 2; if (d < bd) { bd = d; best = s; } } return best; },
+  aiHome(c) { let best = null, bd = 1e9; for (const s of this.aiAllyBases(c.team)) { const d = Math.abs(s.x - c.x) + Math.abs(s.y - c.y) * 2; if (d < bd) { bd = d; best = s; } } return best; },
   aiArmed(c) { return c.inv.includes('sword') || (c.inv.includes('bow') && c.arrows > 0) || c.inv.some(x => THROWABLE.has(x)); },
   aiStrength(tid) {
     let s = 0;
@@ -198,10 +199,11 @@ Object.assign(World.prototype, {
   aiPlan(t, B, D, helper) {
     const own = this.clonks.filter(c => c.team === t.id && c.act !== 'dead');
     const bases = this.aiBases(t.id);
-    const enemies = this.clonks.filter(c => c.team !== t.id && c.act !== 'dead' && !this.teams[c.team].elim);
+    const enemies = this.clonks.filter(c => !this.ally(c.team, t.id) && c.act !== 'dead' && !this.teams[c.team].elim);
+    const defBases = this.aiAllyBases(t.id); // Verbündete verteidigen auch die Basen ihrer Teamkollegen
     // Bedrohung der Basis
     // Bedrohung: bewaffnete Gegner im Umkreis der Basis oder jeder Gegner direkt an der Basis (gegnerische Bergleute in Höhlen darunter zählen nicht)
-    B.threat = enemies.filter(e => !e.inside && bases.some(s => { const dx = Math.abs(e.x - s.x), dy = Math.abs(e.y - s.y); return (dx < 230 && dy < 120 && (e.knight || this.aiArmed(e) || (e.ai && e.ai.task && e.ai.task.type === 'attack'))) || (dx < 90 && dy < 50); }));
+    B.threat = enemies.filter(e => !e.inside && defBases.some(s => { const dx = Math.abs(e.x - s.x), dy = Math.abs(e.y - s.y); return (dx < 230 && dy < 120 && (e.knight || this.aiArmed(e) || (e.ai && e.ai.task && e.ai.task.type === 'attack'))) || (dx < 90 && dy < 50); }));
     B.defend = B.threat.length > 0;
     // laufende Baustelle
     const site = this.structs.find(s => s.team === t.id && s.prog < 1 && !s.remove);
@@ -233,7 +235,7 @@ Object.assign(World.prototype, {
     // Angriff/Verteidigung nach Stärkevergleich (mit Hysterese)
     const my = this.aiStrength(t.id);
     let foeT = null, foeS = 1e9;
-    for (const o of this.teams) if (o.id !== t.id && !o.elim) { const s = this.aiStrength(o.id); if (s < foeS) { foeS = s; foeT = o; } }
+    for (const o of this.teams) if (!this.ally(o.id, t.id) && !o.elim) { const s = this.aiStrength(o.id); if (s < foeS) { foeS = s; foeT = o; } }
     if (foeT) {
       const ready = this.tick > D.attackAfter || my > foeS * 3;
       if (!B.attack && ready && my > foeS * D.attackRatio && fighters.filter(c => this.aiArmed(c) || c.knight).length >= D.group) { B.attack = true; B.target = foeT.id; }
@@ -352,6 +354,7 @@ Object.assign(World.prototype, {
     if (c.inside) { this.aiInside(c, t, B, D, A, helper); return this.aiStuckTrack(c, t, A, false); }
     if ((c.act === 'rope' || c.act === 'float') && this.aiGearCtl(c, A, k)) return this.aiStuckTrack(c, t, A, false);
     if (c.act === 'push') { this.aiPush(c, t, B, D, A, helper, k); return this.aiStuckTrack(c, t, A, A.moving); }
+    if (A.task && A.task.type === 'rescue') { this.aiExec(c, t, B, D, A, helper, k); this.aiStuckTrack(c, t, A, A.moving); return; } // Rettung hat Vorrang (zeitlich begrenzt)
     if (!A.task || A.t >= A.nextThink) { A.nextThink = A.t + D.think + (c.id % 5); this.aiDecide(c, t, B, D, A, helper); }
     this.aiProtect(c, t, D, A, k);
     this.aiExec(c, t, B, D, A, helper, k);
@@ -370,6 +373,8 @@ Object.assign(World.prototype, {
     // Selbstverteidigung gegen nahe Gegner/Monster
     const foe = this.aiNearestFoe(c, helper ? 45 : 150, helper);
     if (foe) add('fight', (this.aiArmed(c) || c.knight ? 0.95 : 0.72) - (helper ? 0.1 : 0), { target: foe });
+    this.aiAnimalThreat(c, A, add, helper);
+    if (helper && B.defend && (this.aiArmed(c) || c.knight)) { const e = this.aiPick(c, B.threat.filter(e => Math.abs(e.x - c.x) < 160 && Math.abs(e.y - c.y) < 80)); if (e) add('fight', 0.9, { target: e, defend: 1 }); } // Helfer verteidigen die Basis, wenn sie bewaffnet sind
     if (!helper) {
       if (B.defend && (role === 'fighter' || (this.aiArmed(c) && B.threat.some(e => Math.abs(e.x - c.x) < 140 && Math.abs(e.y - c.y) < 70)))) { const e = this.aiPick(c, B.threat); if (e) add('fight', 0.9, { target: e, defend: 1 }); } // Bergleute verteidigen nur in der Nähe
       const spare = t.money - (B.defend ? 0 : (B.keep || 0)); // Rücklage (Gebäude) nicht fürs Ausrüsten verwenden
@@ -383,7 +388,7 @@ Object.assign(World.prototype, {
     if (golds >= D.goldCap || (c.inv.length >= INV_MAX && golds)) add('sell', 0.9);
     if (role === 'builder' || helper) {
       if (B.site && !helper && B.builder === c.id) add('build', 0.92);
-      const s = this.structs.find(s => s.team === c.team && s.prog < 1 && !s.remove);
+      const s = this.structs.find(s => s.team === c.team && s.prog < 1 && !s.remove) || this.structs.find(s => s.team !== c.team && this.ally(s.team, c.team) && s.prog < 1 && !s.remove && Math.abs(s.x - c.x) < 220 && Math.abs(s.y - c.y) < 90); // auch Baustellen von Verbündeten
       if (s) add('help', role === 'builder' ? 0.9 : 0.55, { sid: s.id });
     }
     const lorry = this.vehicles.find(v => v.team === t.id && v.type === 'lorry' && !v.pusher && !v.remove && v.inv.filter(x => x === 'gold').length >= 6 && !(v.haulBlock > this.tick));
@@ -406,6 +411,7 @@ Object.assign(World.prototype, {
     if (!best) best = { type: 'idle', s: 0, until: A.t + 30 };
     if (A.task && A.task.type === best.type) { // gleiche Aufgabe: Parameter übernehmen (Ziel nicht ständig wechseln)
       if (best.target) A.task.target = best.target; if (best.item) A.task.item = best.item;
+      if (best.animal && !A.task.animal) Object.assign(A.task, { animal: 1, hunt: best.hunt, until: best.until }); else if (!best.animal && A.task.animal && best.type === 'fight') { A.task.animal = 0; }
       return;
     }
     if (A.task && A.task.type === 'idle' && A.task.until > A.t && best.type !== 'heal' && best.type !== 'fight') return;
@@ -417,9 +423,41 @@ Object.assign(World.prototype, {
   aiArmedEnough(c) { return c.knight || c.inv.includes('sword') || c.inv.filter(x => THROWABLE.has(x)).length >= 1 || (c.inv.includes('bow') && c.arrows > 3); },
   aiNearestFoe(c, r, helper) {
     let best = null, bd = r;
-    for (const o of this.clonks) { if (o.team === c.team || o.act === 'dead' || o.inside) continue; const d = Math.hypot(o.x - c.x, (o.y - c.y) * 1.6); if (d < bd) { bd = d; best = o; } }
-    for (const m of this.monsters) { const d = Math.hypot(m.x - c.x, (m.y - c.y) * 1.6); if (d < Math.min(bd, helper ? 45 : 90)) { bd = d; best = m; } }
+    for (const o of this.clonks) { if (this.ally(o.team, c.team) || o.act === 'dead' || o.inside) continue; const d = Math.hypot(o.x - c.x, (o.y - c.y) * 1.6); if (d < bd) { bd = d; best = o; } }
+    for (const m of this.monsters) { if (!(m.chg > 0 || m.bite > 0) && m.foe !== c.id) continue; const d = Math.hypot(m.x - c.x, (m.y - c.y) * 1.6); if (d < Math.min(bd, 70)) { bd = d; best = m; } } // nur angreifende Wildschweine
     return best;
+  },
+  // Tiere: auf Angriffe reagieren (Wildschwein: wehren oder ausweichen, Hai: raus aus dem Wasser), gelegentlich Wildschweine jagen
+  aiInWater(c) { return this.matAt(c.x, c.y - 4) === MAT.WATER || c.act === 'swim'; },
+  aiShore(c, away) {
+    for (let d = 8; d <= 260; d += 6) for (const s of [away || 1, -(away || 1)]) {
+      const x = Math.round(c.x + s * d); if (x < 3 || x >= this.W - 3) continue;
+      const y = this.surf[x]; if (this.matAt(x, y) !== MAT.WATER && this.matAt(x, y - 2) !== MAT.WATER && this.matAt(x, y + 2) !== MAT.WATER && Math.abs(y - c.y) < 90) return { x, y };
+    }
+    return null;
+  },
+  aiAnimalThreat(c, A, add, helper) {
+    const hit = c.aHit && this.tick - c.aHit.t < 240 ? c.aHit : null;
+    // Hai in der Nähe, während man schwimmt (oder gerade gebissen): ans Ufer
+    if (this.aiInWater(c)) {
+      let sh = null, bd = hit && hit.k === 'shark' ? 140 : 75;
+      for (const a of this.animals) if (a.k === 'shark' && !a.remove) { const d = Math.hypot(a.x - c.x, a.y - (c.y - 5)); if (d < bd) { bd = d; sh = a; } }
+      if (sh) { const p = this.aiShore(c, Math.sign(c.x - sh.x)); add('flee', 1.02, { x: p ? p.x : c.x + Math.sign(c.x - sh.x) * 60, y: p ? p.y : c.y - 30, until: A.t + 360, why: 'shark' }); return; }
+    }
+    // Wildschwein greift an: bewaffnet/gesund → zurückschlagen, sonst ausweichen
+    let boar = null, bd = 90;
+    for (const m of this.monsters) { if (m.remove || m.hp <= 0) continue; const mine = m.foe === c.id || (hit && hit.k === 'boar' && hit.id === m.id); if (!(m.chg > 0 || m.bite > 0) && !mine) continue; const d = Math.hypot(m.x - c.x, m.y - c.y); if (d < bd && (mine || d < 40)) { bd = d; boar = m; } }
+    if (boar) {
+      if (this.aiArmed(c) || c.knight || c.hp > 35) add('fight', 0.98, { target: boar, animal: 1, until: A.t + 300 });
+      else add('flee', 0.99, { x: c.x + (Math.sign(c.x - boar.x) || 1) * 90, y: c.y, until: A.t + 200, why: 'boar' });
+      return;
+    }
+    // Goldvogel abschießen (nur mit Bogen), sonst sammeln sie das fallengelassene Gold ohnehin ein
+    if (c.inv.includes('bow') && c.arrows > 0) for (const a of this.animals) if (a.k === 'bird' && a.steal && !a.remove && Math.abs(a.x - c.x) < 170 && Math.abs(a.y - c.y) < 110) { add('fight', 0.7, { target: a, animal: 1, hunt: 1, until: A.t + 300 }); return; }
+    // Gelegenheitsjagd: ruhiges Wildschwein in der Nähe, gut bewaffnet, keine Eile
+    if (!helper && (A.huntCd || 0) < A.t && c.hp > 60 && (c.inv.includes('sword') || (c.inv.includes('bow') && c.arrows > 2) || c.knight)) {
+      for (const m of this.monsters) if (!m.remove && !m.flee && !m.chg && Math.abs(m.x - c.x) < 110 && Math.abs(m.y - c.y) < 40) { add('fight', 0.6, { target: m, animal: 1, hunt: 1, until: A.t + 600 }); A.huntCd = A.t + 2400; break; }
+    }
   },
   aiPick(c, list) { let best = null, bd = 1e9; for (const o of list) { if (o.act === 'dead' || o.inside) continue; const d = Math.hypot(o.x - c.x, o.y - c.y) + o.hp * 0.6; if (d < bd) { bd = d; best = o; } } return best; },
   aiFindItem(c, B) {
@@ -493,7 +531,16 @@ Object.assign(World.prototype, {
         if (this.aiGoto(c, A, k, v.x, v.y, 5) && (c.act === 'walk')) { this.use(c); if (c.act === 'push') B.gun = c.id; else A.task = null; }
         return;
       }
-      case 'fight': case 'attack': case 'guard': return this.aiCombat(c, t, B, D, A, k, home);
+      case 'fight': case 'attack': case 'guard':
+        if (T.animal) { // Tierkampf: zeitlich begrenzt, flüchtende Tiere nicht verfolgen
+          const m = T.target;
+          if (!m || m.remove || m.hp <= 0 || A.t > T.until || (m.wind > 0 && !(m.bite > 0) && !T.hunt) || Math.abs(m.x - c.x) > 170) { A.task = null; A.huntCd = Math.max(A.huntCd || 0, A.t + 1800); return; }
+        }
+        return this.aiCombat(c, t, B, D, A, k, home);
+      case 'rescue': return this.aiRescue(c, A, k);
+      case 'flee': // ausweichen / Wasser verlassen
+        if (this.aiGoto(c, A, k, T.x, T.y, 6) || A.t > T.until || (T.why === 'shark' && !this.aiInWater(c) && c.act === 'walk')) A.task = null;
+        return;
     }
   },
   aiStat0(c, s) { c.aiS = s; },
@@ -610,8 +657,8 @@ Object.assign(World.prototype, {
   },
   aiGunTarget(c, t, B) {
     const tid = B.target; let best = null, bd = 1e9;
-    for (const o of this.clonks) if (o.team !== t.id && o.act !== 'dead' && !o.inside) { const d = Math.abs(o.x - c.x); if (d < bd) { bd = d; best = { x: o.x, y: o.y - 5 }; } }
-    for (const s of this.structs) if (s.team !== t.id && (tid === undefined || s.team === tid)) { const d = Math.abs(s.x - c.x) + 60; if (d < bd) { bd = d; best = { x: s.x, y: s.y - s.h / 2 }; } }
+    for (const o of this.clonks) if (!this.ally(o.team, t.id) && o.act !== 'dead' && !o.inside) { const d = Math.abs(o.x - c.x); if (d < bd) { bd = d; best = { x: o.x, y: o.y - 5 }; } }
+    for (const s of this.structs) if (!this.ally(s.team, t.id) && !s.remove && (tid === undefined || s.team === tid)) { const d = Math.abs(s.x - c.x) + 60; if (d < bd) { bd = d; best = { x: s.x, y: s.y - s.h / 2 }; } }
     return best;
   },
   aiSolveGun(v, tx, ty, D) {
@@ -643,7 +690,7 @@ Object.assign(World.prototype, {
     if ((A.t + c.id) % 3) return;
     for (const it of this.items) {
       if (!it.armed || it.remove) continue;
-      const own = this.clonks.find(o => o.id === it.owner); if (own && own.team === c.team) continue;
+      const own = this.clonks.find(o => o.id === it.owner); if (own && this.ally(own.team, c.team)) continue;
       const sp = Math.hypot(it.vx, it.vy); if (sp < 1.4) continue;
       let x = it.x, y = it.y, vx = it.vx, vy = it.vy, hit = false;
       for (let s = 0; s < 18; s++) { vy += 0.1; x += vx; y += vy; if (Math.abs(x - c.x) < 7 && y > c.y - 13 && y < c.y + 3) { hit = true; break; } }
@@ -666,9 +713,9 @@ Object.assign(World.prototype, {
     }
     if (T.type === 'attack') {
       const tid = B.target;
-      if (!tgt || A.t % 30 === 0) { let best = null, bd = 1e9; for (const o of this.clonks) { if (o.team === t.id || o.act === 'dead' || o.inside) continue; const d = Math.abs(o.x - c.x) + Math.abs(o.y - c.y) * 2 + (o.team === tid ? 0 : 300); if (d < bd) { bd = d; best = o; } } tgt = best; T.target = best; }
+      if (!tgt || A.t % 30 === 0) { let best = null, bd = 1e9; for (const o of this.clonks) { if (this.ally(o.team, t.id) || o.act === 'dead' || o.inside) continue; const d = Math.abs(o.x - c.x) + Math.abs(o.y - c.y) * 2 + (o.team === tid ? 0 : 300); if (d < bd) { bd = d; best = o; } } tgt = best; T.target = best; }
       if (!tgt) { // niemand draußen: feindliche Gebäude angreifen
-        const s = this.structs.filter(o => o.team !== t.id && !o.remove).sort((a, b) => Math.abs(a.x - c.x) - Math.abs(b.x - c.x))[0];
+        const s = this.structs.filter(o => !this.ally(o.team, t.id) && !o.remove).sort((a, b) => Math.abs(a.x - c.x) - Math.abs(b.x - c.x))[0];
         if (!s) { A.task = null; return; }
         tgt = { x: s.x, y: s.y - Math.min(10, s.h / 3) + 5, struct: s, vx: 0, vy: 0, hp: 50, act: 'walk' };
       }
@@ -695,6 +742,7 @@ Object.assign(World.prototype, {
       if (Math.abs(dx) > 1) c.dir = Math.sign(dx);
       if (hasSword && c.cd <= 0 && c.act !== 'climb' && c.act !== 'hangle' && A.t >= A.react) { A.react = A.t + Math.ceil(D.react / 2); this.aiSlot(c, 'sword'); this.primary(c, [tgt.x, tgt.y]); }
       if (c.inv.includes('shield') && tgt.swing > 0 && this.rand() < D.blockP) { A.blockT = 12; A.blockDir = Math.sign(dx) || c.dir; }
+      if (!hasSword && tgt.team === undefined && tgt.hp !== undefined && c.cd <= 0 && c.act === 'walk' && A.t >= A.react) { A.react = A.t + D.react; this.strike(c); return; } // Tiere: Faustschlag
       if (!hasSword && c.act === 'walk') k[dx > 0 ? 'r' : 'l'] = 1; // hineinlaufen = Faustkampf
       return;
     }
@@ -725,7 +773,7 @@ Object.assign(World.prototype, {
     }
     if (!sol || sol.d > (tgt.struct ? 9 : 6)) return false;
     // eigene Leute in der Nähe des Ziels? (kein Eigenbeschuss)
-    if (!useBow && this.clonks.some(o => o.team === c.team && o !== c && o.act !== 'dead' && Math.hypot(o.x - tx, o.y - 5 - ty) < 24)) return false;
+    if (!useBow && this.clonks.some(o => this.ally(o.team, c.team) && o !== c && o.act !== 'dead' && Math.hypot(o.x - tx, o.y - 5 - ty) < 24)) return false;
     if (!useBow && Math.hypot(tx - px, ty - py) < 24) return false; // zu nah für Sprengstoff
     const th = Math.atan2(sol.vy, sol.vx) + aiGauss(this.rand) * D.aimErr, s = sol.s * (1 + aiGauss(this.rand) * D.aimErr * 0.4);
     const dist = useBow ? 60 : Math.max(14, (s - 1.3) / 0.022);

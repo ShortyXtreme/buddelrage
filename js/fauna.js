@@ -74,12 +74,12 @@ Object.assign(World.prototype, {
   },
   aSolid(x, y) { return this.solid(x, y); },
   aWater(x, y) { return this.matAt(x, y) === MAT.WATER; },
-  animalDie(a, quiet) { if (a.remove) return; a.remove = true; if (!quiet) this.ev({ e: 'poof', x: Math.round(a.x), y: Math.round(a.y - 2), k: a.k }); },
+  animalDie(a, quiet) { if (a.remove) return; if (a.gold) this.birdDropGold(a, 'hit'); a.remove = true; if (!quiet) this.ev({ e: 'poof', x: Math.round(a.x), y: Math.round(a.y - 2), k: a.k }); },
   // Gefahr für Wipfe/Vögel: Monster, Haie, Feuer, Explosionen, Lava, schnelle Geschosse, nahe kämpfende Buddler
   faunaDanger(a, r) {
     let best = null, bd = r;
     const consider = (x, y, w) => { const d = Math.hypot(x - a.x, (y - a.y) * 1.3) / (w || 1); if (d < bd) { bd = d; best = [x, y]; } };
-    for (const m of this.monsters) consider(m.x, m.y);
+    for (const m of this.monsters) if (m.bite > 0 || m.chg > 0) consider(m.x, m.y); // nur stürmende Wildschweine
     for (const b of this.recentBooms || []) if (this.tick - b.t < 90) consider(b.x, b.y, 2);
     for (const it of this.items) if ((it.armed && Math.hypot(it.vx, it.vy) > 1.5) || it.fuse > 0) consider(it.x, it.y, 1.3);
     for (const c of this.clonks) if (c.act !== 'dead' && !c.inside && (c.fire > 0 || c.act === 'fight' || c.swing > 0 || Math.abs(c.vx) > 1.2 || c.act === 'tumble')) consider(c.x, c.y, a.k === 'bird' ? 1.6 : 0.8);
@@ -145,7 +145,57 @@ Object.assign(World.prototype, {
       if (this.aSolid(a.x, ny) || this.aSolid(a.x, ny - 3)) { if (a.vy > 0) { a.y = Math.round(a.y); } a.vy = bounce ? -a.vy * 0.5 : 0; break; } else a.y = ny;
     }
   },
+  // Goldklau: selten stürzt ein Vogel auf offen an der Oberfläche liegendes Gold, packt es und fliegt weit weg (lässt es dort fallen)
+  goldOpen(it) {
+    if (it.type !== 'gold' || it.remove || it.stuck || it.armed || it.fuse > 0 || it.age < 300 || Math.hypot(it.vx, it.vy) > 0.05) return false;
+    const x = Math.round(it.x), y = Math.round(it.y); if (x < 30 || x > this.W - 30) return false;
+    if (y < this.surf[x] - 3 || y > this.surf[x] + 3) return false; // nur an der Oberfläche
+    for (let yy = y - 3; yy > Math.max(0, y - 60); yy -= 2) if (this.matAt(x, yy) !== MAT.SKY) return false; // freier Himmel darüber
+    if (this.structs.some(s => !s.remove && Math.abs(s.x - x) < s.w / 2 + 6 && y > s.y - s.h - 4 && y < s.y + 6)) return false; // nicht an/unter Gebäuden
+    return true;
+  },
+  birdTheft() {
+    if (this.animals.some(a => a.steal)) return; // höchstens ein Diebstahl gleichzeitig
+    if ((this.theftCd || 0) > this.tick || this.frnd() > 0.06) return;
+    const golds = this.items.filter(it => this.goldOpen(it)); if (!golds.length) return;
+    const it = golds[Math.floor(this.frnd() * golds.length)];
+    let bird = null, bd = 420; for (const a of this.animals) if (a.k === 'bird' && !a.remove && !a.flee) { const d = Math.hypot(a.x - it.x, a.y - it.y); if (d < bd) { bd = d; bird = a; } }
+    if (!bird) return;
+    bird.steal = { it: it.id, ph: 'dive', t0: this.tick }; this.theftCd = this.tick + 60 * 75;
+  },
+  birdDropGold(a, why) {
+    if (!a.gold) return; a.gold = 0; a.steal = null;
+    const g = this.spawnItem('gold', a.x, a.y + 2); g.vx = a.vx * 0.5; g.vy = 0.5; g.pickCd = why === 'hit' ? 0 : 20;
+    if (why === 'hit') this.msg('Der Vogel hat das Gold fallen lassen!');
+  },
   updBird(a) {
+    if (a.gold && a.hpG !== undefined && a.hp < a.hpG) { this.birdDropGold(a, 'hit'); a.flee = 120; } // getroffen → Beute fällt
+    a.hpG = a.hp;
+    if (a.steal) {
+      const S = a.steal;
+      if (S.ph === 'dive') {
+        const it = this.items.find(i => i.id === S.it);
+        if (!it || !this.goldOpen(it) || this.tick - S.t0 > 900 || this.clonks.some(c => c.act !== 'dead' && Math.abs(c.x - it.x) < 30 && Math.abs(c.y - it.y) < 20)) { a.steal = null; return this.updBirdFly(a); } // Buddler direkt daneben: lieber nicht
+        a.flee = 0;
+        const dx = it.x - a.x, dy = it.y - 3 - a.y, d = Math.hypot(dx, dy) || 1;
+        a.dir = Math.sign(dx) || a.dir; a.vx += (dx / d * 1.7 - a.vx) * 0.12; a.vy += (dy / d * 1.7 - a.vy) * 0.12;
+        if (d < 4) { it.remove = true; a.gold = 1; S.ph = 'away'; S.x0 = a.x; S.dir = Math.sign(this.W / 2 - a.x) || 1; this.msg('Ein Vogel klaut Gold!'); this.snd('grab', a.x, a.y); }
+        this.aMove(a, true); a.anim += 0.45; return;
+      }
+      // wegfliegen: weit über die Karte, dann irgendwo auf freier Fläche fallen lassen
+      a.dir = S.dir; a.flee = 0;
+      const xi = Math.max(0, Math.min(this.W - 1, Math.round(a.x))), want = Math.max(10, this.surf[xi] - 70);
+      a.vx += (a.dir * 1.4 - a.vx) * 0.06; a.vy += ((want - a.y) * 0.01 - a.vy) * 0.08;
+      if (this.aSolid(a.x + a.dir * 10, a.y) || this.aSolid(a.x + a.dir * 10, a.y + 6)) a.vy = Math.min(a.vy, -0.9);
+      if (a.x < 20 || a.x > this.W - 20) S.dir = a.dir = -a.dir;
+      this.aMove(a, true); a.anim += 0.5;
+      if (Math.abs(a.x - S.x0) > Math.min(700, this.W * 0.4) && this.tick % 20 === 0 && this.frnd() < 0.3 && !this.structs.some(s => Math.abs(s.x - a.x) < 60)) this.birdDropGold(a, 'far');
+      return;
+    }
+    if (this.tick % 120 === a.id % 120) this.birdTheft();
+    return this.updBirdFly(a);
+  },
+  updBirdFly(a) {
     if (a.t % 8 === a.id % 8) { const d = this.faunaDanger(a, 45); if (d) { a.flee = 80; a.dir = Math.sign(a.x - d[0]) || a.dir; } }
     const xi = Math.max(0, Math.min(this.W - 1, Math.round(a.x)));
     const want = Math.max(10, this.surf[xi] - (a.flee ? 110 : 55 + 25 * Math.sin(a.id + a.t / 300)));
@@ -207,7 +257,7 @@ Object.assign(World.prototype, {
     if (shark && tgt && a.cd <= 0 && Math.abs(tgt.x - a.x) < 9 && Math.abs(tgt.y - 5 - a.y) < 8) {
       a.cd = 70; a.bite = 12; this.snd('growl', a.x, a.y);
       if (this.blocks(tgt, a.dir)) { this.snd('shield', tgt.x, tgt.y); tgt.blockT = 10; a.vx = -a.dir; }
-      else { this.hurt(tgt, 13, null); this.snd('hitliving', tgt.x, tgt.y); if (tgt.act !== 'dead' && this.frnd() < 0.5) this.fling(tgt, a.dir * 1.4, -1.2); }
+      else { this.hurt(tgt, 13, null); tgt.aHit = { t: this.tick, k: 'shark', id: a.id }; this.snd('hitliving', tgt.x, tgt.y); if (tgt.act !== 'dead' && this.frnd() < 0.5) this.fling(tgt, a.dir * 1.4, -1.2); }
     }
   },
   // Explosionen: Tiere nehmen Schaden, fliehen; Ballons in der Nähe platzen
@@ -235,7 +285,7 @@ Object.assign(World.prototype, {
     return false;
   },
   faunaMelee(c, reach, dmg) {
-    for (const a of this.animals) if (a.k === 'shark' && Math.abs(a.x - c.x) < reach + 4 && Math.abs(a.y - (c.y - 5)) < 10 && Math.sign(a.x - c.x) === c.dir) { a.hp -= dmg; a.flee = 60; a.vx = c.dir * 1.2; this.snd('hitliving', a.x, a.y); }
+    for (const a of this.animals) if ((a.k === 'shark' || (a.k === 'bird' && a.steal)) && Math.abs(a.x - c.x) < reach + 4 && Math.abs(a.y - (c.y - 5)) < 10 && Math.sign(a.x - c.x) === c.dir) { a.hp -= dmg; a.flee = 60; a.vx = c.dir * 1.2; this.snd('hitliving', a.x, a.y); }
   },
 });
 if (typeof module !== 'undefined') module.exports = { ANIMAL_KINDS };

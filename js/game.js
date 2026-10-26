@@ -34,6 +34,7 @@ const VEH = {
   cannon: { name: 'Kanone', price: 80, w: 16, h: 9, hp: 150, gun: 1, speed: 6.6, cd: 100, amin: 0, amax: 1.1, ang: 0.3, res: 'cannon' },
 };
 const VEH_CODES = ['lorry', 'catapult', 'cannon'];
+const VSTEP = 5; // Fahrzeuge erklimmen Stufen bis 5 px (Räder)
 // Gebäude
 // Startplateau: Hütte in der Mitte, Burg auf der Burgseite (CASTLE_OFF), Wachturm auf der Gegenseite
 // Planieren: max. Abtrag je Spalte, max. Lückentiefe, Kappe über Schächten, Pixel pro Geldstück
@@ -340,7 +341,7 @@ class World {
     const cfg = this.cfg;
     this.generate(cfg.teams.length);
     cfg.teams.forEach((tc, ti) => {
-      const team = { id: ti, name: cleanName(tc.name, 'Team ' + (ti + 1)), color: tc.color || TEAM_COLORS[ti % 6], ai: !!tc.ai, diff: AI_LEVELS.includes(tc.diff) ? tc.diff : 'normal', helper: !tc.ai && !!(tc.helper != null ? tc.helper : cfg.helpers), cname: tc.ai ? '' : cleanName(tc.cname, ''), cnum: 0, pid: tc.pid || null, money: cfg.money != null ? cfg.money : 50, sel: -1, keys: { ...NOKEYS }, elim: false, aiT: 0, nameIdx: ti * 5, res: {}, rq: '', rp: 0, stat: '', stats: newStats() };
+      const team = { id: ti, side: Number.isInteger(tc.side) ? tc.side : ti, hdiff: AI_LEVELS.includes(tc.hdiff) ? tc.hdiff : 'normal', name: cleanName(tc.name, 'Team ' + (ti + 1)), color: tc.color || TEAM_COLORS[ti % 6], ai: !!tc.ai, diff: AI_LEVELS.includes(tc.diff) ? tc.diff : 'normal', helper: !tc.ai && !!(tc.helper != null ? tc.helper : cfg.helpers), cname: tc.ai ? '' : cleanName(tc.cname, ''), cnum: 0, pid: tc.pid || null, money: cfg.money != null ? cfg.money : 50, sel: -1, keys: { ...NOKEYS }, elim: false, aiT: 0, nameIdx: ti * 5, res: {}, rq: '', rp: 0, stat: '', stats: newStats() };
       if (cfg.allResearch) for (const r of RESEARCH) team.res[r.k] = 1;
       this.teams.push(team);
       const bx = this.bases[ti];
@@ -348,7 +349,7 @@ class World {
       for (let k = 0; k < (cfg.clonks || 3); k++) this.spawnClonk(ti, bx - 12 + k * 10, this.surf[bx] - 2);
       team.sel = this.clonks.find(c => c.team === ti).id;
     });
-    if (cfg.monsters) for (let k = 0; k < (cfg.monsterCount || 4); k++) this.spawnMonster();
+    if (cfg.monsters) for (let k = 0; k < (cfg.monsterCount || 2); k++) this.spawnMonster();
     if (cfg.animals !== false && this.spawnFauna) this.spawnFauna();
   }
   addStruct(type, x, y, team, prog) {
@@ -383,14 +384,25 @@ class World {
       const x = 30 + Math.floor(this.rand() * (this.W - 60));
       if (this.bases.some(b => Math.abs(b - x) < 220)) continue;
       if (this.matAt(x, this.surf[x] - 1) === MAT.WATER) continue;
-      const m = { id: this.id(), x, y: this.surf[x] - 1, vx: 0, vy: 0, dir: this.rand() < 0.5 ? -1 : 1, hp: 60, act: 'walk', anim: 0, cd: 0, think: 0, fire: 0 };
+      const m = { id: this.id(), k: 'boar', x, y: this.surf[x] - 1, vx: 0, vy: 0, dir: this.rand() < 0.5 ? -1 : 1, hp: 40, act: 'walk', anim: 0, cd: 0, think: 0, fire: 0, chg: 0, flee: 0 };
       while (this.boxHit(m.x, m.y) && m.y > 2) m.y--;
       this.monsters.push(m); return m;
     }
   }
   structById(id) { return this.structs.find(s => s.id === id); }
   vehById(id) { return this.vehicles.find(v => v.id === id); }
-  hasBase(teamId) { return this.structs.some(s => s.team === teamId && BUILD[s.type].base && s.prog >= 1); }
+  hasBase(teamId) { return this.structs.some(s => this.ally(s.team, teamId) && BUILD[s.type].base && s.prog >= 1 && !s.remove); }
+  // Bündnisse: Teams mit gleicher Seite (Lobby-Team) sind verbündet – kein Eigenbeschuss, gemeinsame Gebäude
+  sideOf(tid) { const t = this.teams[tid]; return t ? (Number.isInteger(t.side) ? t.side : t.id) : -1 - tid; }
+  ally(a, b) { return a === b || this.sideOf(a) === this.sideOf(b); }
+  sideTitle(id) { const n = this.sideName(id); return /^team\b/i.test(n) ? n : 'Team ' + n; }
+  sideName(tid) { const t = this.teams[tid]; if (!t) return ''; const sd = this.cfg.sides && this.cfg.sides[this.sideOf(tid)]; return sd && sd.name ? sd.name : t.name; }
+  // Schaden durch einen Verbündeten (anderer Spieler/KI im selben Lobby-Team)?
+  friendly(c, src) {
+    const k = src && typeof src === 'object' ? src : typeof src === 'number' && src ? this.clonks.find(o => o.id === src) : null;
+    return !!(k && k.team !== undefined && k.id !== c.id && k.team !== c.team && this.ally(k.team, c.team));
+  }
+  friendlyTeam(owner, team) { const k = typeof owner === 'number' && owner ? this.clonks.find(o => o.id === owner) : null; return !!(k && k.team !== team && this.ally(k.team, team)); }
 
   // ---------- Eingabe ----------
   setKeys(teamId, k) { const t = this.teams[teamId]; if (!t) return; const num = v => (typeof v === 'number' && isFinite(v)) ? Math.max(-500, Math.min(9000, Math.round(v))) : 0; t.keys = { l: +!!k.l, r: +!!k.r, u: +!!k.u, d: +!!k.d, b: +!!k.b, s: +!!k.s, g: +!!k.g, am: +!!k.am, ax: num(k.ax), ay: num(k.ay) }; }
@@ -405,6 +417,12 @@ class World {
       return;
     }
     if (a === 'buy') return this.buy(t, arg);
+    if (a === 'helper') { // KI-Helfer für die eigenen, nicht gesteuerten Buddler: aus / Leicht / Mittel / Schwer
+      if (t.ai) return; const on = AI_LEVELS.includes(arg);
+      t.helper = on; if (on) t.hdiff = arg; t.brain = null;
+      for (const c of this.clonks) if (c.team === teamId) { c.ai = null; c.aiKeys = { ...NOKEYS }; }
+      this.msg(on ? 'KI-Helfer: ' + aiDiffName(arg) : 'KI-Helfer aus – nicht gesteuerte Buddler warten.', teamId); return;
+    }
     if (a === 'slot' || a === 'slotd') { const c = this.selClonk(t); if (!c) return; c.slot = a === 'slot' ? Math.max(0, Math.min(INV_MAX - 1, arg | 0)) : ((c.slot || 0) + (arg > 0 ? 1 : INV_MAX - 1)) % INV_MAX; return; }
     if (a === 'research') return this.research(t, arg);
     const c = this.selClonk(t); if (!c) return;
@@ -477,7 +495,7 @@ class World {
   use(c) {
     if (c.act !== 'walk' && c.act !== 'fight') return;
     let v = null; for (const o of this.vehicles) if (!o.pusher && Math.abs(o.x - c.x) < VEH[o.type].w / 2 + 5 && Math.abs(o.y - c.y) < 8 && (!v || Math.abs(o.x - c.x) < Math.abs(v.x - c.x))) v = o;
-    const s0 = this.structs.find(s => s.team === c.team && s.prog >= 1 && Math.abs(c.x - s.x) < Math.min(14, s.w / 2) && c.y > s.y - 10 && c.y < s.y + 5);
+    const s0 = this.structs.find(s => this.ally(s.team, c.team) && !s.remove && s.prog >= 1 && Math.abs(c.x - s.x) < Math.min(14, s.w / 2) && c.y > s.y - 10 && c.y < s.y + 5);
     if (v && !(s0 && Math.abs(s0.x - c.x) < Math.abs(v.x - c.x))) { c.act = 'push'; c.veh = v.id; v.pusher = c.id; v.team = c.team; v.dir = c.dir; c.vx = 0; this.snd('grab', c.x, c.y); return; }
     const s = s0;
     if (s) {
@@ -552,7 +570,7 @@ class World {
   nearBase(c, team) {
     if (c.inside) { const s = this.structById(c.inside); if (s && BUILD[s.type].base) return s; }
     const tm = team === undefined ? c.team : team;
-    return this.structs.find(s => BUILD[s.type].base && s.team === tm && s.prog >= 1 && Math.abs(c.x - s.x) < s.w / 2 + 12 && c.y > s.y - 30 && c.y < s.y + 8);
+    return this.structs.find(s => BUILD[s.type].base && this.ally(s.team, tm) && !s.remove && s.prog >= 1 && Math.abs(c.x - s.x) < s.w / 2 + 12 && c.y > s.y - 30 && c.y < s.y + 8);
   }
   nearHut(c, team) { return this.nearBase(c, team); }
   sell(c) {
@@ -567,7 +585,8 @@ class World {
     this.checkGoal();
   }
   buy(t, what) {
-    const bases = this.structs.filter(s => BUILD[s.type].base && s.team === t.id && s.prog >= 1);
+    let bases = this.structs.filter(s => BUILD[s.type].base && s.team === t.id && s.prog >= 1 && !s.remove);
+    if (!bases.length) bases = this.structs.filter(s => BUILD[s.type].base && this.ally(s.team, t.id) && s.prog >= 1 && !s.remove); // Basis eines Verbündeten
     if (!bases.length) { this.msg('Keine Hütte – kein Einkauf möglich!', t.id); return; }
     const entry = SHOP_ALL.find(e => e.k === what); if (!entry) return;
     if (entry.res && !t.res[entry.res]) { this.msg('Erst erforschen: ' + RES_BY[entry.res].name, t.id); return; }
@@ -704,7 +723,7 @@ class World {
     const hasSword = c.inv.includes('sword'), hasBow = c.inv.includes('bow') && c.arrows > 0;
     if (c.inside) { if (hasBow) this.shoot(c); else if (c.inv.length) this.throwItem(c); return; }
     if (c.act === 'push' || c.act === 'climb' || c.act === 'hangle') return;
-    const foe = this.clonks.find(o => o.team !== c.team && o.act !== 'dead' && !o.inside && Math.abs(o.x - c.x) < 16 && Math.abs(o.y - c.y) < 10 && Math.sign(o.x - c.x) === c.dir)
+    const foe = this.clonks.find(o => !this.ally(o.team, c.team) && o.act !== 'dead' && !o.inside && Math.abs(o.x - c.x) < 16 && Math.abs(o.y - c.y) < 10 && Math.sign(o.x - c.x) === c.dir)
       || this.monsters.find(o => Math.abs(o.x - c.x) < 16 && Math.abs(o.y - c.y) < 10 && Math.sign(o.x - c.x) === c.dir);
     if (melee) { if (hasSword) this.swingSword(c); else this.strike(c); return; }
     if (hasSword && (foe || !hasBow)) this.swingSword(c);
@@ -713,14 +732,14 @@ class World {
   }
   swingSword(c) {
     c.cd = 28; c.swing = 12; this.snd('swing', c.x, c.y);
-    const foe = this.clonks.find(o => o.team !== c.team && o.act !== 'dead' && !o.inside && Math.abs(o.x - c.x) < 15 && Math.abs(o.y - c.y) < 10 && Math.sign(o.x - c.x) === c.dir);
+    const foe = this.clonks.find(o => !this.ally(o.team, c.team) && o.act !== 'dead' && !o.inside && Math.abs(o.x - c.x) < 15 && Math.abs(o.y - c.y) < 10 && Math.sign(o.x - c.x) === c.dir);
     if (foe) {
       if (this.blocks(foe, c.dir)) { this.snd('shield', foe.x, foe.y); foe.blockT = 10; this.walkStep(c, -c.dir * 2); }
       else { this.hurt(foe, 12 + this.rand() * 5, c); this.snd('metalhit', foe.x, foe.y); if (foe.act !== 'dead' && this.rand() < 0.35) this.fling(foe, c.dir * 1.6, -1.4); }
     }
-    for (const m of this.monsters) if (Math.abs(m.x - c.x) < 15 && Math.abs(m.y - c.y) < 10 && Math.sign(m.x - c.x) === c.dir) { m.hp -= 18; m.vx = c.dir * 1.6; m.vy = -1.2; m.act = 'jump'; this.snd('hitliving', m.x, m.y); }
+    for (const m of this.monsters) if (Math.abs(m.x - c.x) < 15 && Math.abs(m.y - c.y) < 10 && Math.sign(m.x - c.x) === c.dir) { m.hp -= 18; m.prov = c.id; m.vx = c.dir * 1.6; m.vy = -1.2; m.act = 'jump'; this.snd('hitliving', m.x, m.y); }
     if (this.faunaMelee) this.faunaMelee(c, 15, 18);
-    for (const v of this.vehicles) if (v.team !== c.team && Math.abs(v.x - c.x) < 14 && Math.abs(v.y - c.y) < 10) v.hp -= 6;
+    for (const v of this.vehicles) if (!this.ally(v.team, c.team) && Math.abs(v.x - c.x) < 14 && Math.abs(v.y - c.y) < 10) v.hp -= 6;
   }
   shoot(c, aim) {
     const k = this.keysFor(c);
@@ -733,7 +752,7 @@ class World {
     this.snd('bow', c.x, c.y);
   }
   strike(c) {
-    const foe = this.clonks.find(o => o.team !== c.team && o.act !== 'dead' && !o.inside && Math.abs(o.x - c.x) < 11 && Math.abs(o.y - c.y) < 9 && Math.sign(o.x - c.x) === c.dir);
+    const foe = this.clonks.find(o => !this.ally(o.team, c.team) && o.act !== 'dead' && !o.inside && Math.abs(o.x - c.x) < 11 && Math.abs(o.y - c.y) < 9 && Math.sign(o.x - c.x) === c.dir);
     c.punch = 10; c.cd = 50;
     if (foe) {
       if (this.blocks(foe, c.dir)) { this.snd('shield', foe.x, foe.y); foe.blockT = 10; }
@@ -741,11 +760,12 @@ class World {
     }
     if (this.faunaMelee) this.faunaMelee(c, 12, 10);
     const mo = this.monsters.find(o => Math.abs(o.x - c.x) < 12 && Math.abs(o.y - c.y) < 10);
-    if (mo) { mo.hp -= 10; mo.vx = c.dir * 2; mo.vy = -1.5; mo.act = 'jump'; this.snd('punch', c.x, c.y); }
+    if (mo) { mo.hp -= 10; mo.prov = c.id; mo.vx = c.dir * 2; mo.vy = -1.5; mo.act = 'jump'; this.snd('punch', c.x, c.y); }
   }
   fling(c, vx, vy) { if (c.act === 'dead' || c.inside) return; if (c.act === 'push') this.release(c); if (c.hk) c.hk = null; c.act = 'tumble'; c.vx = vx; c.vy = vy; c.tumbleT = 0; c.block = 0; }
   hurt(c, dmg, src) {
     if (c.act === 'dead' || dmg <= 0 || c.inside) return;
+    if (src !== 'fire' && src && this.friendly(c, src)) return; // kein Schaden durch Verbündete
     const cont = src === 'fire'; // Dauerschaden (Brennen, Lava, Ertrinken) zählt nicht als Treffer
     if (!cont && c.invT > 0) return;
     if (c.armor && src !== 'fire') dmg *= 0.6;
@@ -756,7 +776,7 @@ class World {
   }
   creditKill(c, src) {
     let k = null; if (src && typeof src === 'object') k = src; else if (typeof src === 'number') k = this.clonks.find(o => o.id === src);
-    if (k && k.team !== c.team && this.teams[k.team] && this.teams[k.team].stats) this.teams[k.team].stats.kills++;
+    if (k && !this.ally(k.team, c.team) && this.teams[k.team] && this.teams[k.team].stats) this.teams[k.team].stats.kills++;
     if (this.teams[c.team].stats) this.teams[c.team].stats.deaths++;
   }
   kill(c) {
@@ -767,7 +787,13 @@ class World {
     this.snd('die', c.x, c.y);
     this.msg(c.name + ' (' + this.teams[c.team].name + ') ist gestorben.');
     const t = this.teams[c.team];
-    if (t.sel === c.id) { const n = this.clonks.find(o => o.team === c.team && o.act !== 'dead'); t.sel = n ? n.id : -1; }
+    if (t.sel === c.id) {
+      // Steuerung geht an den besten verbliebenen eigenen Buddler (gesund und nah), die übrigen bleiben KI-Helfer
+      let n = null, bs = -1e9;
+      for (const o of this.clonks) if (o.team === c.team && o.act !== 'dead') { const s = o.hp - Math.hypot(o.x - c.x, o.y - c.y) * 0.15 + (o.knight ? 10 : 0); if (s > bs) { bs = s; n = o; } }
+      t.sel = n ? n.id : -1;
+      if (n) { if (n.ai && this.aiForget) this.aiForget(n); n.aiKeys = { ...NOKEYS }; if (!t.ai) { this.msg('Du steuerst jetzt ' + n.name + '.', c.team); this.ev({ e: 'takeover', team: c.team, id: n.id }); } }
+    }
     this.checkEnd();
   }
   checkGoal() {
@@ -782,8 +808,8 @@ class World {
       if (!alive && !canBuy) { t.elim = true; this.msg('Team ' + t.name + ' ist ausgeschieden!'); }
     }
     if (this.mode === 'settle') { if (this.teams[0].elim) { this.state = 'over'; this.winner = -1; this.snd('error', 0, 0); } return; }
-    const left = this.teams.filter(t => !t.elim);
-    if (left.length <= 1) { this.state = 'over'; this.winner = left.length ? left[0].id : -1; this.snd('fanfare', 0, 0); }
+    const left = this.teams.filter(t => !t.elim), sides = new Set(left.map(t => this.sideOf(t.id)));
+    if (sides.size <= 1) { this.state = 'over'; this.winner = left.length ? left[0].id : -1; this.snd('fanfare', 0, 0); if (left.length > 1) this.msg(this.sideTitle(left[0].id) + ' gewinnt!'); }
   }
 
   // ---------- Explosion ----------
@@ -801,11 +827,11 @@ class World {
     for (const c of this.clonks) {
       if (c.act === 'dead' || c.inside) continue;
       const dx = c.x - x, dy = c.y - 5 - y, d = Math.hypot(dx, dy) || 1;
-      if (d < R) { const f = 1 - d / R; this.hurt(c, f * r * 2.6, owner); if (c.act !== 'dead') { this.fling(c, dx / d * f * 3.5, -2.5 * f - 0.6); if (d < R * 0.6 && this.rand() < 0.45) c.fire = Math.max(c.fire, 150); } }
+      if (d < R && !(owner && this.friendly(c, owner))) { const f = 1 - d / R; this.hurt(c, f * r * 2.6, owner); if (c.act !== 'dead') { this.fling(c, dx / d * f * 3.5, -2.5 * f - 0.6); if (d < R * 0.6 && this.rand() < 0.45) c.fire = Math.max(c.fire, 150); } }
     }
     for (const m of this.monsters) {
       const dx = m.x - x, dy = m.y - 5 - y, d = Math.hypot(dx, dy) || 1;
-      if (d < R) { const f = 1 - d / R; m.hp -= f * r * 2.6; m.vx = dx / d * f * 3; m.vy = -2 * f; m.act = 'jump'; if (d < R * 0.6) m.fire = 150; }
+      if (d < R) { const f = 1 - d / R; m.hp -= f * r * 2.6; if (typeof owner === 'number') m.prov = owner; m.vx = dx / d * f * 3; m.vy = -2 * f; m.act = 'jump'; if (d < R * 0.6) m.fire = 150; }
     }
     for (const it of this.items) {
       const dx = it.x - x, dy = it.y - y, d = Math.hypot(dx, dy) || 1;
@@ -818,10 +844,10 @@ class World {
     if (this.faunaBlast) this.faunaBlast(x, y, r, R);
     for (const v of this.vehicles) {
       const dx = v.x - x, dy = v.y - 4 - y, d = Math.hypot(dx, dy) || 1;
-      if (d < R + 4) { const f = 1 - d / (R + 4); v.hp -= f * r * 2.2; v.vx += dx / d * f * 2; v.vy = -f * 2; if (VEH[v.type].wood && this.rand() < 0.5) v.fire = 400; }
+      if (d < R + 4 && !this.friendlyTeam(owner, v.team)) { const f = 1 - d / (R + 4); v.hp -= f * r * 2.2; v.vx += dx / d * f * 2; v.vy = -f * 2; if (VEH[v.type].wood && this.rand() < 0.5) v.fire = 400; }
     }
     for (const s of this.structs) {
-      if (Math.abs(s.x - x) < r + s.w / 2 && y > s.y - s.h - r && y < s.y + r) {
+      if (Math.abs(s.x - x) < r + s.w / 2 && y > s.y - s.h - r && y < s.y + r && !this.friendlyTeam(owner, s.team)) {
         s.hp -= r * 1.5; if (BUILD[s.type].wood && this.rand() < 0.6) s.fire = Math.max(s.fire, 500);
         if (s.hp <= 0) this.destroyStruct(s);
       }
@@ -913,6 +939,7 @@ class World {
     this.simMaterials();
     this.updFires();
     for (const t of this.teams) if ((t.ai || t.helper) && !t.elim) this.aiTeam(t);
+    if (this.rescueTick) this.rescueTick();
     for (const c of this.clonks) this.updClonk(c);
     for (const v of this.vehicles) this.updVehicle(v);
     for (const it of this.items) this.updItem(it);
@@ -920,7 +947,7 @@ class World {
     if (this.updFauna) this.updFauna();
     for (const s of this.structs) if (s.prog < 1) {
       const B = BUILD[s.type];
-      const builders = this.clonks.filter(c => c.team === s.team && (c.act === 'walk' || (s.lv && c.act === 'dig')) && !c.inside && Math.abs(c.x - s.x) < s.w / 2 + (s.lv ? 14 : 8) && Math.abs(c.y - s.y) < (s.lv ? 30 : 12)).length;
+      const builders = this.clonks.filter(c => this.ally(c.team, s.team) && (c.act === 'walk' || (s.lv && c.act === 'dig')) && !c.inside && Math.abs(c.x - s.x) < s.w / 2 + (s.lv ? 14 : 8) && Math.abs(c.y - s.y) < (s.lv ? 30 : 12)).length;
       if (builders && s.lv) { if (this.tick % 2 === 0) this.levelStep(s, Math.min(3, builders) * LEVEL_RATE); if (this.tick % 40 === 0) this.snd('dig', s.x, s.y); continue; }
       if (builders) { s.prog = Math.min(1, s.prog + Math.min(3, builders) / B.time); if (s.prog >= 1) { this.snd('build', s.x, s.y); this.msg(B.name + ' fertig gebaut!', s.team); const st = this.teams[s.team].stats; if (st) { st.built++; st.builtList.push(s.type); } } }
     }
@@ -935,7 +962,7 @@ class World {
     this.monsters = this.monsters.filter(m => !m.remove);
     this.vehicles = this.vehicles.filter(v => !v.remove);
     if (this.structs.some(s => s.remove)) { this.structs = this.structs.filter(s => !s.remove); this.checkEnd(); }
-    if (this.cfg.monsters && this.tick % 1500 === 0 && this.monsters.length < (this.cfg.monsterCount || 4) + (this.daylight() < 0.3 ? 2 : 0)) this.spawnMonster();
+    if (this.cfg.monsters && this.tick % 3600 === 0 && this.monsters.length < (this.cfg.monsterCount || 2)) this.spawnMonster(); // Wildschweine: langsam nachwachsend, keine Nacht-Extras
     if (this.tick % 120 === 0) for (const t of this.teams) if (t.ai && !t.elim && (AI_DIFF[t.diff] || {}).bonus) { t.money += 1; t.stats.bonus++; } // dokumentierter kleiner Bonus nur für „Schwer“
     for (const t of this.teams) if (t.sel === -1 || !this.selClonk(t)) { const n = this.clonks.find(o => o.team === t.id && o.act !== 'dead'); t.sel = n ? n.id : -1; }
     if (this.tick % 60 === 0) this.checkEnd();
@@ -1106,7 +1133,7 @@ class World {
           if (down < 4) c.y += down; else { c.act = 'jump'; c.vy = 0; }
         }
         if (mv && c.act === 'walk') {
-          const foe = this.clonks.find(o => o.team !== c.team && o.act !== 'dead' && !o.inside && (o.act === 'walk' || o.act === 'fight' || o.act === 'dig') && Math.abs(o.x - (c.x + mv * 6)) < 3 && Math.abs(o.y - c.y) < 6);
+          const foe = this.clonks.find(o => !this.ally(o.team, c.team) && o.act !== 'dead' && !o.inside && (o.act === 'walk' || o.act === 'fight' || o.act === 'dig') && Math.abs(o.x - (c.x + mv * 6)) < 3 && Math.abs(o.y - c.y) < 6);
           if (foe) { c.act = 'fight'; c.foe = foe.id; c.fightT = 0; if (foe.act !== 'fight') { foe.act = 'fight'; foe.foe = c.id; foe.fightT = 15; } foe.dir = -mv; }
         }
         this.pickup(c);
@@ -1304,8 +1331,8 @@ class World {
       for (const m of this.monsters) {
         if (Math.abs(it.x - m.x) <= 5 && it.y >= m.y - 11 && it.y <= m.y + 1) {
           if (it.type === 'flint' || it.type === 'superflint') { it.remove = true; this.explode(it.x, it.y, ITEMS[it.type].blast, it.owner); return; }
-          if (isArrow) { m.hp -= 16; this.snd('hitliving', m.x, m.y); it.remove = true; return; }
-          m.hp -= (ITEMS[it.type].dmg || 5) * sp / 2; it.vx *= -0.3; it.armed = false; this.snd('hitliving', m.x, m.y);
+          if (isArrow) { m.hp -= 16; m.prov = it.owner; this.snd('hitliving', m.x, m.y); it.remove = true; return; }
+          m.hp -= (ITEMS[it.type].dmg || 5) * sp / 2; m.prov = it.owner; it.vx *= -0.3; it.armed = false; this.snd('hitliving', m.x, m.y);
         }
       }
       for (const v of this.vehicles) {
@@ -1349,11 +1376,14 @@ class World {
       if (d.gun && k.am) { const tx = k.ax - v.x, ty = (v.y - 6) - k.ay; if (Math.abs(tx) > 4 && !mv) v.dir = Math.sign(tx); const ta = Math.max(d.amin, Math.min(d.amax, Math.atan2(ty, Math.max(1, Math.abs(tx))))); v.ang += Math.max(-0.03, Math.min(0.03, ta - v.ang)); }
       else if (d.gun) { if (k.u) v.ang = Math.min(d.amax, v.ang + 0.02); if (k.d) v.ang = Math.max(d.amin, v.ang - 0.02); }
     } else if (ground) v.vx *= 0.8;
+    // Hangabtrieb: ungeschoben auf steilem Hang langsam zurückrollen
+    if (ground && !inWater) { const sl = this.vSlope(v); if (Math.abs(sl) > 0.75) { v.vx += Math.sign(sl) * 0.035; v.vx = Math.max(-0.45, Math.min(0.45, v.vx)); if (pc && Math.sign(v.vx) !== Math.sign(sl)) {} } }
     if (Math.abs(v.vx) < 0.02) v.vx = 0;
     if (v.vx) {
-      const nx = v.x + v.vx; let moved = false;
-      for (let up = 0; up <= 3; up++) if (!this.vHit(v, nx, v.y - up)) { v.x = nx; v.y -= up; moved = true; break; }
-      if (!moved) v.vx = 0;
+      const nx = Math.max(d.w / 2 + 1, Math.min(this.W - d.w / 2 - 1, v.x + v.vx)), f = this.vFit(v, nx, v.y);
+      if (!f) { v.vx = 0; v.blockT = (v.blockT || 0) + 1; }
+      else if (f.steep && Math.sign(v.vx) === -Math.sign(f.slope) && pc) { v.vx = Math.sign(f.slope) * 0.15; v.blockT = (v.blockT || 0) + 1; } // zu steil: rutscht sanft zurück
+      else { v.x = nx; if (f.ground && (ground || f.y < v.y)) v.y = f.y; v.blockT = 0; }
     }
     v.x = Math.max(d.w / 2 + 1, Math.min(this.W - d.w / 2 - 1, v.x));
     if (!this.vHit(v, v.x, v.y + 1)) {
@@ -1365,6 +1395,7 @@ class World {
         for (let s = 0; s < steps; s++) { const ny = v.y + v.vy / steps; if (this.vHit(v, v.x, ny)) { if (v.vy > 3.6) v.hp -= (v.vy - 3.6) * 12; v.vy = 0; v.y = Math.round(v.y); break; } v.y = ny; }
       }
     } else v.vy = 0;
+    if (this.vHit(v, v.x, v.y)) { let up = 0; while (up < VSTEP + 2 && this.vHit(v, v.x, v.y - up)) up++; if (!this.vHit(v, v.x, v.y - up)) v.y -= up; } // nie im Boden stecken
     if (v.y > this.H + 20) { v.remove = true; if (pc) this.release(pc); return; }
     if (pc) {
       pc.x = v.x - v.dir * (d.w / 2 + 1); pc.y = v.y; pc.dir = v.dir;
@@ -1375,29 +1406,93 @@ class World {
       if (Math.abs(it.x - v.x) <= d.w / 2 && it.y > v.y - d.h - 3 && it.y <= v.y + 1) { v.inv.push(it.type); it.remove = true; this.snd('grab', v.x, v.y); if (v.inv.length >= d.cap) break; }
     }
   }
+  // Rad-Bodenfolger: Ruhehöhe an drei Spalten (Räder + Mitte); Stufen bis VSTEP px werden erklommen
+  vRest(xx, y) {
+    const r0 = Math.round(y) - VSTEP;
+    if (this.solid(xx, r0)) return null; // Wand höher als eine Stufe
+    let r = r0; const lim = Math.round(y) + 4;
+    while (r < lim && !this.solid(xx, r + 1)) r++;
+    return this.solid(xx, r + 1) ? r : Infinity;
+  }
+  vFit(v, nx, y) {
+    const d = VEH[v.type], hw = (d.w >> 1) - 2, xi = Math.round(nx), hb = d.w >> 1;
+    let Y = Infinity; const rs = [];
+    for (let xx = xi - hb; xx <= xi + hb; xx++) { const r = this.vRest(xx, y); if (r === null) return null; if (r < Y) Y = r; if (xx === xi - hw || xx === xi + hw) rs.push(r); }
+    rs.splice(1, 0, 0);
+    const ground = Y !== Infinity; if (!ground) Y = Math.round(y);
+    for (let xx = xi - (d.w >> 1); xx <= xi + (d.w >> 1); xx += 2) if (this.solid(xx, Y) || this.solid(xx, Y - (d.h >> 1)) || this.solid(xx, Y - d.h + 1)) return null; // Aufbau passt nicht
+    const L = rs[0] === Infinity ? Y + 4 : rs[0], Rr = rs[2] === Infinity ? Y + 4 : rs[2], slope = (L - Rr) / (2 * hw); // >0: rechts höher … Abtrieb nach links
+    return { y: Y, ground, slope: -slope, steep: Math.abs(slope) > 1.25 };
+  }
+  // Neigung (Bodenwinkel) für Darstellung und Hangabtrieb; positiv = rechts tiefer
+  vSlope(v) {
+    const d = VEH[v.type], hw = (d.w >> 1) - 2, xi = Math.round(v.x);
+    const a = this.vRest(xi - hw, v.y), b = this.vRest(xi + hw, v.y);
+    const L = a === null ? v.y - VSTEP : a === Infinity ? v.y + 4 : a, Rr = b === null ? v.y - VSTEP : b === Infinity ? v.y + 4 : b;
+    return (Rr - L) / (2 * hw);
+  }
   vHit(v, x, y) {
     const d = VEH[v.type], hw = d.w >> 1, xi = Math.round(x), yi = Math.round(y);
     for (let xx = xi - hw; xx <= xi + hw; xx += 2) if (this.solid(xx, yi) || this.solid(xx, yi - (d.h >> 1)) || this.solid(xx, yi - d.h + 1)) return true;
     return false;
   }
+  // Wildschwein (ersetzt das frühere Monster): grast und wandert; wird es angegriffen oder in die Enge getrieben,
+  // stürmt es höchstens zweimal auf den Angreifer los und flieht dann – es verfolgt niemanden dauerhaft.
   updMonster(m) {
-    if (m.hp <= 0) { m.remove = true; this.snd('growl', m.x, m.y); if (this.rand() < 0.6) { const it = this.spawnItem('gold', m.x, m.y - 5); it.vy = -2; } this.msg('Ein Monster wurde besiegt!'); return; }
+    if (m.hp <= 0) {
+      m.remove = true; this.snd('hitliving', m.x, m.y);
+      const n = 1 + (this.rand() < 0.5 ? 1 : 0); for (let k = 0; k < n; k++) { const it = this.spawnItem('gold', m.x + k * 3, m.y - 5); it.vy = -2; it.vx = (this.rand() - 0.5); }
+      const kt = this.clonks.find(c => c.id === m.prov); this.msg('Wildschwein erlegt! Es ließ Gold fallen.', kt ? kt.team : undefined); return;
+    }
     if (m.cd > 0) m.cd--;
     if (m.y > this.H + 10) { m.remove = true; return; }
     const here = this.matAt(m.x, m.y - 3);
     if (here === MAT.LAVA) { m.hp -= 1; m.fire = 200; }
     if (m.fire > 0) { m.fire--; m.hp -= 0.15; if (here === MAT.WATER) m.fire = 0; if (this.tick % 25 === m.id % 25) this.ignitePoint(m.x, m.y); }
+    if (m.fire > 0 && !m.flee) { m.flee = 180; m.chg = 0; }
+    // Treffer erkennen (Nahkampf setzt m.prov, Pfeile/Explosionen: nächster Buddler gilt als Angreifer)
+    if (m.lastHp === undefined) m.lastHp = m.hp;
+    if (m.hp < m.lastHp - 0.5 && !m.flee) {
+      let foe = this.clonks.find(c => c.id === m.prov && c.act !== 'dead');
+      if (!foe) { let bd = 160; for (const c of this.clonks) { if (c.act === 'dead' || c.inside) continue; const d = Math.hypot(c.x - m.x, c.y - m.y); if (d < bd) { bd = d; foe = c; } } }
+      if (foe && !m.chg && (m.charges === undefined || m.charges > 0) && this.rand() < 0.8) { m.chg = 150; m.foe = foe.id; m.charges = m.charges === undefined ? 2 : m.charges; this.snd('growl', m.x, m.y); }
+      else { m.flee = 240; m.chg = 0; if (foe) m.dir = Math.sign(m.x - foe.x) || m.dir; }
+    }
+    m.lastHp = m.hp;
+    // in die Enge getrieben: ein Buddler steht lange direkt davor
+    let near = null; for (const c of this.clonks) { if (c.act === 'dead' || c.inside) continue; if (Math.abs(c.x - m.x) < 10 && Math.abs(c.y - m.y) < 9) { near = c; break; } }
+    m.crowd = near ? (m.crowd || 0) + 1 : 0;
+    if (m.crowd > 150 && !m.chg && !m.flee) { m.crowd = 0; if (m.charges === undefined || m.charges > 0) { m.chg = 90; m.foe = near.id; if (m.charges === undefined) m.charges = 2; this.snd('growl', m.x, m.y); } else m.flee = 200; }
     m.think--;
-    const night = this.daylight() < 0.3;
-    let target = null, best = night ? 200 : 140;
-    for (const c of this.clonks) { if (c.act === 'dead' || c.inside) continue; const d = Math.abs(c.x - m.x); if (d < best && Math.abs(c.y - m.y) < 50) { best = d; target = c; } }
-    if (target) m.dir = Math.sign(target.x - m.x) || m.dir;
-    else if (m.think <= 0) { m.think = 120 + this.rand() * 200 | 0; if (this.rand() < 0.4) m.dir = -m.dir; }
+    let sp;
+    const foe = m.chg ? this.clonks.find(c => c.id === m.foe && c.act !== 'dead' && !c.inside) : null;
+    if (m.chg && !foe) { m.chg = 0; m.flee = 120; }
+    if (m.chg) {
+      m.chg--; m.dir = Math.sign(foe.x - m.x) || m.dir; sp = 1.35;
+      if (m.cd === 0 && Math.abs(foe.x - m.x) < 9 && Math.abs(foe.y - m.y) < 9) { // Treffer mit den Hauern
+        m.cd = 50; m.charges = Math.max(0, (m.charges || 1) - 1);
+        if (this.blocks(foe, m.dir)) { this.snd('shield', foe.x, foe.y); foe.blockT = 10; }
+        else { this.hurt(foe, 8, null); foe.aHit = { t: this.tick, k: 'boar', id: m.id }; this.snd('hitliving', foe.x, foe.y); if (foe.act !== 'dead') this.fling(foe, m.dir * 1.8, -1.6); }
+        m.chg = 0; if (m.charges <= 0) { m.flee = 300; m.dir = -m.dir; } else { m.flee = 45; m.dir = -m.dir; } // zurückweichen, ggf. erneut anlaufen
+        if (m.charges > 0) m.rech = 60;
+      }
+      if (m.chg === 0 && !m.flee) m.flee = 200;
+    } else if (m.flee > 0) {
+      m.flee--; sp = 1.0;
+      if (m.flee === 0 && m.rech > 0 && (m.charges || 0) > 0) { const f2 = this.clonks.find(c => c.id === m.foe && c.act !== 'dead' && !c.inside && Math.abs(c.x - m.x) < 80); if (f2) m.chg = 120; m.rech = 0; }
+      if (m.flee === 0 && !m.chg) { m.charges = undefined; m.foe = 0; m.prov = 0; }
+    } else {
+      sp = 0.25; // gemütliches Grasen
+      if (m.think <= 0) { m.think = 90 + this.rand() * 220 | 0; m.graze = this.rand() < 0.45; if (this.rand() < 0.4) m.dir = -m.dir; }
+      if (m.graze) sp = 0;
+      for (const c of this.clonks) if (c.act !== 'dead' && !c.inside && Math.abs(c.x - m.x) < 24 && Math.abs(c.y - m.y) < 12 && (c.punch > 0 || c.swing > 0)) { m.flee = 120; m.dir = Math.sign(m.x - c.x) || m.dir; break; } // erschreckt sich
+      if (Math.abs(m.x - this.bases.reduce((b, x) => Math.abs(x - m.x) < Math.abs(b - m.x) ? x : b, -9999)) < 90 && m.think > 30) { m.dir = Math.sign(m.x - this.bases.reduce((b, x) => Math.abs(x - m.x) < Math.abs(b - m.x) ? x : b, -9999)) || m.dir; } // meidet Siedlungen
+    }
     const inWater = this.matAt(m.x, m.y - 4) === MAT.WATER;
     if (m.act === 'walk') {
-      const sp = (target ? (night ? 0.85 : 0.7) : 0.4) * (inWater ? 0.5 : 1) * (m.wind ? 0.2 : 1);
-      if (!this.walkStep(m, m.dir * sp)) { m.act = 'jump'; m.vy = -2.3; m.vx = m.dir * 0.6; if (this.rand() < 0.3) m.dir = -m.dir; }
-      m.anim += 0.12;
+      const v = sp * (inWater ? 0.5 : 1);
+      if (v && !this.walkStep(m, m.dir * v)) { if (m.chg || m.flee || this.rand() < 0.5) { m.act = 'jump'; m.vy = -2.1; m.vx = m.dir * 0.6; } if (this.rand() < 0.4) m.dir = -m.dir; }
+      m.anim += v ? 0.12 + v * 0.1 : 0.03;
       if (!this.boxHit(m.x, m.y + 1)) { let d = 0; while (d < 4 && !this.boxHit(m.x, m.y + d + 1)) d++; if (d < 4) m.y += d; else { m.act = 'jump'; m.vy = 0; m.vx = m.dir * 0.4; } }
       if (inWater && !this.boxHit(m.x, m.y - 0.5)) m.y -= 0.5;
     } else {
@@ -1406,16 +1501,7 @@ class World {
       if (!this.boxHit(m.x, m.y + m.vy)) m.y += m.vy; else { if (m.vy > 0) { m.act = 'walk'; m.y = Math.round(m.y); } m.vy = 0; }
       if (inWater) m.act = 'walk';
     }
-    // Biss mit Vorwarnung: Monster duckt sich und knurrt (~0,27 s), dann schnappt es zu
-    if (target && m.cd === 0 && !m.wind && Math.abs(target.x - m.x) < 13 && Math.abs(target.y - m.y) < 10) { m.wind = 16; this.snd('growl', m.x, m.y); }
-    if (m.wind > 0 && --m.wind === 0) {
-      m.cd = 55; m.bite = 10;
-      if (target && Math.abs(target.x - m.x) < 12 && Math.abs(target.y - m.y) < 10 && Math.sign(target.x - m.x) !== -m.dir) {
-        if (this.blocks(target, m.dir)) { this.snd('shield', target.x, target.y); target.blockT = 10; m.vx = -m.dir; }
-        else { this.hurt(target, 9, null); this.snd('hitliving', target.x, target.y); if (target.act !== 'dead') this.fling(target, m.dir * 1.6, -1.4); }
-      }
-    }
-    if (m.bite > 0) m.bite--;
+    m.bite = m.chg > 0 ? 1 : 0; m.wind = m.flee > 0 ? 1 : 0; // für Schnappschuss/Darstellung
   }
 
   // ---------- KI: siehe js/ai.js ----------
@@ -1428,13 +1514,13 @@ class World {
     return {
       c: this.clonks.map(c => [c.id, c.team, r1(c.x), r1(c.y), c.dir, ACTS.indexOf(c.act), Math.ceil(c.hp), r1(c.anim), invEnc(c.inv), Math.round(c.breath), c.name, c.punch, r1(c.digA),
         (c.armor ? 1 : 0) | (c.knight ? 2 : 0) | (c.block ? 4 : 0) | (c.bowT > 0 ? 8 : 0) | (c.fire > 0 ? 16 : 0) | (c.blockT > 0 ? 32 : 0) | (c.invT > 0 ? 64 : 0), c.arrows, c.inside, c.swing, c.veh, c.slot || 0,
-        c.hk ? c.hk.st : 0, c.hk ? r1(c.hk.x) : 0, c.hk ? r1(c.hk.y) : 0, c.bl ? (c.bl.gas > 0 ? 1 : 2) : 0, (c.escCd || 0) > this.tick ? Math.ceil((c.escCd - this.tick) / 60) : 0]),
+        c.hk ? c.hk.st : 0, c.hk ? r1(c.hk.x) : 0, c.hk ? r1(c.hk.y) : 0, c.bl ? (c.bl.gas > 0 ? 1 : 2) : 0, (c.escCd || 0) > this.tick ? Math.ceil((c.escCd - this.tick) / 60) : 0, c.help ? (this.rescuerOf && this.rescuerOf(c) ? 2 : 1) : 0]),
       i: this.items.map(i => [i.id, ITEM_CODES.indexOf(i.type), r1(i.x), r1(i.y), i.fuse, i.stuck ? 1 : 0, r1(i.vx), r1(i.vy), i.landed ? 1 : 0]),
       m: this.monsters.map(m => [m.id, r1(m.x), r1(m.y), m.dir, Math.ceil(m.hp), r1(m.anim), m.bite > 0 ? m.bite : m.wind > 0 ? -m.wind : 0, m.fire > 0 ? 1 : 0]),
-      a: this.animals.map(a => [a.id, ANIMAL_KINDS.indexOf(a.k), r1(a.x), r1(a.y), a.dir, r1(a.anim), (a.flee > 0 ? 1 : 0) | (a.flop ? 2 : 0) | (a.bite > 0 ? 4 : 0) | (a.perch ? 8 : 0)]),
+      a: this.animals.map(a => [a.id, ANIMAL_KINDS.indexOf(a.k), r1(a.x), r1(a.y), a.dir, r1(a.anim), (a.flee > 0 ? 1 : 0) | (a.flop ? 2 : 0) | (a.bite > 0 ? 4 : 0) | (a.perch ? 8 : 0) | (a.gold ? 16 : 0)]),
       s: this.structs.map(s => [s.id, s.type, s.x, s.y, s.team, Math.round(s.prog * 100) / 100, Math.ceil(s.hp), s.fire > 0 ? 1 : 0, s.lv ? 1 : 0]),
       v: this.vehicles.map(v => [v.id, VEH_CODES.indexOf(v.type), r1(v.x), r1(v.y), v.dir, v.team, Math.ceil(v.hp), Math.round(v.ang * 100) / 100, invEnc(v.inv), v.fire > 0 ? 1 : 0, v.pusher, v.cd]),
-      t: this.teams.map(t => [t.money, t.sel, t.elim ? 1 : 0, Object.keys(t.res).join(','), t.rq, Math.round(t.rp * 1000) / 1000, t.ai ? 1 : 0, t.diff || '', t.stat || '', t.helper ? 1 : 0]),
+      t: this.teams.map(t => [t.money, t.sel, t.elim ? 1 : 0, Object.keys(t.res).join(','), t.rq, Math.round(t.rp * 1000) / 1000, t.ai ? 1 : 0, t.diff || '', t.stat || '', t.helper ? 1 : 0, t.hdiff || '']),
       f: fl, b: this.burntNew && this.burntNew.length ? this.burntNew.splice(0) : undefined,
       st: this.state, w: this.winner, tk: this.tick,
     };
@@ -1446,7 +1532,7 @@ class World {
       const fl = a[13] || 0;
       Object.assign(c, { id: a[0], team: a[1], x: a[2], y: a[3], dir: a[4], act: ACTS[a[5]], hp: a[6], anim: a[7], inv: invDec(a[8]), breath: a[9], name: a[10], punch: a[11], digA: a[12],
         armor: fl & 1, knight: fl & 2, block: fl & 4, bowT: fl & 8 ? 1 : 0, fire: fl & 16 ? 1 : 0, blockT: fl & 32 ? 1 : 0, invT: fl & 64 ? 1 : 0, arrows: a[14], inside: a[15], swing: a[16], veh: a[17], slot: a[18] || 0 });
-      c.hk = a[19] ? { st: a[19], x: a[20], y: a[21] } : null; c.bl = a[22] ? { gas: a[22] === 1 ? 1 : 0 } : null; c.escCd = a[23] ? this.tick + a[23] * 60 : 0;
+      c.hk = a[19] ? { st: a[19], x: a[20], y: a[21] } : null; c.bl = a[22] ? { gas: a[22] === 1 ? 1 : 0 } : null; c.escCd = a[23] ? this.tick + a[23] * 60 : 0; c.helpS = a[24] || 0;
       return c;
     });
     const oi = new Map(this.items.map(c => [c.id, c]));
@@ -1454,11 +1540,11 @@ class World {
     const om = new Map(this.monsters.map(c => [c.id, c]));
     this.monsters = s.m.map(a => { const m = om.get(a[0]) || { rx: a[1], ry: a[2] }; Object.assign(m, { id: a[0], x: a[1], y: a[2], dir: a[3], hp: a[4], anim: a[5], bite: a[6] > 0 ? a[6] : 0, wind: a[6] < 0 ? -a[6] : 0, fire: a[7] }); return m; });
     const oa = new Map(this.animals.map(c => [c.id, c]));
-    this.animals = (s.a || []).map(a => { const o = oa.get(a[0]) || { rx: a[2], ry: a[3] }; Object.assign(o, { id: a[0], k: ANIMAL_KINDS[a[1]], x: a[2], y: a[3], dir: a[4], anim: a[5], flee: a[6] & 1, flop: a[6] & 2, bite: a[6] & 4 ? 1 : 0, perch: a[6] & 8 }); return o; });
+    this.animals = (s.a || []).map(a => { const o = oa.get(a[0]) || { rx: a[2], ry: a[3] }; Object.assign(o, { id: a[0], k: ANIMAL_KINDS[a[1]], x: a[2], y: a[3], dir: a[4], anim: a[5], flee: a[6] & 1, flop: a[6] & 2, bite: a[6] & 4 ? 1 : 0, perch: a[6] & 8, gold: a[6] & 16 ? 1 : 0 }); return o; });
     this.structs = s.s.map(a => { const B = BUILD[a[1]]; return { id: a[0], type: a[1], x: a[2], y: a[3], team: a[4], prog: a[5], hp: a[6], fire: a[7], lv: a[8] || 0, w: B.w, h: B.h }; });
     const ov = new Map(this.vehicles.map(c => [c.id, c]));
     this.vehicles = (s.v || []).map(a => { const v = ov.get(a[0]) || { rx: a[2], ry: a[3] }; Object.assign(v, { id: a[0], type: VEH_CODES[a[1]], x: a[2], y: a[3], dir: a[4], team: a[5], hp: a[6], ang: a[7], inv: invDec(a[8]), fire: a[9], pusher: a[10], cd: a[11] }); return v; });
-    s.t.forEach((a, i) => { const t = this.teams[i]; if (t) { t.money = a[0]; t.sel = a[1]; t.elim = !!a[2]; t.res = {}; if (a[3]) for (const k of a[3].split(',')) t.res[k] = 1; t.rq = a[4]; t.rp = a[5]; t.ai = !!a[6]; t.diff = a[7] || ''; t.stat = a[8] || ''; t.helper = !!a[9]; } });
+    s.t.forEach((a, i) => { const t = this.teams[i]; if (t) { t.money = a[0]; t.sel = a[1]; t.elim = !!a[2]; t.res = {}; if (a[3]) for (const k of a[3].split(',')) t.res[k] = 1; t.rq = a[4]; t.rp = a[5]; t.ai = !!a[6]; t.diff = a[7] || ''; t.stat = a[8] || ''; t.helper = !!a[9]; t.hdiff = a[10] || 'normal'; } });
     const fs = [], f = s.f || [];
     for (let k = 0; k < f.length; k += 3) fs.push({ x: f[k], y: f[k + 1], k: f[k + 2] });
     if (s.b) for (const x of s.b) this.markBurnt(x);

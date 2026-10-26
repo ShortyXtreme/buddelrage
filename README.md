@@ -7,13 +7,14 @@ Alles funktioniert im Einzelspieler und online im Mehrspieler (Peer-to-Peer, Hos
 **Online spielen:** https://shortyxtreme.github.io/buddelrage/
 
 ## Einzelspieler
-Seite öffnen (oder lokal `index.html`) → „Einzelspieler“ → Siedeln / Melee / Freies Spiel. Keine Installation nötig.
+Seite öffnen (oder lokal `index.html`) → „Einzelspieler“ → Einstellungen wählen (Name, KI-Helfer, Gegner-Stufe, Kartengröße,
+Goldziel, Optionen) → Modus starten: **Goldrausch**, **Melee · 1 KI** oder **Melee · 2 KI**. Keine Installation nötig.
 Im Einzelspieler startet jedes Team (auch die KI) mit **einem Buddler**; weitere kauft man im Laden. Im Mehrspieler stellt der Host die Startzahl in der Lobby ein (Standard 3).
 Beim ersten Start führt ein kurzes Tutorial durch die Steuerung (in den Einstellungen wiederholbar).
 
 ## KI-Teams, Schwierigkeit und Buddler-Name
-* **Drei Stufen pro KI-Team:** Leicht / Mittel / Schwer – im Einzelspieler-Menü (KI Rot, bei „Melee · 2 KI“ auch KI Grün)
-  und in der Lobby (eine Auswahl pro KI-Gegner, dazu die Stufe für die KI-Übernahme bei Verbindungsabbruch). Die letzte Wahl wird gespeichert.
+* **Drei Stufen pro KI-Team:** Leicht 🌱 / Mittel ⚔️ / Schwer 🔥 – im Einzelspieler-Menü (KI Rot, bei „Melee · 2 KI“ auch KI Grün)
+  und in der Team-Lobby (pro KI-Spieler, dazu die Stufe für die KI-Übernahme bei Verbindungsabbruch). Die letzte Wahl wird gespeichert.
   * *Leicht:* denkt/reagiert langsam, wirft ungenau, blockt selten, kauft wenig, greift erst nach ~5 Minuten und nur bei großer Übermacht an.
   * *Mittel:* ausgewogen; forscht (Waffen, Lore, Wachturm, Burg, Ritter, TNT), baut Wachturm und Burg, nutzt Loren.
   * *Schwer:* schnelle Reaktion, Würfe/Pfeile mit Vorhalt, Schildblock gegen anfliegende Geschosse, effizientere Wirtschaft,
@@ -24,15 +25,35 @@ Beim ersten Start führt ein kurzes Tutorial durch die Steuerung (in den Einstel
   Feuersteine kaufen → forschen → Gebäude bauen → verteidigen/angreifen. Status steht in der Teamübersicht (z. B. „baut Gold ab“, „forscht: Burg“).
 * **Wegsuche:** grobes Navigationsraster (5 px) mit A* über Laufen/Springen/Klettern/Hangeln/Schwimmen/Graben (Erde/Sand kosten mehr,
   Fels/Granit/Lava gesperrt), gestufte Steckenbleib-Erkennung (neu planen → freigraben → Ziel sperren → Treppe nach oben graben).
-* **KI-Helfer:** Schalter „Eigene Buddler arbeiten selbstständig“ – nicht ausgewählte eigene Buddler arbeiten selbst (geben nie Geld aus).
+* **KI-Helfer (Einzel- und Mehrspieler):** Gekaufte Buddler arbeiten als Helfer in deinem Team – Gold abbauen, verkaufen, beim Bauen
+  helfen, verteidigen (wenn bewaffnet), festsitzende Kameraden befreien. Stufe Aus / Leicht / Mittel / Schwer im Einzelspieler-Menü,
+  in der Lobby (Host) und jederzeit im **Pause-Menü**. Helfer geben nie Geld aus. Du steuerst nur deinen eigenen Buddler;
+  mit **Tab** (Gamepad L3, Touch „Buddler“) wechselst du – der vorherige arbeitet dann als Helfer weiter.
+* **Übernahme beim Tod:** Stirbt dein Buddler, übernimmst du automatisch den besten Helfer (nah + gesund, Ritter bevorzugt) –
+  Meldung „Du steuerst jetzt …“, die Kamera springt hin. Verloren ist erst, wenn kein eigener Buddler mehr lebt (und kein Geld für einen neuen).
+* **Inventar gehört jedem Buddler:** Plätze, gewählter Platz, gefangener Wipf, Enterhaken/Ballon bleiben beim Buddler – beim Wechseln,
+  bei der Übernahme, bei KI-Übernahme nach Verbindungsabbruch, beim Host-Wechsel und im Spielstand. Die KI nutzt, was ihr Buddler trägt.
+* **Rettung:** Sitzt ein Buddler (Spieler oder KI) unter der Erde fest, erscheint „Hilfe!“ über ihm, ein freier KI-Teamkollege in der
+  Nähe bekommt die Aufgabe „Rettung“, läuft zum Einstieg und gräbt eine schräge Rampe zu ihm („Hilfe kommt…“). Klappt es nicht
+  rechtzeitig, nimmt ein KI-Buddler den Notausgang; Spieler bekommen den Hinweis auf **N**.
+* **Wehrhaft gegen Tiere:** Die KI flieht vor Haien aus dem Wasser, wehrt sich gegen anstürmende Wildschweine (oder weicht aus,
+  wenn unbewaffnet/schwach) und arbeitet danach weiter; bewaffnete KI jagt gelegentlich ein Wildschwein (Gold) oder schießt
+  einen Gold-Dieb-Vogel ab – ohne endlose Jagden.
 * **Buddler-Name:** im Einzelspieler- und Mehrspieler-Menü einstellbar (max. 16 Zeichen, Sonderzeichen werden entfernt, wird gespeichert),
   steht über dem Buddler und in der Buddlerliste, wird im Mehrspieler synchronisiert. Weitere Buddler heißen „Name 2“, „Name 3“ …
 * Details, Quellen und Testergebnisse: [AI_NOTES.md](AI_NOTES.md).
 
+## Goldziel und Fahrzeuge
+* **Goldrausch-Ziel:** 100 / 200 / 300 (Standard) / 500 / 1000 Geld oder „Eigenes“ (Schieberegler 50–5000) im Einzelspieler-Menü.
+  Fortschritt im HUD („Ziel: 120 / 300“ mit Balken); wird im Spielstand gespeichert. (Im Mehrspieler gibt es keinen Gold-Modus.)
+* **Fahrzeuge (Lore, Katapult, Kanone):** steigen kleine Stufen (bis 5 px) hoch, folgen Hängen und neigen sich dabei, bleiben nicht an
+  einzelnen Pixeln hängen und sinken nicht ein. Zu steile Hänge (über ca. 50°) schaffen sie nicht – dann rollen sie sanft zurück.
+  Auf Gefälle rollen sie leicht von selbst. Gilt beim Schieben durch Spieler und KI, im Mehrspieler synchron.
+
 ## Karten, Burgplatz und Planieren
 * **Kartengröße:** Klein / Mittel (Standard, ca. 20 % größer als früher) / Groß / Riesig, im Einzelspieler-Menü bzw. vom Host in der Lobby
   (wird mit der Spielkonfiguration an alle übertragen und gespeichert). Breite: Faktor 0,85 / 1,2 / 1,6 / 2,2 der Grundbreite, Höhe 580 / 660 / 760 / 880 px.
-  Höhlen, Gold, Gestein, Lava-Höhlen, Seen, Gegenstände, Monster und Startabstände wachsen mit.
+  Höhlen, Gold, Gestein, Lava-Höhlen, Seen, Gegenstände, Tiere und Startabstände wachsen mit.
 * **Garantierter Burgplatz:** Die Karten bleiben zufällig, aber jede Startbasis liegt auf einem ebenen, festen Plateau
   (Hütte in der Mitte, Platz für den Wachturm auf der einen und für die Burg auf der anderen Seite, freier Himmel darüber).
   Das Plateau geht mit sanften Hängen ins Gelände über; darunter liegt eine feste Erdschicht, Seen werden dort nicht angelegt.
@@ -49,7 +70,15 @@ Beim ersten Start führt ein kurzes Tutorial durch die Steuerung (in den Einstel
    und an Mitspieler schicken. Das Passwort am besten auf einem anderen Weg mitteilen.
 3. **Mitspieler** öffnen den Link → das Mehrspielermenü öffnet sich mit eingefügtem Link → Passwort eingeben → „Beitreten“.
    Falsches Passwort: „Falsches Passwort – Beitritt abgelehnt.“
-4. Host stellt KI-Gegner/Optionen ein und startet. Max. 6 Spieler pro Raum, plus KI-Teams.
+4. **Team-Lobby:** Der Host legt 2–6 Teams an (Name und Farbe per Farbtupfer), jeder Spieler wählt sein Team mit **„Beitreten“**,
+   der Host kann Spieler verschieben (↔-Auswahl) und mit **„+ KI“** KI-Spieler in jedes Team setzen (Stufe je KI per Pille, ✕ entfernt).
+   * **KI im eigenen Team ist verbündet:** kein Eigenbeschuss (Waffen, Würfe, Explosionen), gemeinsame Gebäude (Hütte/Burg betreten,
+     verkaufen, kaufen), hilft beim Bauen und Verteidigen. Gegnerische KI greift alle Menschen an.
+   * **Schnellstart:** „🤝 Freunde gegen KI“ (alle Spieler in Team 1, 1–5 KI in Team 2, Stufe wählbar) oder „⚔️ Jeder gegen jeden“.
+   * Startprüfung: mindestens zwei Teams mit Mitgliedern, max. 9 Einheiten (Spieler + KI), jeder Spieler hat ein Team – sonst klare Meldung.
+   * Ein Team gewinnt, wenn alle anderen Teams ausgeschieden sind („Sieg! Euer Team Blau hat gewonnen!“).
+   * Host-Wechsel und KI-Übernahme bei Verbindungsabbruch behalten Teams, Bündnisse und KI-Stufen.
+   Max. 6 Spieler pro Raum.
 
 Technik:
 * Transport: WebRTC-Datenkanäle über [PeerJS](https://peerjs.com) (`js/peerjs.min.js`, MIT, lokal eingebunden).
@@ -76,20 +105,26 @@ für den Mehrspieler wird er nicht mehr gebraucht. Lokal geht auch `python3 -m h
 * **Fahrzeuge** (im Laden [B]): *Lore* sammelt herumliegende Objekte ein (25 Plätze), wird geschoben, an der Basis mit [V] samt Inhalt verkauft; beim Graben mit vollem Inventar landet Gold in einer nahen Lore. *Katapult* (Bogenwurf) und *Kanone* (flach, Steine werden zu Kanonenkugeln) feuern Steine, Gold, Feuersteine, TNT – aus dem Inventar des Schiebenden.
 * **Gebäude** [C] als Baustelle: *Hütte*, *Wachturm* (betretbar, man wirft/schießt von oben, sicher, Heilung), *Burg* (Stein, Heimatbasis mit Laden/Verkauf/Forschung, viel Struktur, schnelle Heilung, gibt Rüstung beim Betreten). Gebäude können brennen (Holz) und gesprengt werden.
 * **Ritter** (Laden): Schwert, Schild, Bogen + 15 Pfeile, Rüstung (−40 % Schaden). Nahkampf automatisch beim Gegeneinanderlaufen oder gezielt mit Linksklick/[F]; Blocken mit Schild (Rechtsklick halten, Schwert/Schild gewählt) gegen Hiebe, Pfeile, Würfe und Bisse von vorne.
-* **Lava**: fließt langsam, verbrennt Buddler/Monster/Fahrzeuge, lässt Feuersteine explodieren, wird mit Wasser zu Fels (Wasser verdampft).
+* **Lava**: fließt langsam, verbrennt Buddler/Tiere/Fahrzeuge, lässt Feuersteine explodieren, wird mit Wasser zu Fels (Wasser verdampft).
 * **Feuer**: Gras, Holzbrücken, Holzhütten, Türme, Katapulte brennen; Feuer breitet sich aus, Explosionen und Lava entzünden, Wasser löscht.
-* **Tag & Nacht** (4 Minuten pro Tag): Himmel, Sterne, Sonne/Mond, Dunkelheit mit Lichtquellen (Buddler, Gebäude, Feuer, Lava, Explosionen). Nachts sind Monster schneller und zahlreicher.
+* **Tag & Nacht** (4 Minuten pro Tag): Himmel, Sterne, Sonne/Mond, Dunkelheit mit Lichtquellen (Buddler, Gebäude, Feuer, Lava, Explosionen).
 * **Gamepad** (Gamepad-API, Standardbelegung) – siehe unten und Hilfe [H].
 
 ## Tiere, Enterhaken, Ballon, Notausgang
 * **Tiere** (Schalter „Tiere“ im Einzelspieler-Menü bzw. in der Lobby, Standard an; Anzahl wächst mit der Kartengröße,
   im Mehrspieler vom Host synchronisiert, fehlende Tiere tauchen nach und nach wieder auf):
-  * **Wipfe** laufen und hüpfen über die Wiesen, fliehen vor Gefahr (Monster, Explosionen, Kämpfe, Feuer). Mit **E** fangen
+  * **Wipfe** laufen und hüpfen über die Wiesen, fliehen vor Gefahr (Wildschweine, Explosionen, Kämpfe, Feuer). Mit **E** fangen
     (belegt einen der 3 Inventarplätze), mit **Q** freilassen, werfen oder an der Hütte für 6 Geld verkaufen.
   * **Vögel** am Himmel (setzen sich auch mal hin, fliegen vor Buddlern weg), **Fische** in Seen, **Fledermäuse** in Höhlen.
+  * **Gold-Diebe:** Selten stürzt ein Vogel auf ein Goldstück, das **offen an der Oberfläche** liegt (freier Himmel, nicht in Tunneln,
+    Höhlen, an/unter Gebäuden, nie aus Inventaren), packt es (Nugget in den Krallen) und fliegt weit weg – „Ein Vogel klaut Gold!“.
+    Trifft man ihn (Pfeil, Wurf, Schlag), lässt er das Gold fallen; sonst legt er es weit entfernt an der Oberfläche ab. Höchstens ein
+    Diebstahl gleichzeitig, mit langer Pause dazwischen. Tipp: Gold schnell aufsammeln oder in die Hütte bringen.
   * **Haie** in tiefem Wasser: jagen schwimmende Buddler und beißen (13 Schaden). Mit Pfeilen, Würfen, Schwert oder Sprengstoff zu besiegen.
-* **Monster** (neu gezeichnet): geduckte, stachelige Bestie mit glühenden Augen, Krallen und Zähnen. Vor dem Biss duckt sie sich
-  und knurrt kurz (rotes „!“ über dem Kopf) – Zeit zum Ausweichen oder Blocken. Verletzte Monster blinken auf und zeigen einen Lebensbalken.
+* **Wildschweine** (ersetzen das frühere grüne Monster; Schalter „Wildschweine“): grasen und wandern friedlich. Nur wenn man sie
+  angreift oder lange in die Enge treibt, stürmen sie höchstens zweimal los (8 Schaden, Stoß) und fliehen dann – sie verfolgen niemanden.
+  Jagbar: ein erlegtes Wildschwein lässt 1–2 Gold fallen. Wenige Tiere (Standard 2), keine nächtlichen Zusatz-Spawns.
+  Alte Spielstände mit Monstern werden beim Laden in Wildschweine umgewandelt.
 * **Enterhaken** (Laden, 15 Geld): **Linksklick** schießt den Haken zum Mauszeiger (Vorschau: grüner Kreis = trifft, rotes X = zu weit).
   Er hält an festem Material (Erde, Fels, Holz …). Am Seil: **W/S** einholen/ablassen, **A/D** schwingen, **Leertaste** abspringen,
   **Linksklick/E** Seil lösen. Bricht der Ankerpunkt weg, fällt man.
@@ -132,8 +167,11 @@ für den Mehrspieler wird er nicht mehr gebraucht. Lokal geht auch `python3 -m h
 * **Kontext-Hinweise** mit Tastensymbolen („E Betreten“, „LMT Werfen“ …), Zielkreuz und **Wurfbahn-Vorschau**; abschaltbar.
 * Laden als Kartenraster (Symbol, Name, Preis, Beschreibung, Besitz, gesperrt mit nötiger Forschung, ausgegraut wenn zu teuer).
 * Hauptmenü mit animierter Spielwelt im Hintergrund, Hilfe mit Reitern Tastatur / Gamepad / Touch / Ziel, Credits.
-* **Musik**: ruhige, prozedural erzeugte Ambient-Musik (WebAudio, keine Dateien); startet nach der ersten Eingabe,
-  leise voreingestellt, eigener Lautstärkeregler und Ein/Aus in den Einstellungen.
+* **Musik**: fröhliche, prozedural erzeugte Musik (WebAudio, keine Dateien) mit leichten Drums, hüpfendem Bass und Melodie-Hooks:
+  Menü (116 BPM), Tag (124 BPM), Nacht (112 BPM, sanfter), Kampf/Spannung (132 BPM, wenn Gegner nah sind oder man getroffen wird).
+  Wechsel immer am Taktanfang. Startet nach der ersten Eingabe, eigener Lautstärkeregler und Ein/Aus in den Einstellungen.
+* **Einstellungs-Bildschirme**: gruppierte Abschnitte mit Symbolen, Stufen als Pillen mit Symbol und Ein-Zeilen-Beschreibung,
+  Schalter, Schieberegler mit Wert, Kartengrößen-Vorschau; per Maus, Touch (große Ziele), Tastatur (Tab, Pfeile, Enter) und Gamepad bedienbar.
 
 ## Steuerung (Tastatur + Maus) – in den Einstellungen frei belegbar
 | Eingabe | Aktion |
@@ -180,6 +218,8 @@ Tippen in die Welt = Aktion zu dieser Stelle, lange drücken = dorthin graben, z
   (Host nur „eingefroren“ statt weg), scheitert die Übernahme und alle landen mit Hinweis im Hauptmenü.
 * Läuft der Host-Tab im Hintergrund, drosselt der Browser das Spiel für alle (wie bisher).
 * Kein Splitscreen (bewusst weggelassen, um die Stabilität nicht zu gefährden).
+* Teams in der Lobby sind Bündnisse: jeder Spieler und jede KI behält eigenes Geld, eigene Buddler und Forschung; Gebäude werden geteilt.
+* Rettung ist „best effort“: in Granit/Fels eingeschlossene Buddler kann auch der Retter nicht freigraben (dann Notausgang).
 * Speichern nur im Einzelspieler; Spielstände liegen im Browser des Geräts (kein Export).
 * Emojis im Chat nutzen die Emoji-Schrift des Systems (Aussehen je nach Gerät).
 * Ohne TURN-Server klappt die P2P-Verbindung bei manchen NAT-/Firewall-Kombinationen nicht. Die PeerJS-Cloud ist ein kostenloser Dienst ohne Garantie.

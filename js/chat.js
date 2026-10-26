@@ -80,6 +80,17 @@ function wheelClose(send) {
 function drawBubbles() {
   const w = G.world, v = R.view; if (!w || !v) return;
   const g = cv.getContext('2d'), now = performance.now();
+  // „Hilfe!“ über festsitzenden Buddlern des eigenen Teams/der Verbündeten
+  for (const c of w.clonks) {
+    const hs = w.remote ? c.helpS : (c.help ? (w.rescuerOf(c) ? 2 : 1) : 0); if (!hs || c.act === 'dead' || c.inside) continue;
+    if (G.myTeam >= 0 && !w.ally(c.team, G.myTeam)) continue;
+    const x = c.rx !== undefined && w.remote ? c.rx : c.x, y = c.ry !== undefined && w.remote ? c.ry : c.y;
+    const sx = (x - v.cx) * v.S, sy = (y - 30 - v.cy) * v.S + Math.sin(now / 200) * 2; if (sx < -60 || sx > cv.width + 60 || sy < -30 || sy > cv.height + 30) continue;
+    const txt = hs === 2 ? 'Hilfe kommt…' : 'Hilfe!';
+    g.save(); g.font = '700 12px Inter, system-ui, sans-serif'; const tw = g.measureText(txt).width + 12;
+    g.fillStyle = hs === 2 ? 'rgba(80,200,120,.92)' : 'rgba(240,80,60,.92)'; roundRect(g, sx - tw / 2, sy - 18, tw, 18, 7); g.fill();
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, sx, sy - 8.5); g.restore();
+  }
   for (const k in CHAT.bubbles) {
     const B = CHAT.bubbles[k]; if (now > B.until) { delete CHAT.bubbles[k]; continue; }
     const t = w.teams[k]; if (!t) continue;

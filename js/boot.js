@@ -56,13 +56,15 @@ for (const sel of document.querySelectorAll('.diffsel')) sel.innerHTML = AI_LEVE
 const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
 $('spcname').value = $('mpcname').value = cleanName(lsGet('br_cname', ''), '');
 $('spdiff1').value = lsGet('br_diff1', 'normal'); $('spdiff2').value = lsGet('br_diff2', 'normal'); $('opttakeover').value = lsGet('br_takeover', 'normal');
-$('opthelper').checked = $('opthelper2').checked = lsGet('br_helper', '0') === '1';
+for (const id of ['opthelper', 'opthelper2']) { $(id).innerHTML = '<option value="off">Aus</option>' + AI_LEVELS.map(k => '<option value="' + k + '">' + aiDiffName(k) + '</option>').join(''); const v = lsGet('br_helperdiff', 'normal'); $(id).value = v === 'off' || AI_DIFF[v] ? v : 'normal'; }
 for (const [id, k] of [['spsize', 'br_size'], ['optsize', 'br_size2']]) { const v = lsGet(k, 'mittel'); $(id).value = MAP_SIZES[v] ? v : 'mittel'; $(id).addEventListener('change', () => { try { localStorage.setItem(k, $(id).value); } catch (e) {} }); }
 for (const id of ['spcname', 'mpcname']) $(id).addEventListener('change', () => { const n = cleanName($(id).value, ''); $(id).value = n; $('spcname').value = $('mpcname').value = n; localStorage.setItem('br_cname', n); });
 for (const [id, k] of [['spdiff1', 'br_diff1'], ['spdiff2', 'br_diff2'], ['opttakeover', 'br_takeover']]) $(id).addEventListener('change', () => localStorage.setItem(k, $(id).value));
-for (const id of ['opthelper', 'opthelper2']) $(id).addEventListener('change', () => { localStorage.setItem('br_helper', $(id).checked ? '1' : '0'); $('opthelper').checked = $('opthelper2').checked = $(id).checked; });
+for (const id of ['opthelper', 'opthelper2']) $(id).addEventListener('change', () => { try { localStorage.setItem('br_helperdiff', $(id).value); } catch (e) {} $('opthelper').value = $('opthelper2').value = $(id).value; });
+$('coopdiff').innerHTML = AI_LEVELS.map(k => '<option value="' + k + '">' + aiDiffName(k) + '</option>').join(''); $('coopdiff').value = 'normal'; setupLobby();
+$('pausehelper').innerHTML = $('opthelper').innerHTML; $('pausehelper').addEventListener('change', () => { act('helper', $('pausehelper').value); });
 for (const id of ['optanimals', 'optanimals2']) { $(id).checked = lsGet('br_animals', '1') === '1'; $(id).addEventListener('change', () => { localStorage.setItem('br_animals', $(id).checked ? '1' : '0'); $('optanimals').checked = $('optanimals2').checked = $(id).checked; }); }
-$('optai').addEventListener('change', renderAiDiffs); renderAiDiffs();
+setupFancyUI();
 fillIcons(); renderDock(); setupTouch();
 for (const [id, ic] of [['btnsettle', 'goldnug'], ['btnmelee', 'sword'], ['btnmelee3', 'swords']]) { const m = $(id).querySelector('.mode-ico'); if (m) m.innerHTML = ICONS[ic]; }
 hideAll(); $('loading').style.display = 'flex';

@@ -15,7 +15,7 @@ const NETCFG = Object.assign({
   maxPlayers: 6
 }, window.BR_NETCFG || {}); // eigene TURN-Server o. Ä. können per window.BR_NETCFG = { iceServers: [...] } ergänzt werden
 const PEER_PREFIX = 'buddelrage-v1-';
-const HOST_TYPES = new Set(['start', 'map', 'snap', 'chunks', 'chat', 'mig']);
+const HOST_TYPES = new Set(['start', 'map', 'snap', 'chunks', 'chat', 'mig', 'lobby']);
 const CHUNK = 16000;
 
 // ---------- Hilfsfunktionen: Zufall & SHA-256 ----------
@@ -161,6 +161,7 @@ async function hostOnMsg(c, m) {
   }
   if (m.t === 'ping') return;
   if (m.t === 'in') { m.from = c.id; onNet(m); }
+  else if (m.t === 'lteam') onNet({ t: 'lteamin', from: c.id, team: m.team | 0 });
   else if (m.t === 'chat') onNet({ t: 'chatin', from: c.id, s: typeof m.s === 'string' ? m.s.slice(0, 200) : '', e: m.e });
 }
 function hostSend(o) {
@@ -196,7 +197,7 @@ async function p2pJoin(secret, name, pw, onErr, cname, old) {
   });
   peer.on('error', e => { if (peer === P2P.peer && !gotErr) onErr(peerErrText(e)); });
 }
-function clientSend(o) { if (o.t === 'in' || o.t === 'chat') pSend(P2P.hostConn, JSON.stringify(o)); }
+function clientSend(o) { if (o.t === 'in' || o.t === 'chat' || o.t === 'lteam') pSend(P2P.hostConn, JSON.stringify(o)); }
 // Host-Wechsel: dieser Client übernimmt die Raum-ID des alten Hosts (wird frei, sobald dessen Browser getrennt ist)
 async function p2pPromote(myId, nextId, onOpen, onFail, maxMs) {
   const K = MIGKEY; if (!K.secret || !K.key) { onFail('keine Zugangsdaten'); return; }

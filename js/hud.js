@@ -87,7 +87,7 @@ function setHTML(id, html) { if (HUD.sig[id] === html) return; HUD.sig[id] = htm
 const ACT_DE = { walk: 'Läuft', jump: 'Springt', climb: 'Klettert', hangle: 'Hangelt', dig: 'Gräbt', swim: 'Schwimmt', fight: 'Kämpft', tumble: 'Taumelt', dead: 'Tot', push: 'Schiebt', rope: 'Am Seil', float: 'Schwebt' };
 function myClonk() { const w = G.world; if (!w || G.myTeam < 0) return null; const t = w.teams[G.myTeam]; return t ? w.clonks.find(o => o.id === t.sel && o.act !== 'dead') : null; }
 function nearVehicle(w, c) { let v = null; for (const o of w.vehicles) if (!o.pusher && Math.abs(o.x - c.x) < VEH[o.type].w / 2 + 5 && Math.abs(o.y - c.y) < 8 && (!v || Math.abs(o.x - c.x) < Math.abs(v.x - c.x))) v = o; return v; }
-function nearDoor(w, c) { return w.structs.find(s => s.team === c.team && s.prog >= 1 && Math.abs(c.x - s.x) < Math.min(14, s.w / 2) && c.y > s.y - 10 && c.y < s.y + 5); }
+function nearDoor(w, c) { return w.structs.find(s => w.ally(s.team, c.team) && !s.remove && s.prog >= 1 && Math.abs(c.x - s.x) < Math.min(14, s.w / 2) && c.y > s.y - 10 && c.y < s.y + 5); }
 function nearItem(w, c) { let best = null, bd = 14; for (const it of w.items) { if (it.fuse > 0 || it.type === 'arrow' || it.stuck) continue; const d = Math.hypot(it.x - c.x, (it.y - c.y + 4) * 1.5); if (d < bd) { bd = d; best = it; } } return best; }
 function interactTarget(w, c) {
   if (c.inside || c.act !== 'walk' && c.act !== 'fight') return null;
@@ -147,7 +147,7 @@ function updateHUD() {
   $('spectate').style.display = G.spectate ? 'block' : 'none';
   if (me) {
     if (HUD.money !== me.money) { if (HUD.money !== null && me.money > HUD.money) { const m = $('h-money').parentNode; m.classList.remove('bump'); void m.offsetWidth; m.classList.add('bump'); } HUD.money = me.money; $('h-money').textContent = me.money; }
-    setHTML('h-team', escapeHtml(me.name) + (w.mode === 'settle' ? ' · Ziel: ' + w.goal + ' Geld' : ' · Melee'));
+    setHTML('h-team', escapeHtml(me.name) + (w.cfg.sides && w.cfg.sides.length ? ' · ' + escapeHtml(w.sideName(me.id)) : '') + (w.mode === 'settle' ? ' · Ziel: ' + Math.min(me.money, w.goal) + ' / ' + w.goal + '<span class="goalbar" title="Fortschritt zum Goldziel"><i style="width:' + Math.min(100, me.money / w.goal * 100).toFixed(1) + '%"></i></span>' : ' · Melee'));
     if (me.rq) { $('h-res').style.display = 'block'; setHTML('h-resname', RES_BY[me.rq].name); setHTML('h-respct', Math.floor(me.rp * 100) + '%'); $('h-resfill').style.width = (me.rp * 100).toFixed(1) + '%'; } else $('h-res').style.display = 'none';
     // Buddlerliste
     const own = w.clonks.filter(c => c.team === me.id && c.act !== 'dead');
@@ -159,7 +159,7 @@ function updateHUD() {
   // Teams
   if (w.teams.length > 1) setHTML('hud-teams', w.teams.map(t => {
     const alive = w.clonks.filter(c => c.team === t.id && c.act !== 'dead').length;
-    const tag = t.ai ? '<span class="dtag d-' + (t.diff || 'normal') + '">KI · ' + aiDiffName(t.diff) + '</span>' : t.helper ? '<span class="dtag d-help">Helfer</span>' : '';
+    const tag = (t.id !== G.myTeam && G.myTeam >= 0 && w.ally(t.id, G.myTeam) ? '<span class="dtag d-ally" title="Verbündet">🤝</span>' : '') + (t.ai ? '<span class="dtag d-' + (t.diff || 'normal') + '">KI · ' + aiDiffName(t.diff) + '</span>' : t.helper ? '<span class="dtag d-help">Helfer · ' + aiDiffName(t.hdiff) + '</span>' : '');
     const sub = t.ai && !t.elim && t.stat ? '<div class="tstat">' + escapeHtml(t.stat) + '</div>' : '';
     return '<div class="trow' + (t.elim ? ' el' : '') + '"><div class="tline"><i style="background:' + t.color + '"></i>' + escapeHtml(t.name.slice(0, 14)) + tag + '<span class="muted" style="margin-left:auto">' + (t.elim ? '✝' : alive) + '</span></div>' + sub + '</div>';
   }).join('')); else $('hud-teams').style.display = 'none';
@@ -171,7 +171,7 @@ function updateHUD() {
     $('h-hp').style.width = hp + '%'; setHTML('h-hpt', Math.ceil(hp)); bar.className = 'bar hp' + (hp < 25 ? ' low' : hp < 50 ? ' mid' : '');
     $('h-airrow').style.display = c.breath < 99 ? 'flex' : 'none'; $('h-air').style.width = c.breath + '%';
     const sl = actIdx(c), hb = [];
-    for (let s = 0; s < INV_MAX; s++) { const it = c.inv[s]; hb.push('<div class="slot' + (it && s === sl ? ' sel' : '') + (it ? '' : ' empty') + '" data-s="' + s + '">' + bindCap('slot' + (s + 1)) + (it ? '<img src="' + itemIcon(it) + '" alt="">' : '') + '<span class="nm">' + (it ? ITEMS[it].name : 'leer') + '</span></div>'); }
+    for (let s = 0; s < INV_MAX; s++) { const it = c.inv[s]; hb.push('<div class="slot' + (it && s === sl ? ' sel' : '') + (it ? '' : ' empty') + '" data-s="' + s + '">' + bindCap('slot' + (s + 1)) + (it ? '<img src="' + itemIcon(it) + '" alt="">' : '') + '<span class="nm">' + (it ? (ITEMS[it] ? ITEMS[it].name : it) : 'leer') + '</span></div>'); }
     const hbs = hb.join('');
     if (HUD.sig.hb !== hbs) { HUD.sig.hb = hbs; $('hotbar').innerHTML = hbs; for (const el of $('hotbar').querySelectorAll('.slot')) el.onclick = e => { e.stopPropagation(); act('slot', +el.dataset.s); }; }
     const ex = []; if (c.knight) ex.push('<span>⚔ Ritter</span>'); if (c.armor) ex.push('<span>🛡 Rüstung</span>'); if (c.arrows || c.inv.includes('bow')) ex.push('<span>➶ Pfeile: ' + c.arrows + '</span>'); if (c.fire) ex.push('<span style="color:#ff9a6a">Brennt! Ins Wasser!</span>');

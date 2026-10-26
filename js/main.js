@@ -49,7 +49,7 @@ function handleEvents(evs) {
 }
 
 // ---------- Spielstart ----------
-// Kartengröße anwenden: Breite skaliert, Höhe je Stufe; Monster mitwachsen
+// Kartengröße anwenden: Breite skaliert, Höhe je Stufe; Anzahl Wildschweine wächst mit
 function applySize(cfg, size) { const d = mapDims(cfg.W, size); cfg.W = d.W; cfg.H = d.H; cfg.size = d.size; if (cfg.monsterCount) cfg.monsterCount = Math.max(1, Math.round(cfg.monsterCount * MAP_SIZES[d.size].f)); return cfg; }
 // Karten-Übertragung: RLE + Deflate (CompressionStream), Fallback unkomprimiert; Versand in 16-KB-Stücken (net.js)
 async function deflateB64(str) {
@@ -70,12 +70,12 @@ function sendMap(to) {
 function newSeed() { return (Math.random() * 1e9) | 0; }
 function startSingle(mode) {
   const cfg = mode === 'settle'
-    ? { mode, W: 1800, H: 640, seed: newSeed(), teams: [{ name: 'Siedler' }], clonks: 1, money: 40, goal: 300, monsters: true, monsterCount: 4 }
+    ? { mode, W: 1800, H: 640, seed: newSeed(), teams: [{ name: 'Siedler' }], clonks: 1, money: 40, goal: spGoal(), monsters: $('optmon1').checked, monsterCount: 2 }
     : { mode: 'melee', W: 1700, H: 620, seed: newSeed(), teams: [{ name: 'Du' }, { name: 'KI Rot', ai: true, diff: $('spdiff1').value }], clonks: 1, money: 40, monsters: false };
   if (mode === 'melee3') { cfg.teams.push({ name: 'KI Grün', ai: true, diff: $('spdiff2').value }); cfg.W = 2300; }
   applySize(cfg, $('spsize').value);
   const cn = cleanName($('spcname').value, ''); $('spcname').value = cn; try { localStorage.setItem('br_cname', cn); } catch (e) {}
-  cfg.teams[0].cname = cn; cfg.teams[0].helper = $('opthelper').checked;
+  cfg.teams[0].cname = cn; const hv = $('opthelper').value; cfg.teams[0].helper = hv !== 'off'; cfg.teams[0].hdiff = hv !== 'off' ? hv : 'normal';
   cfg.allResearch = $('optallres').checked; cfg.daynight = $('optday').checked; cfg.lava = true; cfg.animals = $('optanimals').checked;
   if (mode !== 'settle') cfg.money = cfg.allResearch ? 120 : 60;
   G.role = 'single'; G.myTeam = 0; G.spectate = false; G.spMode = mode;
@@ -87,7 +87,7 @@ function launchWorld(cfg, remote, map, prebuilt) {
   const w = prebuilt || new World(cfg, remote);
   if (prebuilt) { }
   else if (!remote) w.setup();
-  else { w.teams = cfg.teams.map((tc, i) => ({ id: i, name: cleanName(tc.name, 'Team'), color: tc.color || TEAM_COLORS[i % 6], ai: !!tc.ai, diff: AI_DIFF[tc.diff] ? tc.diff : 'normal', helper: !tc.ai && !!tc.helper, stat: '', money: 0, sel: -1, elim: false, keys: {}, res: {}, rq: '', rp: 0 })); if (map) w.loadMap(map); }
+  else { w.teams = cfg.teams.map((tc, i) => ({ id: i, side: Number.isInteger(tc.side) ? tc.side : i, hdiff: AI_DIFF[tc.hdiff] ? tc.hdiff : 'normal', name: cleanName(tc.name, 'Team'), color: tc.color || TEAM_COLORS[i % 6], ai: !!tc.ai, diff: AI_DIFF[tc.diff] ? tc.diff : 'normal', helper: !tc.ai && !!tc.helper, stat: '', money: 0, sel: -1, elim: false, keys: {}, res: {}, rq: '', rp: 0 })); if (map) w.loadMap(map); }
   G.world = w; R.attach(w); R.miniDom = $('minimap'); R.resize();
   const me = w.teams[G.myTeam]; const f = w.clonks.find(c => me && c.id === me.sel) || w.clonks[0];
   if (f) { R.cam.x = f.x - cv.width / R.scale / 2; R.cam.y = f.y - cv.height / R.scale / 2; }
@@ -145,8 +145,11 @@ function onNet(m) {
     case 'err': $('mperr').textContent = m.s; break;
     case 'joined': net.id = m.id; net.code = m.code; net.host = m.host; net.players = m.players; net.hostId = m.hostId; net.link = m.link || null; $('mpbusy').style.display = 'none'; $('mperr').textContent = '';
       if (G.migrating && G.world) { G.migrating.joined = true; migBanner('Verbunden – Spielstand wird übertragen…'); break; }
+      if (net.host) { LB = lbDefault(); net.lobby = null; } else net.lobby = null;
       showLobby(); break;
     case 'players': net.players = m.players; net.hostId = m.hostId; if (!G.world && !G.migrating) showLobby(); break;
+    case 'lobby': if (!net.host && m.L && Array.isArray(m.L.teams)) { net.lobby = m.L; if (!G.world && $('lobby').style.display === 'flex') renderLobbyTeams(); } break;
+    case 'lteamin': lobbyJoinIn(m.from, m.team); break;
     case 'chat': if (G.role === 'client') chatDeliver(m); break;
     case 'chatin': if (G.role === 'host') hostChatIn(m.from, m.s, m.e); break;
     case 'mig': if (G.role === 'client' && m.st && Array.isArray(m.order)) G.mig = { st: m.st, order: m.order, hostId: m.hostId, at: Date.now() }; break;
@@ -177,33 +180,11 @@ function showLobby() {
   showScreen('lobby');
   $('invitebox').style.display = net.host ? 'block' : 'none'; $('clientinfo').style.display = net.host ? 'none' : 'block';
   if (net.host) $('invitelink').value = net.link || '';
-  $('lobbyplayers').innerHTML = net.players.map((p, i) => '<li><i style="background:' + TEAM_COLORS[i % 6] + '"></i>' + escapeHtml(p.name) + (p.cname ? ' <span class="muted">· Buddler „' + escapeHtml(p.cname) + '“</span>' : '') + '<small>' + (p.id === net.hostId ? 'Host' : '') + (p.id === net.id ? (p.id === net.hostId ? ' · ' : '') + 'du' : '') + '</small></li>').join('');
-  $('hostopts').style.display = net.host ? 'block' : 'none'; renderAiDiffs();
+  $('hostopts').style.display = net.host ? 'block' : 'none';
+  if (net.host) lobbySync(); else renderLobbyTeams();
   $('waithost').style.display = net.host ? 'none' : 'block';
 }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
-// Lobby: pro KI-Gegner eine Schwierigkeitsauswahl
-function renderAiDiffs() {
-  const box = $('aidiffs'); if (!box) return; const n = +$('optai').value;
-  const old = [...box.querySelectorAll('select')].map(s => s.value);
-  let saved = []; try { saved = JSON.parse(localStorage.getItem('br_lobbydiffs') || '[]'); } catch (e) {}
-  box.innerHTML = Array.from({ length: n }, (_, k) => '<label class="field inline">KI ' + (k + 1) + ' <select data-k="' + k + '">' + AI_LEVELS.map(l => '<option value="' + l + '">' + aiDiffName(l) + '</option>').join('') + '</select></label>').join('');
-  box.querySelectorAll('select').forEach((s, k) => { s.value = old[k] || saved[k] || 'normal'; s.onchange = () => { try { localStorage.setItem('br_lobbydiffs', JSON.stringify([...box.querySelectorAll('select')].map(x => x.value))); } catch (e) {} }; });
-}
-function hostStart() {
-  const ai = +$('optai').value, cl = +$('optclonks').value, mon = $('optmon').checked;
-  const diffs = [...$('aidiffs').querySelectorAll('select')].map(s => s.value), helper = $('opthelper2').checked;
-  const teams = net.players.map((p, i) => ({ name: p.name, pid: p.id, color: TEAM_COLORS[i % 6], cname: p.cname || '', helper }));
-  for (let k = 0; k < ai; k++) teams.push({ name: 'KI ' + (k + 1), ai: true, diff: diffs[k] || 'normal', color: TEAM_COLORS[teams.length % 6] });
-  if (teams.length < 2) { alert('Mindestens 2 Teams nötig (KI-Gegner hinzufügen oder auf Mitspieler warten).'); return; }
-  const allRes = $('optallres2').checked;
-  const cfg = { mode: 'melee', W: 1100 + teams.length * 380, H: 620, seed: newSeed(), teams, clonks: cl, money: allRes ? 120 : 60, monsters: mon, monsterCount: 3, allResearch: allRes, daynight: $('optday2').checked, animals: $('optanimals2').checked, lava: true, takeover: $('opttakeover').value };
-  applySize(cfg, $('optsize').value);
-  G.role = 'host'; G.myTeam = teams.findIndex(t => t.pid === net.id); G.spectate = false;
-  launchWorld(cfg, false);
-  netSend({ t: 'start', cfg }); sendMap();
-  G.world.netDirty.clear(); G.chunkSent = new Map();
-}
 // ---------- Host-Wechsel (best effort) ----------
 function humanToAi(t) { if (!t.wasHuman) { t.wasHuman = true; t.helperWas = !!t.helper; } G.world.aiTakeover(t, G.cfg.takeover || 'normal'); }
 function restoreHuman(t) {
@@ -284,7 +265,7 @@ function checkOver() {
   const w = G.world; if (w.state !== 'over' || $('gameover').style.display === 'flex') return;
   let txt, win;
   if (w.mode === 'settle') { win = w.winner === 0; txt = win ? 'Gewonnen! Du hast ' + w.goal + ' Geld verdient.' : 'Verloren! Alle Buddler sind tot.'; }
-  else { win = w.winner === G.myTeam; txt = w.winner < 0 ? 'Unentschieden!' : (win ? 'Sieg! Dein Team hat überlebt!' : 'Team ' + w.teams[w.winner].name + ' gewinnt!'); }
+  else { win = w.winner >= 0 && G.myTeam >= 0 && w.ally(w.winner, G.myTeam); const multi = w.teams.some(t => t.id !== G.myTeam && G.myTeam >= 0 && w.ally(t.id, G.myTeam)); txt = w.winner < 0 ? 'Unentschieden!' : (win ? (multi ? 'Sieg! Euer ' + w.sideTitle(G.myTeam) + ' hat gewonnen!' : 'Sieg! Dein Team hat überlebt!') : w.sideTitle(w.winner) + ' gewinnt!'); }
   closeAllMenus(); releaseAll();
   $('goicon').innerHTML = ICONS[win ? 'trophy' : 'skull']; $('goicon').style.color = win ? 'var(--acc)' : 'var(--bad)';
   $('gameovertext').textContent = txt;

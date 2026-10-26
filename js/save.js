@@ -1,10 +1,10 @@
 // BuddelRage – Spielstände (Einzelspieler, localStorage) und Welt-Serialisierung (auch für den Host-Wechsel im Mehrspieler)
 'use strict';
-const SAVE_SLOTS = 3, SAVE_VER = 1;
+const SAVE_SLOTS = 3, SAVE_VER = 2; // v2: Wildschweine statt Monster, Team-Seiten, Helfer-Stufe (v1 wird beim Laden umgewandelt)
 // nicht speicherbare/flüchtige Felder: KI-Gedächtnis (wird neu aufgebaut), Interpolation, Caches
 function saveReplacer(k, v) {
   if ((k === 'ai' || k === 'brain' || k === 'keys' || k === 'aiKeys') && v && typeof v === 'object') return undefined;
-  if (k === 'rx' || k === 'ry' || k === 'spots' || k === 'spotsT' || k === 'hpSeen' || k === 'flashT') return undefined;
+  if (k === 'rx' || k === 'ry' || k === 'spots' || k === 'spotsT' || k === 'hpSeen' || k === 'flashT' || k === 'yS' || k === 'tiltR' || k === 'animSeen') return undefined;
   return v;
 }
 function serializeWorld(w, withMap) {
@@ -32,6 +32,13 @@ function deserializeWorld(S, matSrc) {
   w.fireSet = new Set(w.fires.map(f => (f.y >> 1) * 4096 + (f.x >> 1)));
   w.recolorAll(); w.activeNext.fill(1);
   return w;
+}
+// Alte Spielstände (v1): Monster werden zu Wildschweinen (weniger, friedlich), Helfer bekommen eine Stufe
+function upgradeSaveV1(S) {
+  const cfg = S.cfg; if (cfg.monsterCount) cfg.monsterCount = Math.max(1, Math.round(cfg.monsterCount / 2));
+  S.monsters = (S.monsters || []).slice(0, cfg.monsterCount || 2).map(m => Object.assign({}, m, { k: 'boar', hp: Math.min(40, m.hp || 40), bite: 0, wind: 0, chg: 0, flee: 0, cd: 0, act: 'walk' }));
+  for (const t of S.teams || []) { if (!t.hdiff) t.hdiff = 'normal'; if (!Number.isInteger(t.side)) t.side = t.id; }
+  S.v = SAVE_VER;
 }
 // Host-Wechsel: letzter vollständiger Stand des alten Hosts + aktuelle Positionen aus den Schnappschüssen des Clients
 function mergeLive(w, L) {
@@ -84,7 +91,8 @@ async function loadGame(n) {
   const rec = saveMeta(n); if (!rec) { toast('Platz ' + n + ' ist leer.', 'warn'); return false; }
   let S;
   try { S = JSON.parse(rec.z ? await inflateB64(rec.z) : rec.raw); } catch (e) { toast('Spielstand beschädigt – konnte nicht geladen werden.', 'warn'); return false; }
-  if (!S || S.v !== SAVE_VER || !S.cfg) { toast('Spielstand ist nicht kompatibel.', 'warn'); return false; }
+  if (!S || !(S.v === 1 || S.v === SAVE_VER) || !S.cfg) { toast('Spielstand ist nicht kompatibel.', 'warn'); return false; }
+  if (S.v === 1) upgradeSaveV1(S);
   p2pClose(); net.link = null; net.code = null;
   const w = deserializeWorld(S);
   G.role = 'single'; G.myTeam = rec.my || 0; G.spectate = false; G.spMode = rec.mode || 'melee';

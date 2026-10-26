@@ -77,26 +77,40 @@
 </div>
 
 <div id="spmenu" class="screen menu-screen">
-  <div class="panel wide">
-    <div class="phead"><h2>Einzelspieler</h2><button class="x" data-back>✕</button></div>
+  <div class="panel wide setup">
+    <div class="phead"><div><h2>Einzelspieler</h2><div class="sub">Einstellungen wählen – dann unten einen Modus starten</div></div><button class="x" data-back aria-label="Zurück">✕</button></div>
+    <div class="setgrid">
+      <section class="sec2"><h4><span class="sic">🧑</span>Dein Buddler</h4>
+        <label class="field">Name<input id="spcname" maxlength="16" placeholder="z. B. Hans" autocomplete="off"></label>
+        <div class="orow"><span class="olbl">KI-Helfer</span><select id="opthelper" aria-label="KI-Helfer"></select></div>
+        <p class="hint">Gekaufte Buddler arbeiten als Helfer (abbauen, verkaufen, bauen, verteidigen). Stirbt dein Buddler, übernimmst du automatisch den besten Helfer.</p>
+      </section>
+      <section class="sec2"><h4><span class="sic">🤖</span>Gegner (Melee)</h4>
+        <div class="orow"><span class="olbl">KI Rot</span><select id="spdiff1" class="diffsel" aria-label="KI Rot"></select></div>
+        <div class="orow" id="rowdiff2"><span class="olbl">KI Grün <small>nur „Melee · 2 KI“</small></span><select id="spdiff2" class="diffsel" aria-label="KI Grün"></select></div>
+      </section>
+      <section class="sec2"><h4><span class="sic">🗺️</span>Karte</h4>
+        <div class="orow"><span class="olbl">Kartengröße</span><select id="spsize" class="sizesel" aria-label="Kartengröße"><option value="klein">Klein</option><option value="mittel" selected>Mittel</option><option value="gross">Groß</option><option value="riesig">Riesig</option></select></div>
+      </section>
+      <section class="sec2"><h4><span class="sic">🏆</span>Goldrausch-Ziel</h4>
+        <div class="orow"><span class="olbl">Geld zum Sieg</span><select id="spgoal" aria-label="Goldziel"><option value="100">100</option><option value="200">200</option><option value="300" selected>300</option><option value="500">500</option><option value="1000">1000</option><option value="custom">Eigenes</option></select></div>
+        <div class="orow" id="goalcrow"><span class="olbl">Eigenes Ziel</span><div class="slider"><input type="range" id="spgoalc" min="50" max="5000" step="50" value="750" aria-label="Eigenes Goldziel"><output id="spgoalv">750</output></div></div>
+      </section>
+      <section class="sec2 full"><h4><span class="sic">⚙️</span>Optionen</h4>
+        <div class="toggles left">
+          <label class="switch"><input type="checkbox" id="optallres"><i></i><span>Alles erforscht<small>schneller Start</small></span></label>
+          <label class="switch"><input type="checkbox" id="optday" checked><i></i><span>Tag &amp; Nacht<small>dunkle Nächte, Fackeln</small></span></label>
+          <label class="switch"><input type="checkbox" id="optanimals" checked><i></i><span>Tiere<small>Wipfe, Vögel, Fische, Haie …</small></span></label>
+          <label class="switch"><input type="checkbox" id="optmon1" checked><i></i><span>Wildschweine<small>nur im Goldrausch, jagbar</small></span></label>
+        </div>
+      </section>
+    </div>
+    <h3 class="starth">Modus starten</h3>
     <div class="cards three">
-      <div class="card opt mode" id="btnsettle"><div class="mode-ico gold"></div><h3>Goldrausch</h3><p>Siedeln: Grabe Gold, verkaufe es und erreiche 300 Geld. Monster lauern.</p><span class="tag">Entspannt</span></div>
-      <div class="card opt mode" id="btnmelee"><div class="mode-ico sword"></div><h3>Melee · 1 KI</h3><p>Zwei Teams, eine Karte. Das letzte überlebende Team gewinnt.</p><span class="tag">Klassisch</span></div>
-      <div class="card opt mode" id="btnmelee3"><div class="mode-ico swords"></div><h3>Melee · 2 KI</h3><p>Jeder gegen jeden auf einer größeren Karte mit drei Teams.</p><span class="tag hot">Chaos</span></div>
+      <div class="card opt mode" id="btnsettle" tabindex="0" role="button"><div class="mode-ico gold"></div><h3>Goldrausch</h3><p>Siedeln: Grabe Gold, verkaufe es und erreiche <b id="goaltxt">300</b> Geld.</p><span class="tag">Entspannt</span></div>
+      <div class="card opt mode" id="btnmelee" tabindex="0" role="button"><div class="mode-ico sword"></div><h3>Melee · 1 KI</h3><p>Zwei Teams, eine Karte. Das letzte überlebende Team gewinnt.</p><span class="tag">Klassisch</span></div>
+      <div class="card opt mode" id="btnmelee3" tabindex="0" role="button"><div class="mode-ico swords"></div><h3>Melee · 2 KI</h3><p>Jeder gegen jeden auf einer größeren Karte mit drei Teams.</p><span class="tag hot">Chaos</span></div>
     </div>
-    <div class="inrow spopts">
-      <label class="field inline">Name deines Buddlers<input id="spcname" maxlength="16" placeholder="z. B. Hans" autocomplete="off"></label>
-      <label class="field inline">KI Rot <select id="spdiff1" class="diffsel"></select></label>
-      <label class="field inline">Kartengröße <select id="spsize" class="sizesel"><option value="klein">Klein</option><option value="mittel" selected>Mittel</option><option value="gross">Groß</option><option value="riesig">Riesig</option></select></label>
-      <label class="field inline" title="Nur bei Melee · 2 KI">KI Grün <small class="muted">(2 KI)</small> <select id="spdiff2" class="diffsel"></select></label>
-    </div>
-    <div class="toggles">
-      <label class="switch"><input type="checkbox" id="opthelper"><i></i> Eigene Buddler arbeiten selbstständig (KI-Helfer)</label>
-      <label class="switch"><input type="checkbox" id="optallres"><i></i> Alles erforscht (schneller Start)</label>
-      <label class="switch"><input type="checkbox" id="optday" checked><i></i> Tag &amp; Nacht</label>
-      <label class="switch"><input type="checkbox" id="optanimals" checked><i></i> Tiere (Wipfe, Vögel, Fische, Fledermäuse, Haie)</label>
-    </div>
-    <div class="muted small center">Du startest mit einem Buddler – weitere gibt es im Laden.</div>
   </div>
 </div>
 
@@ -121,22 +135,39 @@
 </div>
 
 <div id="lobby" class="screen menu-screen">
-  <div class="panel">
+  <div class="panel wide setup">
     <div class="phead"><h2>Lobby</h2><span class="pill">Privatraum</span></div>
     <div id="invitebox"><div class="muted small">Einladungslink an Mitspieler schicken – das Passwort separat mitteilen:</div>
       <div class="inrow"><input id="invitelink" readonly onclick="this.select()"><button id="btncopy" class="btn">Link kopieren</button></div></div>
     <div id="clientinfo" style="display:none" class="muted">Verbunden mit dem Host.</div>
     <h3>Spieler</h3>
     <ul id="lobbyplayers" class="players"></ul>
+    <h3>Teams <span class="muted small">– klicke „Beitreten“, um das Team zu wechseln</span></h3>
+    <div id="lobbyteams" class="lteams"></div>
+    <div id="lobbyhostbar">
+      <section class="sec2 qs"><h4><span class="sic">⚡</span>Schnellstart</h4>
+        <div class="orow"><button id="btncoop" class="btn sm primary" title="Alle Spieler in Team 1, KI-Gegner in Team 2">🤝 Freunde gegen KI</button><span class="olbl">mit</span><select id="coopn" aria-label="Anzahl KI-Gegner"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select><span class="olbl">KI</span></div>
+        <div class="orow"><span class="olbl">Stufe</span><select id="coopdiff" aria-label="Stufe der KI-Gegner"></select></div>
+        <div class="orow"><button id="btnffa" class="btn sm" title="Jeder Spieler in einem eigenen Team">⚔️ Jeder gegen jeden</button><button id="btnaddteam" class="btn sm">+ Team</button><button id="btndelteam" class="btn sm ghost">− Team</button></div>
+        <p class="hint">„+ KI“ fügt einem Team einen KI-Spieler hinzu. KI im eigenen Team ist verbündet (kein Eigenbeschuss, gemeinsame Gebäude).</p>
+      </section>
+    </div>
+    <div id="lobbymsg" class="lobbymsg"></div>
     <div id="hostopts">
-      <h3>Einstellungen</h3>
-      <div class="inrow"><label class="field inline">KI-Gegner <select id="optai"><option>0</option><option selected>1</option><option>2</option><option>3</option></select></label>
-      <label class="field inline">Kartengröße <select id="optsize" class="sizesel"><option value="klein">Klein</option><option value="mittel" selected>Mittel</option><option value="gross">Groß</option><option value="riesig">Riesig</option></select></label>
-      <label class="field inline">Buddler pro Team <select id="optclonks"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label></div>
-      <div class="inrow" id="aidiffs"></div>
-      <div class="inrow"><label class="field inline" title="Wenn ein Mitspieler die Verbindung verliert, übernimmt eine KI sein Team">KI bei Verbindungsabbruch <select id="opttakeover" class="diffsel"></select></label></div>
-      <div class="toggles"><label class="switch"><input type="checkbox" id="optmon"><i></i> Monster</label><label class="switch"><input type="checkbox" id="opthelper2"><i></i> KI-Helfer für eigene Buddler</label><label class="switch"><input type="checkbox" id="optallres2" checked><i></i> Alles erforscht</label><label class="switch"><input type="checkbox" id="optday2" checked><i></i> Tag &amp; Nacht</label><label class="switch"><input type="checkbox" id="optanimals2" checked><i></i> Tiere</label></div>
-      <button id="btnstart" class="btn primary big">▶ Melee starten</button>
+      <div class="setgrid">
+      <section class="sec2"><h4><span class="sic">🗺️</span>Karte &amp; Teams</h4>
+        <div class="orow"><span class="olbl">Kartengröße</span><select id="optsize" class="sizesel" aria-label="Kartengröße"><option value="klein">Klein</option><option value="mittel" selected>Mittel</option><option value="gross">Groß</option><option value="riesig">Riesig</option></select></div>
+        <div class="orow"><span class="olbl">Buddler pro Team</span><select id="optclonks" aria-label="Buddler pro Team"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></div>
+      </section>
+      <section class="sec2"><h4><span class="sic">🤖</span>KI</h4>
+        <div class="orow" title="Wenn ein Mitspieler die Verbindung verliert, übernimmt eine KI sein Team"><span class="olbl">Bei Verbindungsabbruch</span><select id="opttakeover" class="diffsel" aria-label="KI bei Verbindungsabbruch"></select></div>
+        <div class="orow" title="Gekaufte Buddler der Spieler arbeiten als KI-Helfer"><span class="olbl">KI-Helfer</span><select id="opthelper2" aria-label="KI-Helfer"></select></div>
+      </section>
+      <section class="sec2 full"><h4><span class="sic">⚙️</span>Optionen</h4>
+        <div class="toggles left"><label class="switch" title="Friedliche Wildschweine – wehren sich nur kurz, wenn man sie angreift"><input type="checkbox" id="optmon"><i></i><span>Wildschweine<small>jagbar, wehren sich kurz</small></span></label><label class="switch"><input type="checkbox" id="optallres2" checked><i></i><span>Alles erforscht<small>schneller Start</small></span></label><label class="switch"><input type="checkbox" id="optday2" checked><i></i><span>Tag &amp; Nacht<small>dunkle Nächte</small></span></label><label class="switch"><input type="checkbox" id="optanimals2" checked><i></i><span>Tiere<small>Wipfe, Vögel, Haie …</small></span></label></div>
+      </section>
+      </div>
+      <button id="btnstart" class="btn primary big">▶ Spiel starten</button>
     </div>
     <div id="waithost" style="display:none" class="busy">Warte, bis der Host startet…</div>
     <button id="btnleave" class="btn ghost">Verlassen</button>
@@ -162,6 +193,7 @@
   <button id="btnresume" class="btn primary opt">Weiter</button>
   <button id="btnsaves" class="btn opt">Speichern / Laden</button>
   <button id="btnescape" class="btn opt">Notausgang</button>
+  <div id="pausehelperrow" class="pausehelper"><span class="olbl">🤖 KI-Helfer für deine Buddler</span><select id="pausehelper" aria-label="KI-Helfer"></select></div>
   <button id="btnsetp" class="btn opt">Einstellungen</button>
   <button id="btnhelp" class="btn opt">Hilfe &amp; Steuerung</button>
   <button id="btnrestart" class="btn opt">Neustart</button>
@@ -180,14 +212,17 @@
 <script src="js/ai.js"></script>
 <script src="js/fauna.js"></script>
 <script src="js/gear.js"></script>
+<script src="js/rescue.js"></script>
 <script src="js/save.js"></script>
 <script src="js/render.js"></script>
 <script src="js/main.js"></script>
+<script src="js/lobby.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/input.js"></script>
 <script src="js/hud.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/menus.js"></script>
+<script src="js/ui.js"></script>
 <script src="js/boot.js"></script>
 </body>
 </html>

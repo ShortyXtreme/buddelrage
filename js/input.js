@@ -164,7 +164,10 @@ addEventListener('keydown', e => {
   if (CHAT.wheel && /^Digit[1-8]$/.test(e.code)) { e.preventDefault(); CHAT.wheel.sel = +e.code.slice(5) - 1; wheelClose(true); return; }
   if (CHAT.wheel && e.code === 'Escape') { wheelClose(false); return; }
   const tag = document.activeElement && document.activeElement.tagName;
-  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') { if (e.code === 'Escape') document.activeElement.blur(); return; }
+  const ae = document.activeElement, typing = tag === 'TEXTAREA' || tag === 'SELECT' || (tag === 'INPUT' && !/^(checkbox|radio|range|button)$/.test(ae.type));
+  if (typing) { if (e.code === 'Escape') ae.blur(); return; }
+  if (tag === 'INPUT' && ae.type === 'range' && /^Arrow|^Home|^End|^Page/.test(e.code)) return; // Regler mit Pfeiltasten bedienen
+  if (tag === 'INPUT' && (e.code === 'Escape' || G.world)) ae.blur(); // Schalter/Regler: Tasten gehen weiter ans Spiel bzw. Menü
   if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'F1'].includes(e.code)) e.preventDefault();
   if (input.mode !== 'mouse' && input.mode !== 'touch') input.mode = 'mouse';
   heldCodes.add(e.code);
@@ -296,7 +299,7 @@ function pollPad() {
     if (edge(1) || edge(9) || (edge(8) && G.menu === 'shop') || (edge(11) && G.menu === 'research')) closeAllMenus();
     pad.keys = { l: 0, r: 0, u: 0, d: 0, b: 0, s: 0, g: 0 }; if (w) pushKeys();
   } else if (!w || $('gameover').style.display === 'flex') { // Hauptmenü / Lobby / Spielende
-    const btns = Array.from(document.querySelectorAll('.screen')).filter(s => s.style.display === 'flex').flatMap(s => Array.from(s.querySelectorAll('button, .card.opt'))).filter(b => b.offsetParent);
+    const btns = Array.from(document.querySelectorAll('.screen')).filter(s => s.style.display === 'flex').flatMap(s => Array.from(s.querySelectorAll('button, .card.opt, .switch'))).filter(b => b.offsetParent);
     if (btns.length) { if (upE) pad.sel--; if (downE) pad.sel++; pad.sel = (pad.sel + btns.length) % btns.length; btns.forEach((b, i) => b.classList.toggle('hl', i === pad.sel)); if (edge(0)) btns[pad.sel].click(); if (edge(1) && !w) menuBack(); }
   } else {
     pad.keys = { l: +st.l, r: +st.r, u: +st.u, d: +st.d, b: 0, s: +st.s, g: +st.g }; pushKeys();
