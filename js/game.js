@@ -339,16 +339,50 @@ class World {
   // ---------- Setup ----------
   setup() {
     const cfg = this.cfg;
-    this.generate(cfg.teams.length);
+    cfg.sharedBase = true; // ein Lager je Lobby-Team (Seite): gemeinsame Hütte, Kasse, Forschung
+    this.generate(this.sideList(cfg.teams).length);
     cfg.teams.forEach((tc, ti) => {
       const team = { id: ti, side: Number.isInteger(tc.side) ? tc.side : ti, hdiff: AI_LEVELS.includes(tc.hdiff) ? tc.hdiff : 'normal', name: cleanName(tc.name, 'Team ' + (ti + 1)), color: tc.color || TEAM_COLORS[ti % 6], ai: !!tc.ai, diff: AI_LEVELS.includes(tc.diff) ? tc.diff : 'normal', helper: !tc.ai && !!(tc.helper != null ? tc.helper : cfg.helpers), cname: tc.ai ? '' : cleanName(tc.cname, ''), cnum: 0, pid: tc.pid || null, money: cfg.money != null ? cfg.money : 50, sel: -1, keys: { ...NOKEYS }, elim: false, aiT: 0, nameIdx: ti * 5, res: {}, rq: '', rp: 0, stat: '', stats: newStats() };
       if (cfg.allResearch) for (const r of RESEARCH) team.res[r.k] = 1;
       this.teams.push(team);
-      const bx = this.bases[ti];
-      this.addStruct('hut', bx, this.surf[bx], ti, 1);
-      for (let k = 0; k < (cfg.clonks || 3); k++) this.spawnClonk(ti, bx - 12 + k * 10, this.surf[bx] - 2);
-      team.sel = this.clonks.find(c => c.team === ti).id;
     });
+    this.setupPools(true);
+    const placed = {};
+    for (const team of this.teams) {
+      const ti = team.id, bi = this.bIdx(ti), bx0 = this.bases[bi], m = placed[bi] || 0; placed[bi] = m + 1;
+      if (!m) this.addStruct('hut', bx0, this.surf[bx0], ti, 1); // nur der erste im Team baut die Hütte – alle teilen sie
+      const P = this.plats && this.plats[bi], off = m ? (m % 2 ? 1 : -1) * Math.ceil(m / 2) * 32 : 0;
+      const bx = P ? Math.max(P.a + 16, Math.min(P.b - 36, bx0 + off)) : bx0 + off;
+      for (let k = 0; k < (cfg.clonks || 3); k++) this.spawnClonk(ti, bx - 12 + k * 10, this.surf[Math.max(0, Math.min(this.W - 1, bx - 12 + k * 10))] - 2);
+      team.sel = this.clonks.find(c => c.team === ti).id;
+    }
+    this._setupEnd();
+  }
+  // Lobby-Seiten in Reihenfolge ihres ersten Auftretens (eine Basis je Seite)
+  sideList(arr) { const L = []; arr.forEach((tc, i) => { const sd = Number.isInteger(tc.side) ? tc.side : i; if (!L.includes(sd)) L.push(sd); }); return L; }
+  // Teamkasse: Geld, Forschung und laufendes Projekt gehören der Seite – jedes Mitglied (Mensch/KI) liest und schreibt dieselben Werte
+  setupPools(merge) {
+    const shared = !!this.cfg.sharedBase, sl = this.sideList(this.teams);
+    this.pools = {}; this.baseIdx = [];
+    for (const t of this.teams) {
+      const sd = this.sideOf(t.id), v = { money: +t.money || 0, res: t.res || {}, rq: t.rq || '', rp: +t.rp || 0 };
+      let P = this.pools[sd];
+      if (!P) P = this.pools[sd] = { side: sd, lead: t.id, members: [], money: v.money, res: Object.assign({}, v.res), rq: v.rq, rp: v.rp };
+      else if (merge) { P.money += v.money; Object.assign(P.res, v.res); if (!P.rq && v.rq) { P.rq = v.rq; P.rp = v.rp; } }
+      P.members.push(t.id);
+      this.baseIdx[t.id] = shared ? Math.max(0, sl.indexOf(sd)) : t.id;
+      for (const k of ['money', 'res', 'rq', 'rp']) Object.defineProperty(t, k, { get() { return P[k]; }, set(x) { P[k] = x; }, enumerable: true, configurable: true });
+    }
+  }
+  poolOf(tid) { return this.pools ? this.pools[this.sideOf(tid)] : null; }
+  teamMates(tid) { const P = this.poolOf(tid); return P ? P.members : [tid]; }
+  sharedPool(tid) { const P = this.poolOf(tid); return !!(P && P.members.length > 1); }
+  msgSide(s, tid) { const M = this.teamMates(tid); for (const id of M) this.msg(s, id); }
+  bIdx(tid) { const b = this.baseIdx && this.baseIdx[tid]; return Number.isInteger(b) && b < this.bases.length ? b : Math.min(tid, this.bases.length - 1); }
+  baseX(tid) { return this.bases[this.bIdx(tid)]; }
+  castleSiteOf(tid) { return this.castleSites && this.castleSites[this.bIdx(tid)]; }
+  _setupEnd() {
+    const cfg = this.cfg;
     if (cfg.monsters) for (let k = 0; k < (cfg.monsterCount || 2); k++) this.spawnMonster();
     if (cfg.animals !== false && this.spawnFauna) this.spawnFauna();
   }
@@ -769,6 +803,7 @@ class World {
     const cont = src === 'fire'; // Dauerschaden (Brennen, Lava, Ertrinken) zählt nicht als Treffer
     if (!cont && c.invT > 0) return;
     if (c.armor && src !== 'fire') dmg *= 0.6;
+    { const hk = typeof src === 'number' ? src : src && typeof src === 'object' && src.team !== undefined ? src.id : 0; if (hk && !cont) c.hitBy = { id: hk, t: this.tick }; } // KI-Verteidigung: wer greift an?
     c.hp -= dmg;
     if (!cont && dmg >= 3 && c.hp > 0) c.invT = INV_TICKS;
     if (c.hp <= 0) { this.creditKill(c, src); this.kill(c); return; }
@@ -848,7 +883,7 @@ class World {
     }
     for (const s of this.structs) {
       if (Math.abs(s.x - x) < r + s.w / 2 && y > s.y - s.h - r && y < s.y + r && !this.friendlyTeam(owner, s.team)) {
-        s.hp -= r * 1.5; if (BUILD[s.type].wood && this.rand() < 0.6) s.fire = Math.max(s.fire, 500);
+        s.hp -= r * 1.5; if (typeof owner === 'number' && owner) s.hitBy = { id: owner, t: this.tick }; if (BUILD[s.type].wood && this.rand() < 0.6) s.fire = Math.max(s.fire, 500);
         if (s.hp <= 0) this.destroyStruct(s);
       }
     }
@@ -952,10 +987,12 @@ class World {
       if (builders) { s.prog = Math.min(1, s.prog + Math.min(3, builders) / B.time); if (s.prog >= 1) { this.snd('build', s.x, s.y); this.msg(B.name + ' fertig gebaut!', s.team); const st = this.teams[s.team].stats; if (st) { st.built++; st.builtList.push(s.type); } } }
     }
     // Forschung
+    const rdone = new Set(); // Teamkasse: jedes Forschungsprojekt läuft einmal je Seite
     for (const t of this.teams) if (t.rq) {
+      const P = this.poolOf(t.id); if (P) { if (rdone.has(P)) continue; rdone.add(P); }
       if (!this.hasBase(t.id)) continue;
       const r = RES_BY[t.rq]; t.rp += 1 / (r.time * 60);
-      if (t.rp >= 1) { t.res[t.rq] = 1; if (t.stats) t.stats.research++; this.msg('Forschung abgeschlossen: ' + r.name + '!', t.id); this.ev({ e: 'snd', n: 'ding', x: 0, y: 0, team: t.id }); t.rq = ''; t.rp = 0; }
+      if (t.rp >= 1) { t.res[t.rq] = 1; if (t.stats) t.stats.research++; this.msgSide('Forschung abgeschlossen: ' + r.name + '!', t.id); for (const id of this.teamMates(t.id)) this.ev({ e: 'snd', n: 'ding', x: 0, y: 0, team: id }); t.rq = ''; t.rp = 0; }
     }
     this.clonks = this.clonks.filter(c => !c.remove);
     this.items = this.items.filter(i => !i.remove);
@@ -1347,7 +1384,7 @@ class World {
         if (it.age > 10 && Math.abs(it.x - s.x) < s.w / 2 && it.y > s.y - s.h && it.y < s.y && !this.clonks.some(c => c.id === it.owner && c.inside === s.id)) {
           if (it.type === 'flint' || it.type === 'superflint') { it.remove = true; this.explode(it.x, it.y, ITEMS[it.type].blast, it.owner); return; }
           if (it.shot === 2) { it.remove = true; this.explode(it.x, it.y, 8, it.owner); return; }
-          if (isArrow) { it.remove = true; s.hp -= 1; return; }
+          if (isArrow) { it.remove = true; s.hp -= 1; if (it.owner) s.hitBy = { id: it.owner, t: this.tick }; return; }
         }
       }
     }

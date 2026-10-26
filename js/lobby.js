@@ -152,7 +152,7 @@ function hostStart() {
     for (const x of T.ai) teams.push({ name: 'KI ' + (++aiN), ai: true, diff: x.diff, color, side });
   });
   const allRes = $('optallres2').checked;
-  const cfg = { mode: 'melee', W: 1100 + teams.length * 380, H: 620, seed: newSeed(), teams, sides, clonks: cl, money: allRes ? 120 : 60, monsters: mon, monsterCount: 2, allResearch: allRes, daynight: $('optday2').checked, animals: $('optanimals2').checked, lava: true, takeover: $('opttakeover').value };
+  const cfg = { mode: 'melee', W: 1100 + sides.length * 380 + (teams.length - sides.length) * 120, H: 620, seed: newSeed(), teams, sides, clonks: cl, money: allRes ? 120 : 60, monsters: mon, monsterCount: 2, allResearch: allRes, daynight: $('optday2').checked, animals: $('optanimals2').checked, lava: true, takeover: $('opttakeover').value };
   applySize(cfg, $('optsize').value);
   G.role = 'host'; G.myTeam = teams.findIndex(t => t.pid === net.id); G.spectate = G.myTeam < 0;
   launchWorld(cfg, false);

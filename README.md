@@ -21,6 +21,14 @@ Beim ersten Start führt ein kurzes Tutorial durch die Steuerung (in den Einstel
     Katapult/Kanone, koordinierte Angriffe in Gruppen.
   * Keine Schummelei: Die KI nutzt dieselben Aktionen wie Spieler. Einzige Ausnahme: **Schwer** erhält +1 Geld alle 2 Sekunden
     (früher bekam jede KI diesen Bonus; jetzt nur noch Schwer).
+* **Verteidigung (je Stufe stärker):** Die KI erkennt Angreifer auf ihre Buddler (auch fern der Basis) und Gegner an Hütte, Burg
+  und Türmen, teilt passend zur Bedrohung **Verteidiger** ein (Rollenwechsel: Bergleute legen die Arbeit nieder), rüstet Unbewaffnete
+  an der Hütte aus, schickt Unbewaffnete in Mittel/Schwer zum Schutz in die Hütte, **sammelt** sich an der Basis statt einzeln
+  anzugreifen, lässt sich nicht weit weglocken, **deckt mit dem Schild**, während das eigene Schwert nachlädt, zieht sich angeschlagen
+  zum **Heilen** zurück, besetzt Wachturm/Burg mit Bogenschützen, nimmt ein gemeinsames **Fokusziel**, kauft im Notfall einen Ritter,
+  lässt beim Angriff eine **Wache** zu Hause und **kontert** nach einem abgewehrten Überfall. *Leicht* verteidigt nur mit wenigen
+  Buddlern ohne diese Taktiken; *Mittel* und *Schwer* nutzen alles (Schwer: größerer Radius, mehr Verteidiger, häufiger Schildblock).
+  Verbündete KI verteidigt die gemeinsame Basis ebenso.
 * Die KI **arbeitet wie ein Spieler**: Gold abbauen → zur Hütte tragen oder per Lore holen → verkaufen → Buddler, Waffen,
   Feuersteine kaufen → forschen → Gebäude bauen → verteidigen/angreifen. Status steht in der Teamübersicht (z. B. „baut Gold ab“, „forscht: Burg“).
 * **Wegsuche:** grobes Navigationsraster (5 px) mit A* über Laufen/Springen/Klettern/Hangeln/Schwimmen/Graben (Erde/Sand kosten mehr,
@@ -72,6 +80,12 @@ Beim ersten Start führt ein kurzes Tutorial durch die Steuerung (in den Einstel
    Falsches Passwort: „Falsches Passwort – Beitritt abgelehnt.“
 4. **Team-Lobby:** Der Host legt 2–6 Teams an (Name und Farbe per Farbtupfer), jeder Spieler wählt sein Team mit **„Beitreten“**,
    der Host kann Spieler verschieben (↔-Auswahl) und mit **„+ KI“** KI-Spieler in jedes Team setzen (Stufe je KI per Pille, ✕ entfernt).
+   * **Gemeinsame Basis & Teamkasse:** Jedes Team startet an *einer* gemeinsamen Hütte (ein Startplatz mit Burgplatz je Team),
+     alle Mitglieder – Menschen und KI – erscheinen dort zusammen. Geld liegt in der **Teamkasse** (HUD-Abzeichen „Teamkasse“):
+     Verkaufen füllt sie, Kaufen, Bauen und Forschen bezahlt jedes Mitglied daraus; Forschung gilt für das ganze Team
+     (ein Projekt gleichzeitig). Startgeld = Summe der Mitglieder. Verbündete KI plant Forschung/Bauten nur einmal pro Team
+     und lässt Menschen mindestens ~40 % der Kasse übrig. Gilt auch für „Freunde gegen KI“, Host-Wechsel, KI-Übernahme und Spielstände.
+     „Jeder gegen jeden“ bleibt wie bisher (jeder eigenes Team, eigene Basis und Kasse).
    * **KI im eigenen Team ist verbündet:** kein Eigenbeschuss (Waffen, Würfe, Explosionen), gemeinsame Gebäude (Hütte/Burg betreten,
      verkaufen, kaufen), hilft beim Bauen und Verteidigen. Gegnerische KI greift alle Menschen an.
    * **Schnellstart:** „🤝 Freunde gegen KI“ (alle Spieler in Team 1, 1–5 KI in Team 2, Stufe wählbar) oder „⚔️ Jeder gegen jeden“.
@@ -218,7 +232,7 @@ Tippen in die Welt = Aktion zu dieser Stelle, lange drücken = dorthin graben, z
   (Host nur „eingefroren“ statt weg), scheitert die Übernahme und alle landen mit Hinweis im Hauptmenü.
 * Läuft der Host-Tab im Hintergrund, drosselt der Browser das Spiel für alle (wie bisher).
 * Kein Splitscreen (bewusst weggelassen, um die Stabilität nicht zu gefährden).
-* Teams in der Lobby sind Bündnisse: jeder Spieler und jede KI behält eigenes Geld, eigene Buddler und Forschung; Gebäude werden geteilt.
+* Teams in der Lobby teilen Basis, Kasse und Forschung; Buddler, Inventar und Statistik bleiben pro Spieler/KI. Gebäude gehören dem Erbauer, werden aber vom ganzen Team genutzt.
 * Rettung ist „best effort“: in Granit/Fels eingeschlossene Buddler kann auch der Retter nicht freigraben (dann Notausgang).
 * Speichern nur im Einzelspieler; Spielstände liegen im Browser des Geräts (kein Export).
 * Emojis im Chat nutzen die Emoji-Schrift des Systems (Aussehen je nach Gerät).

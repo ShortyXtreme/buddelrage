@@ -26,6 +26,7 @@ function deserializeWorld(S, matSrc) {
   w.clonks = S.clonks || []; w.items = S.items || []; w.monsters = S.monsters || []; w.animals = S.animals || []; w.structs = S.structs || []; w.vehicles = S.vehicles || []; w.fires = S.fires || [];
   w.teams = S.teams || [];
   for (const t of w.teams) { t.keys = { ...NOKEYS }; t.brain = null; if (!t.stats) t.stats = newStats(); if (!t.res) t.res = {}; }
+  w.setupPools(!cfg.sharedBase); // Teamkasse; alte Stände (eigene Kassen je Spieler) werden zusammengelegt
   for (const c of w.clonks) { c.aiKeys = { ...NOKEYS }; c.ai = null; c.digHold = 0; }
   w.rand = mulberry32(((cfg.seed * 7 + 1) ^ (S.tick * 2654435761)) | 0);
   w.frng = mulberry32(((cfg.seed | 0) ^ (S.tick * 40503)) | 0);

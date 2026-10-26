@@ -171,7 +171,7 @@ Object.assign(World.prototype, {
   },
   aiForget(c) { const A = c.ai; if (A) { const t = this.teams[c.team], B = t && t.brain; if (B) { B.claims.delete(c.id); for (const [k, v] of B.itemClaims) if (v === c.id) B.itemClaims.delete(k); } } c.ai = null; c.aiKeys = { ...NOKEYS }; },
   aiStat(t, s) { const B = this.aiBrain(t); B.stat = s; t.stat = s; },
-  aiBases(tid) { return this.structs.filter(s => s.team === tid && BUILD[s.type].base && s.prog >= 1 && !s.remove); },
+  aiBases(tid) { return this.structs.filter(s => this.ally(s.team, tid) && BUILD[s.type].base && s.prog >= 1 && !s.remove); },
   aiHome(c) { let best = null, bd = 1e9; for (const s of this.aiAllyBases(c.team)) { const d = Math.abs(s.x - c.x) + Math.abs(s.y - c.y) * 2; if (d < bd) { bd = d; best = s; } } return best; },
   aiArmed(c) { return c.inv.includes('sword') || (c.inv.includes('bow') && c.arrows > 0) || c.inv.some(x => THROWABLE.has(x)); },
   aiStrength(tid) {
@@ -261,8 +261,12 @@ Object.assign(World.prototype, {
     t.stat = s; B.stat = s;
   },
   aiSpend(t, B, D, own, bases, fighters) {
-    const R = D.reserve, n = own.length, m = t.money;
-    if (!bases.length) { // Basis verloren → neue Hütte hat Vorrang
+    // Teamkasse: nur die erste KI des Teams plant Forschung/Gebäude; mit Menschen im Team bleibt eine Rücklage für sie
+    const P = this.poolOf && this.poolOf(t.id), hum = P ? P.members.filter(id => !this.teams[id].ai).length : 0;
+    const lead = !P || P.members.find(id => this.teams[id].ai && !this.teams[id].elim) === t.id;
+    const R = D.reserve, n = own.length, m = t.money - (hum ? Math.max(25 + 10 * hum, Math.round(t.money * 0.4)) : 0); // KI gibt höchstens ~60 % der Teamkasse aus
+    if (!bases.length) {
+      if (!lead) return; // Basis verloren → neue Hütte hat Vorrang
       if (!B.site && !B.buildId && m >= BUILD.hut.price) this.aiPlanSite(t, B, 'hut');
       return;
     }
@@ -271,9 +275,14 @@ Object.assign(World.prototype, {
     const free = m - save;
     // 1) Grundversorgung: mindestens 2 Arbeiter
     if (n < 2 && free >= PRICE_CLONK) { this.aiBuy(t, null, 'clonk'); return; }
+    if (!lead) { // weitere KI im Team: nur eigene Buddler/Ritter, mit größerer Rücklage für die Teamplanung
+      B.keep = 0; const kn = t.res.knight && (B.attack || B.defend) && free >= PRICE_KNIGHT + R + 40;
+      if (n < D.maxClonks - 1 && (kn || free >= PRICE_CLONK + R + 40)) this.aiBuy(t, null, kn ? 'knight' : 'clonk');
+      return;
+    }
     // erforschtes, aber noch nicht gebautes Gebäude hat Vorrang vor weiterer Forschung (sonst wird die Burg nie bezahlt)
     let pend = 0;
-    if (!B.site && !B.buildId && n >= 3) for (const k of D.builds) { const Bd = BUILD[k]; if (Bd.res && !t.res[Bd.res]) continue; if (this.structs.some(s => s.team === t.id && s.type === k && !s.remove)) continue; if ((B.unbuild[k] || 0) > this.tick) continue; pend = Bd.price; break; }
+    if (!B.site && !B.buildId && n >= 3) for (const k of D.builds) { const Bd = BUILD[k]; if (Bd.res && !t.res[Bd.res]) continue; if (this.structs.some(s => this.ally(s.team, t.id) && s.type === k && !s.remove)) continue; if ((B.unbuild[k] || 0) > this.tick) continue; pend = Bd.price; break; }
     B.keep = save + pend; // Rücklage, die beim Ausrüsten nicht angetastet wird
     // 2) Forschung nach Plan (Bauordnung)
     if (!t.rq) for (const k of D.research) {
@@ -285,7 +294,7 @@ Object.assign(World.prototype, {
     // 3) Gebäude
     if (!B.site && !B.buildId) for (const k of D.builds) {
       const Bd = BUILD[k]; if (Bd.res && !t.res[Bd.res]) continue;
-      if (this.structs.some(s => s.team === t.id && s.type === k && !s.remove)) continue;
+      if (this.structs.some(s => this.ally(s.team, t.id) && s.type === k && !s.remove)) continue;
       if ((B.unbuild[k] || 0) > this.tick) continue;
       if (k === 'tower' && n < 3) continue;
       if (m >= Bd.price + (k === 'castle' ? 0 : R)) { this.aiPlanSite(t, B, k); return; } // Burg: Sparziel reicht, keine zusätzliche Reserve
@@ -295,7 +304,7 @@ Object.assign(World.prototype, {
     if (n >= 3 && !B.defend) {
       if (pend) goal = pend;
       if (!goal && !t.rq) for (const k of D.research) { const r = RES_BY[k]; if (t.res[k]) continue; if (r.req && !r.req.every(q => t.res[q])) continue; goal = r.cost; break; }
-      if (!goal && !B.site && !B.buildId) for (const k of D.builds) { const Bd = BUILD[k]; if (Bd.res && !t.res[Bd.res]) continue; if (this.structs.some(s => s.team === t.id && s.type === k && !s.remove)) continue; if ((B.unbuild[k] || 0) > this.tick) continue; goal = Bd.price; break; }
+      if (!goal && !B.site && !B.buildId) for (const k of D.builds) { const Bd = BUILD[k]; if (Bd.res && !t.res[Bd.res]) continue; if (this.structs.some(s => this.ally(s.team, t.id) && s.type === k && !s.remove)) continue; if ((B.unbuild[k] || 0) > this.tick) continue; goal = Bd.price; break; }
     }
     // 4) mehr Buddler / Ritter
     const knights = own.filter(c => c.knight).length;
@@ -314,10 +323,10 @@ Object.assign(World.prototype, {
   },
   // Bauplatz suchen (wie die Prüfung in build()); merkt unmögliche Gebäude eine Zeit lang (Petra: „unbuildables“)
   aiPlanSite(t, B, type) {
-    const base = this.aiBases(t.id)[0] || this.structs.find(s => s.team === t.id) || { x: this.bases[t.id], y: this.surf[this.bases[t.id]] };
+    const base = this.aiBases(t.id)[0] || this.structs.find(s => this.ally(s.team, t.id)) || { x: this.baseX(t.id), y: this.surf[this.baseX(t.id)] };
     const Bd = BUILD[type], hw = Bd.w >> 1;
-    const cs = this.castleSites && this.castleSites[t.id], home = cs && Math.abs(base.x - this.bases[t.id]) < 4;
-    const hasCastle = this.structs.some(s => s.team === t.id && s.type === 'castle' && !s.remove);
+    const cs = this.castleSiteOf(t.id), home = cs && Math.abs(base.x - this.baseX(t.id)) < 4;
+    const hasCastle = this.structs.some(s => this.ally(s.team, t.id) && s.type === 'castle' && !s.remove);
     const cand = [];
     if (type === 'castle' && home) cand.push({ x: cs.x, dir: cs.d, pri: -100 }); // reserviertes Burg-Plateau zuerst
     for (let o = 50; o <= 320; o += 10) cand.push({ x: Math.round(base.x + o), dir: 1, pri: o / 10 }, { x: Math.round(base.x - o), dir: -1, pri: o / 10 });
@@ -402,7 +411,7 @@ Object.assign(World.prototype, {
     if (A.task && (A.task.type === 'park' || A.task.type === 'haul' || A.task.type === 'gun') && this.vehById(A.task.veh)) add(A.task.type, 0.87, { veh: A.task.veh, x: A.task.x });
     if (!helper && B.defend && this.aiArmed(c)) {
       const tw = this.structs.find(s => s.team === c.team && s.type === 'tower' && s.prog >= 1 && !s.remove && Math.abs(s.x - c.x) < 220);
-      if (tw && B.threat.some(e => Math.abs(e.x - tw.x) < 200)) add('tower', 0.93, { sid: tw.id, until: A.t + 1200 });
+      if (tw && Math.abs(c.y - tw.y) < 40 && B.threat.some(e => Math.abs(e.x - tw.x) < 200)) add('tower', 0.93, { sid: tw.id, until: A.t + 1200 });
     }
     if (D.idleP && golds < 2 && !foe && this.rand() < D.idleP) add('idle', 0.7, { until: A.t + 50 + (this.rand() * 70 | 0) }); // Leicht: trödelt ab und zu (aber nicht mit vollen Taschen oder im Kampf)
     if (A.wander && A.wander.until > A.t) add('wander', 1.05, A.wander);
@@ -481,7 +490,12 @@ Object.assign(World.prototype, {
       case 'heal':
         if (!home) { A.task = null; return; }
         this.aiStat0(c, 'heilt');
-        const hs = this.aiBaseSpot(c, home); if (this.nearBase(c) || this.aiGoto(c, A, k, hs.x, hs.y, 3)) { if (golds(c)) this.aiSell(c); this.use(c); }
+        { // Tür = Gebäudemitte (use() braucht < 14 px Abstand; nearBase() reicht bis an den Rand)
+          const nb = this.nearBase(c);
+          if (nb && Math.abs(c.x - nb.x) < 11) { if (golds(c)) this.aiSell(c); if (c.act === 'dig') c.act = 'walk'; this.use(c); }
+          else if (nb) { A.moving = true; if (c.act === 'dig') c.act = 'walk'; k[nb.x > c.x ? 'r' : 'l'] = 1; }
+          else { const hs = this.aiBaseSpot(c, home); if (this.aiGoto(c, A, k, hs.x, hs.y, 3)) { A.moving = true; k[home.x > c.x ? 'r' : 'l'] = 1; } }
+        }
         return;
       case 'sell':
         if (!home) { A.task = null; return; }
@@ -522,7 +536,7 @@ Object.assign(World.prototype, {
       case 'mine': return this.aiMine(c, t, B, D, A, k, home);
       case 'haul': case 'park': return this.aiHaulStart(c, t, B, A, k);
       case 'tower': {
-        const s = this.structById(T.sid); if (!s || s.remove) { A.task = null; return; }
+        const s = this.structById(T.sid); if (!s || s.remove || (T.until && A.t > T.until)) { A.task = null; return; }
         if (this.aiGoto(c, A, k, s.x, s.y, 4) && c.act === 'walk') { this.use(c); if (!c.inside) A.task = null; }
         return;
       }
@@ -706,7 +720,7 @@ Object.assign(World.prototype, {
     let tgt = T.target && T.target.act !== 'dead' && !T.target.remove && !T.target.inside ? T.target : null;
     if (T.type === 'guard') { // vor der eigenen Basis Stellung halten
       if (!home) { A.task = null; return; }
-      const gx = home.x + (B.target !== undefined && this.bases[B.target] < home.x ? -50 : 50);
+      const gx = home.x + (B.target !== undefined && this.baseX(B.target) < home.x ? -50 : 50);
       this.aiGoto(c, A, k, gx, home.y, 10); if (A.arrived && c.act === 'dig') c.act = 'walk';
       const e = this.aiNearestFoe(c, 160, false); if (e) { A.task = { type: 'fight', target: e, s: 0.9 }; }
       return;

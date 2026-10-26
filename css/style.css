@@ -400,3 +400,7 @@ input[type=range]:focus-visible{box-shadow:none;outline:2px solid var(--acc);out
 .qs .orow .btn.sm{width:auto}
 .ltd:not(.on) b{display:none}
 .pausehelper .seg-b{min-width:0;padding:6px 5px;font-size:12px}
+
+/* Teamkasse */
+.money .mlbl{display:none;margin-left:6px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#ffd970;background:rgba(255,200,60,.16);border:1px solid rgba(255,200,60,.35);border-radius:999px;padding:1px 6px;vertical-align:middle}
+.money.teamcash .mlbl{display:inline-block}

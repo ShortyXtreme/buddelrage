@@ -147,6 +147,7 @@ function updateHUD() {
   $('spectate').style.display = G.spectate ? 'block' : 'none';
   if (me) {
     if (HUD.money !== me.money) { if (HUD.money !== null && me.money > HUD.money) { const m = $('h-money').parentNode; m.classList.remove('bump'); void m.offsetWidth; m.classList.add('bump'); } HUD.money = me.money; $('h-money').textContent = me.money; }
+    { const sp = w.sharedPool && w.sharedPool(me.id), n = sp ? w.teamMates(me.id).length : 0, lb = sp ? 'Teamkasse · ' + n : ''; if (HUD.mlbl !== lb) { HUD.mlbl = lb; const el = $('h-mlbl'); el.textContent = sp ? 'Teamkasse' : ''; el.title = sp ? 'Gemeinsames Geld deines Teams (' + n + ' Mitglieder): Verkaufen füllt sie, Kaufen, Bauen und Forschen bezahlt daraus' : ''; el.parentNode.classList.toggle('teamcash', sp); } }
     setHTML('h-team', escapeHtml(me.name) + (w.cfg.sides && w.cfg.sides.length ? ' · ' + escapeHtml(w.sideName(me.id)) : '') + (w.mode === 'settle' ? ' · Ziel: ' + Math.min(me.money, w.goal) + ' / ' + w.goal + '<span class="goalbar" title="Fortschritt zum Goldziel"><i style="width:' + Math.min(100, me.money / w.goal * 100).toFixed(1) + '%"></i></span>' : ' · Melee'));
     if (me.rq) { $('h-res').style.display = 'block'; setHTML('h-resname', RES_BY[me.rq].name); setHTML('h-respct', Math.floor(me.rp * 100) + '%'); $('h-resfill').style.width = (me.rp * 100).toFixed(1) + '%'; } else $('h-res').style.display = 'none';
     // Buddlerliste

@@ -87,7 +87,7 @@ function launchWorld(cfg, remote, map, prebuilt) {
   const w = prebuilt || new World(cfg, remote);
   if (prebuilt) { }
   else if (!remote) w.setup();
-  else { w.teams = cfg.teams.map((tc, i) => ({ id: i, side: Number.isInteger(tc.side) ? tc.side : i, hdiff: AI_DIFF[tc.hdiff] ? tc.hdiff : 'normal', name: cleanName(tc.name, 'Team'), color: tc.color || TEAM_COLORS[i % 6], ai: !!tc.ai, diff: AI_DIFF[tc.diff] ? tc.diff : 'normal', helper: !tc.ai && !!tc.helper, stat: '', money: 0, sel: -1, elim: false, keys: {}, res: {}, rq: '', rp: 0 })); if (map) w.loadMap(map); }
+  else { w.teams = cfg.teams.map((tc, i) => ({ id: i, side: Number.isInteger(tc.side) ? tc.side : i, hdiff: AI_DIFF[tc.hdiff] ? tc.hdiff : 'normal', name: cleanName(tc.name, 'Team'), color: tc.color || TEAM_COLORS[i % 6], ai: !!tc.ai, diff: AI_DIFF[tc.diff] ? tc.diff : 'normal', helper: !tc.ai && !!tc.helper, stat: '', money: 0, sel: -1, elim: false, keys: {}, res: {}, rq: '', rp: 0 })); w.setupPools(false); if (map) w.loadMap(map); }
   G.world = w; R.attach(w); R.miniDom = $('minimap'); R.resize();
   const me = w.teams[G.myTeam]; const f = w.clonks.find(c => me && c.id === me.sel) || w.clonks[0];
   if (f) { R.cam.x = f.x - cv.width / R.scale / 2; R.cam.y = f.y - cv.height / R.scale / 2; }
