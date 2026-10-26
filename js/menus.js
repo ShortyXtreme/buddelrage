@@ -36,7 +36,7 @@ function numBadge(i) { return i < 9 ? i + 1 : i === 9 ? 0 : ''; }
 function keepSel(fn) { const s = G.menuSel; fn(); G.menuSel = s; menuHL(); }
 
 // ---------- Laden ----------
-const SHOP_DESC = { flint: 'Explodiert beim Aufprall', superflint: 'Große Explosion beim Aufprall', tnt: 'Lunte – zündet nach 2,5 s, sehr stark', rock: 'Wurfgeschoss & Katapult-Munition', clonk: 'Neuer Arbeiter für dein Team', lorry: 'Sammelt Gegenstände ein (25 Plätze)', catapult: 'Schleudert Munition im hohen Bogen', cannon: 'Schießt flach und hart', sword: 'Nahkampf-Waffe', shield: 'Blocken: Rechtsklick halten', bow: 'Fernkampf, braucht Pfeile', arrows: '+10 Pfeile', armor: 'Nimmt 40 % weniger Schaden', knight: 'Schwert, Schild, Bogen & Rüstung', hook: 'Seil schießen, schwingen, hochziehen', balloon: 'Schwebt langsam nach oben' };
+const SHOP_DESC = { flint: 'Explodiert beim Aufprall', superflint: 'Große Explosion beim Aufprall', tnt: 'Lunte – zündet nach 2,5 s, sehr stark', rock: 'Wurfgeschoss & Katapult-Munition', clonk: 'Neuer Arbeiter für dein Team', lorry: 'Sammelt Gegenstände ein (25 Plätze)', catapult: 'Schleudert Munition im hohen Bogen', cannon: 'Schießt flach und hart', sword: 'Nahkampf · eigener Ausrüstungsplatz (Taste 4)', shield: 'Blocken: Schwert wählen (4), Rechtsklick halten', bow: 'Fernkampf (Taste 5), braucht Pfeile', earth: 'Füllt Löcher: ablegen (Q) oder werfen', arrows: '+10 Pfeile', armor: 'Nimmt 40 % weniger Schaden', knight: 'Schwert, Schild, Bogen & Rüstung', hook: 'Seil schießen, schwingen, hochziehen (Taste 6)', balloon: 'Schwebt langsam nach oben' };
 function shopTitle(k) { return k === 'clonk' ? 'Buddler' : k === 'knight' ? 'Ritter' : VEH[k] ? VEH[k].name : ITEMS[k].name; }
 function ownedCount(w, t, k) {
   const own = w.clonks.filter(c => c.team === t.id && c.act !== 'dead');
@@ -44,7 +44,7 @@ function ownedCount(w, t, k) {
   if (VEH[k]) return w.vehicles.filter(v => v.team === t.id && v.type === k).length;
   if (k === 'arrows') return own.reduce((s, c) => s + (c.arrows || 0), 0);
   if (k === 'armor') return own.filter(c => c.armor).length;
-  return own.reduce((s, c) => s + c.inv.filter(x => x === k).length, 0);
+  return own.reduce((s, c) => s + c.inv.concat(c.gear || []).filter(x => x === k).length, 0);
 }
 function renderShop() {
   const w = G.world; if (!w || G.myTeam < 0) return;
@@ -62,10 +62,23 @@ function renderShop() {
       '<div class="foot">' + (locked ? '<span class="lockinfo">' + icon('lock', 'ico-s') + ' ' + RES_BY[e.res].name + '</span>' : '<span class="price' + (poor ? ' no' : '') + '">' + icon('coin', 'ico-s') + p + '</span>') + '<span class="owned">' + (ow ? 'Besitz: ' + ow + unit : '') + '</span></div></div>';
   });
   h += '</div>';
-  const val = inv.reduce((s, x) => s + ITEMS[x].sell, 0);
-  h += '<div class="shopfoot"><span class="moneybig">' + icon('coin') + t.money + '</span><span class="muted small">' + (inv.length ? inv.length + ' Objekte im Inventar' + (v ? ' + Lore' : '') + ' · Wert ' + val : 'Nichts zu verkaufen') + '</span>' +
-    '<button class="btn sm primary opt' + (near && inv.length ? '' : ' dis') + '" id="sellbtn">' + icon('sell', 'ico-s') + ' Verkaufen ' + bindCap('sell') + '</button></div>' + (near ? '' : '<div class="muted small" style="margin-top:6px">Verkaufen geht nur an der eigenen Hütte oder Burg.</div>');
+  // Verkaufen: Automatik je Typ (Taste/Knopf „Verkaufen“) + einzelne Gegenstände
+  const AS = t.autoSell || AUTO_SELL_DEFAULT, selInv = inv.filter(x => AS[x]), val = selInv.reduce((s, x) => s + ITEMS[x].sell, 0);
+  h += '<div class="sellbox"><div class="sellhd"><b>' + icon('sell', 'ico-s') + ' Verkaufen</b><span class="muted small">' + (near ? 'Taste ' + bindCap('sell') + ' verkauft nur die markierten Sorten' : 'Verkaufen geht nur an der eigenen Hütte oder Burg.') + '</span></div>';
+  h += '<div class="sellrow"><span class="muted small">Automatisch:</span>' + SELLABLE.map(k => '<button class="schip opt' + (AS[k] ? ' on' : '') + '" data-as="' + k + '" title="' + (AS[k] ? 'wird verkauft' : 'wird behalten') + '"><img src="' + itemIcon(k) + '" alt="">' + ITEMS[k].name + ' <small>+' + ITEMS[k].sell + '</small>' + (AS[k] ? ' ✔' : '') + '</button>').join('') + '</div>';
+  if (c) {
+    const one = [];
+    c.inv.forEach((x, i) => one.push('<button class="schip opt' + (near && ITEMS[x].sell > 0 ? '' : ' dis') + '" data-so="' + i + '"><img src="' + itemIcon(x) + '" alt="">' + ITEMS[x].name + ' <small>+' + ITEMS[x].sell + '</small></button>'));
+    for (const q of EQ_SLOTS) { const has = q.k === 'armor' ? c.armor && !c.knight : hasG(c, q.k); if (has) one.push('<button class="schip eqc opt' + (near ? '' : ' dis') + '" data-so="' + q.k + '"><img src="' + itemIcon(q.k) + '" alt="">' + ITEMS[q.k].name + ' <small>+' + ITEMS[q.k].sell + '</small></button>'); }
+    h += '<div class="sellrow"><span class="muted small">Einzeln:</span>' + (one.length ? one.join('') : '<span class="muted small">' + c.name + ' trägt nichts.</span>') + '</div>';
+  }
+  h += '</div>';
+  h += '<div class="shopfoot"><span class="moneybig">' + icon('coin') + t.money + '</span><span class="muted small">' + (inv.length ? inv.length + ' Objekte' + (v ? ' (mit Lore)' : '') + ' · markiert: ' + selInv.length + ' · Wert ' + val : 'Nichts zu verkaufen') + '</span>' +
+    '<button class="btn sm primary opt' + (near && selInv.length ? '' : ' dis') + '" id="sellbtn">' + icon('sell', 'ico-s') + ' Markierte verkaufen (+' + val + ') ' + bindCap('sell') + '</button></div>';
   keepSel(() => { $('shop').innerHTML = h; });
+  const re = () => setTimeout(() => { if (G.menu === 'shop') renderShop(); }, 120);
+  for (const el of $('shop').querySelectorAll('[data-as]')) el.onclick = () => { uiSnd(); act('autosell', [el.dataset.as, AS[el.dataset.as] ? 0 : 1]); re(); };
+  for (const el of $('shop').querySelectorAll('[data-so]')) el.onclick = () => { if (!near) { toast('Verkaufen geht nur an der Hütte/Burg', 'warn'); return; } const d = el.dataset.so; uiSnd(); act('sellone', /^[0-9]+$/.test(d) ? +d : d); re(); };
   for (const el of $('shop').querySelectorAll('[data-buy]')) el.onclick = () => { const k = el.dataset.buy, e = SHOP_ALL.find(x => x.k === k); if (e.res && !t.res[e.res]) { toast('Erst erforschen: ' + RES_BY[e.res].name, 'warn'); playSnd('error'); return; } uiSnd(); act('buy', k); setTimeout(() => { if (G.menu === 'shop') renderShop(); }, 120); };
   $('sellbtn').onclick = () => { act('sell'); setTimeout(() => { if (G.menu === 'shop') renderShop(); }, 120); };
 }
@@ -159,7 +172,8 @@ function renderHelp() {
     h += '<div class="kbdviz"><div class="grp"><div class="rowk">' + B('up') + '</div><div class="rowk">' + B('left') + B('down') + B('right') + '</div><small>Laufen · Klettern</small></div>' +
       '<div class="grp"><div class="rowk">' + B('jump') + '</div><small>Springen</small></div><div class="grp"><div class="rowk">' + B('sprint') + '</div><small>Sprinten</small></div>' +
       '<div class="grp"><div class="rowk">' + B('primary') + B('secondary') + '</div><small>Aktion · Graben/Blocken</small></div><div class="grp"><div class="rowk">' + B('interact') + B('drop') + '</div><small>Benutzen · Ablegen</small></div>' +
-      '<div class="grp"><div class="rowk">' + B('slot1') + B('slot2') + B('slot3') + '</div><small>Inventar (3 Plätze)</small></div></div>';
+      '<div class="grp"><div class="rowk">' + B('slot1') + B('slot2') + B('slot3') + '</div><small>Inventar (3 Plätze)</small></div>' +
+      '<div class="grp"><div class="rowk">' + B('slot4') + B('slot5') + B('slot6') + '</div><small>Ausrüstung: Schwert · Bogen · Haken</small></div></div>';
     h += '<div class="helpgrid">';
     let grp = '';
     const items = ACTIONS.map(a => ({ a, cap: bindCap(a.k, true) }));
@@ -167,7 +181,7 @@ function renderHelp() {
     h += col(items.slice(0, 12)); grp = ''; h += col(items.slice(12).concat([{ a: { g: 'Menüs', n: 'Pause' }, cap: keyCap('Escape') }, { a: { g: 'Ansicht', n: 'Zoomen' }, cap: keyCap('WheelUp') + keyCap('WheelDown') }, { a: { g: 'Ansicht', n: 'Inventarplatz wechseln' }, cap: kbdShift() + keyCap('WheelUp') }]));
     h += '</div><div class="muted small" style="margin-top:10px">Die Maus zielt: Würfe, Pfeile, Graben und Geschütze folgen dem Mauszeiger. Alle Tasten lassen sich unter Einstellungen › Steuerung neu belegen.</div>';
   } else if (tab === 'pad') {
-    const rows = [['LS', 'Laufen · hoch = klettern · ganz durchdrücken = sprinten'], ['RS', 'Zielen (Twin-Stick)'], ['RT', 'Aktion: werfen / schlagen / schießen / feuern'], ['LT', 'Halten: graben in Zielrichtung · mit Schwert/Schild blocken'], ['A', 'Springen · in Menüs: auswählen'], ['B', 'Graben an/aus · in Menüs: zurück'], ['X', 'Benutzen (Fahrzeug, Tür, Aufheben)'], ['Y', 'Ablegen · Lore ausladen'], ['LB', 'Inventarplatz links'], ['RB', 'Inventarplatz rechts'], ['L3', 'Nächster Buddler'], ['R3', 'Forschung'], ['Select', 'Laden'], ['Start', 'Pause (dort: Bauen über Dock/Maus)'], ['DP', 'Laufen · in Menüs navigieren']];
+    const rows = [['LS', 'Laufen · hoch = klettern · ganz durchdrücken = sprinten'], ['RS', 'Zielen (Twin-Stick)'], ['RT', 'Aktion: werfen / schlagen / schießen / feuern'], ['LT', 'Halten: graben in Zielrichtung · mit gewähltem Schwert + Schild blocken'], ['A', 'Springen · in Menüs: auswählen'], ['B', 'Graben an/aus · in Menüs: zurück'], ['X', 'Benutzen (Fahrzeug, Tür, Aufheben)'], ['Y', 'Ablegen · Lore ausladen'], ['LB', 'Inventar-/Ausrüstungsplatz links'], ['RB', 'Inventar-/Ausrüstungsplatz rechts'], ['L3', 'Nächster Buddler'], ['R3', 'Forschung'], ['Select', 'Laden'], ['Start', 'Pause (dort: Bauen über Dock/Maus)'], ['DP', 'Laufen · in Menüs navigieren']];
     h += '<div class="ctl">' + rows.map(([b, d]) => '<div class="keys">' + padCap(b) + '</div><div class="d">' + d + '</div>').join('') + '</div><div class="muted small" style="margin-top:10px">Xbox-/PlayStation-Standardbelegung (✕ = A, ◯ = B, ▢ = X, △ = Y). Wird automatisch erkannt.</div>';
   } else if (tab === 'touch') {
     h += '<ul class="tips"><li><b>Linker Stick</b>: laufen, nach oben schieben = springen/klettern.</li><li><b>Ins Spielfeld tippen</b>: Aktion (werfen, schlagen, schießen) in Richtung des Fingers.</li><li><b>Ins Spielfeld lange drücken</b>: dorthin graben (Finger bewegen = Richtung).</li><li><b>Knöpfe rechts</b>: Sprung, Aktion, Graben, Benutzen, Ablegen, Inventarplatz, Buddler wechseln.</li><li><b>Zwei Finger</b> auf dem Spielfeld auseinander/zusammen ziehen = zoomen.</li><li><b>💬 oben</b> (Mehrspieler): Chat und Emotes.</li><li><b>Oben</b>: Laden und Menü. Das Dock rechts öffnet Bauen, Forschung, Hilfe und Einstellungen.</li></ul><div class="muted small">Touch-Steuerung lässt sich unter Einstellungen › Anzeige erzwingen oder abschalten.</div>';
@@ -184,6 +198,9 @@ function renderHelp() {
       '<li><b>Buddler-Name</b>: Im Einzelspieler-Menü bzw. Mehrspieler-Menü kannst du deinem Buddler einen Namen geben (max. 16 Zeichen). Er steht über dem Buddler und in der Buddlerliste; weitere gekaufte Buddler heißen „Name 2“, „Name 3“ … Leer lassen = zufällige Namen.</li></ul>';
   } else {
     h += '<ul class="tips"><li><b>Goldrausch</b>: Grabe Gold, verkaufe es an der Hütte (' + bindCap('sell') + ') und erreiche das Geldziel.</li><li><b>Melee</b>: Das letzte überlebende Team gewinnt. Ritter, Katapulte und Burgen helfen.</li><li><b>Forschung</b> (' + bindCap('research') + ') schaltet Lore, Katapult, Kanone, Wachturm, Burg, Waffen, Ritter und TNT frei.</li><li><b>Bauen</b> (' + bindCap('build') + '): Gebäude entstehen als Baustelle vor deinem Buddler – Buddler in der Nähe bauen sie auf. Die Vorschau zeigt den Platz: <b style="color:#7ee69a">grün</b> = frei, <b style="color:#ffd36b">gelb</b> = wird zuerst planiert (Erde/Sand abtragen, Lücken auffüllen, kostet etwas Geld und Zeit), <b style="color:#ff8a80">rot</b> = unmöglich (z. B. Fels im Weg – erst sprengen).</li><li>Jede Startbasis liegt auf einem ebenen Plateau mit Platz für Hütte, Wachturm und Burg. Die Kartengröße (Klein bis Riesig) wählst du im Menü bzw. der Host in der Lobby.</li><li>Feuersteine explodieren beim Aufprall, TNT nach kurzer Zeit.</li><li>Lava verbrennt alles und wird mit Wasser zu Fels. Feuer breitet sich über Gras und Holz aus – ins Wasser springen löscht.</li><li>Nachts ist es dunkel – Gebäude, Fackeln und Feuer spenden Licht.</li><li>Du startest im Einzelspieler mit einem Buddler – weitere kaufst du im Laden; sie arbeiten als KI-Helfer. Stirbt dein Buddler, übernimmst du automatisch einen Helfer.</li><li><b>Goldziel</b>: im Einzelspieler-Menü 100–1000 oder eigenes Ziel; der Fortschritt steht oben links.</li><li><b>Vögel klauen Gold</b>, das offen an der Oberfläche liegt – schnell aufsammeln oder den Vogel treffen, dann lässt er es fallen.</li><li>Steckt ein Buddler fest, erscheint „Hilfe!“ – ein KI-Kamerad gräbt einen Ausweg.</li>' +
+      '<li><b>Ausrüstung</b>: Schwert, Schild, Bogen, Rüstung und Enterhaken haben eigene Plätze (rechts neben dem Inventar) und belegen keinen der 3 Inventarplätze. ' + bindCap('slot4') + ' Schwert, ' + bindCap('slot5') + ' Bogen, ' + bindCap('slot6') + ' Enterhaken; mit leerer Hand kämpft der Buddler mit der besten Waffe. Schild und Rüstung wirken automatisch – Blocken: Schwert wählen und ' + bindCap('secondary') + ' halten.</li>' +
+      '<li><b>Verkaufen</b> (' + bindCap('sell') + '): verkauft nur die markierten Sorten – anfangs nur Gold. Im Laden (' + bindCap('shop') + ') unter „Verkaufen“ schaltest du weitere Sorten zu oder verkaufst einzelne Gegenstände (auch Ausrüstung).</li>' +
+      '<li><b>Erdklumpen</b> (Laden, 2 Geld): ' + bindCap('drop') + ' füllt das Loch vor/unter dir mit Erde, werfen lässt ihn beim Aufprall platschen. Niemand wird dabei eingeschlossen.</li>' +
       '<li><b>Tiere</b>: <b>Wipfe</b> laufen über die Wiesen – mit ' + bindCap('interact') + ' fangen, tragen (belegt einen Inventarplatz), mit ' + bindCap('drop') + ' freilassen oder an der Hütte verkaufen. Vögel, Fische und Fledermäuse sind harmlos. <b>Haie</b> leben in tiefem Wasser und beißen Schwimmer – schnell raus!</li>' +
       '<li><b>Wildschweine</b> grasen friedlich. Greifst du eines an (oder bedrängst es lange), stürmt es höchstens zweimal los und flieht dann. Erlegt lässt es Gold fallen.</li>' +
       '<li><b>KI-Helfer</b>: Gekaufte Buddler arbeiten selbstständig (abbauen, verkaufen, beim Bauen helfen, verteidigen); Stufe im Startmenü oder in der Pause. Stirbt dein Buddler, übernimmst du automatisch den besten Helfer; mit ' + bindCap('nextclonk') + ' wechselst du selbst.</li>' +

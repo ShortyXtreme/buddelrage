@@ -10,28 +10,46 @@ const SIM_CHUNK_BUDGET = 360; // max. aktive Material-Chunks pro Tick (große Ka
 const ITEMS = {
   rock: { name: 'Stein', price: 3, sell: 2, dmg: 9 },
   flint: { name: 'Feuerstein', price: 10, sell: 5, blast: 13 },
-  superflint: { name: 'Superflint', price: 20, sell: 10, blast: 21 },
-  tnt: { name: 'TNT', price: 25, sell: 12, blast: 30 },
+  superflint: { name: 'Superflint', price: 24, sell: 10, blast: 21 },
+  tnt: { name: 'TNT', price: 30, sell: 12, blast: 30 },
   gold: { name: 'Gold', price: 0, sell: 20, dmg: 6 },
-  sword: { name: 'Schwert', price: 15, sell: 7, dmg: 7 },
-  shield: { name: 'Schild', price: 12, sell: 6, dmg: 5 },
-  bow: { name: 'Bogen', price: 15, sell: 7, dmg: 4 },
-  arrows: { name: 'Pfeile (10)', price: 6, sell: 3, dmg: 3 },
-  armor: { name: 'Rüstung', price: 25, sell: 12, dmg: 6 },
+  sword: { name: 'Schwert', price: 22, sell: 7, dmg: 7 },
+  shield: { name: 'Schild', price: 18, sell: 6, dmg: 5 },
+  bow: { name: 'Bogen', price: 22, sell: 7, dmg: 4 },
+  arrows: { name: 'Pfeile (10)', price: 8, sell: 3, dmg: 3 },
+  armor: { name: 'Rüstung', price: 38, sell: 12, dmg: 6 },
   arrow: { name: 'Pfeil', price: 0, sell: 0, dmg: 13 },
   wipf: { name: 'Wipf', price: 0, sell: 6, dmg: 1 },
-  hook: { name: 'Enterhaken', price: 15, sell: 7, dmg: 4 },
-  balloon: { name: 'Ballon', price: 12, sell: 5, dmg: 1 },
+  hook: { name: 'Enterhaken', price: 20, sell: 7, dmg: 4 },
+  balloon: { name: 'Ballon', price: 15, sell: 5, dmg: 1 },
+  earth: { name: 'Erdklumpen', price: 2, sell: 0, dmg: 3 },
 };
-const ITEM_CODES = ['rock', 'flint', 'superflint', 'tnt', 'gold', 'sword', 'shield', 'bow', 'arrows', 'armor', 'arrow', 'wipf', 'hook', 'balloon'];
+const ITEM_CODES = ['rock', 'flint', 'superflint', 'tnt', 'gold', 'sword', 'shield', 'bow', 'arrows', 'armor', 'arrow', 'wipf', 'hook', 'balloon', 'earth'];
 const AMMO = new Set(['rock', 'flint', 'superflint', 'tnt', 'gold']);
 const THROWABLE = new Set(['flint', 'superflint', 'tnt']);
-const PRICE_CLONK = 60, PRICE_KNIGHT = 90, PRICE_BRIDGE = 12;
+// Ausrüstung: eigene Plätze, getrennt vom 3er-Inventar (Rüstung = c.armor, Pfeile = c.arrows)
+const GEAR = new Set(['sword', 'shield', 'bow', 'hook']);
+const GEAR_SEL = ['sword', 'bow', 'hook']; // per Taste 4–6 wählbar (Schild/Rüstung wirken passiv)
+const EQ_SLOTS = [{ k: 'sword', n: 'Waffe' }, { k: 'shield', n: 'Schild' }, { k: 'bow', n: 'Bogen' }, { k: 'armor', n: 'Rüstung' }, { k: 'hook', n: 'Werkzeug' }];
+const SELLABLE = ['gold', 'rock', 'flint', 'superflint', 'tnt', 'wipf', 'balloon']; // Verkaufsmenü: Automatik je Typ
+const AUTO_SELL_DEFAULT = { gold: 1 }; // Standard: nur Wertgegenstände
+function hasG(c, k) { return !!(c && c.gear && c.gear.includes(k)); }
+function canTake(c, type) { if (type === 'arrows') return true; if (type === 'armor') return !c.armor; if (GEAR.has(type)) return !hasG(c, type); return c.inv.length < INV_MAX; }
+function giveItem(c, type) {
+  if (!canTake(c, type)) return false;
+  if (type === 'arrows') c.arrows += 10; else if (type === 'armor') c.armor = 1; else if (GEAR.has(type)) (c.gear || (c.gear = [])).push(type); else c.inv.push(type);
+  return true;
+}
+function bestWeapon(c) { return hasG(c, 'sword') ? 'sword' : hasG(c, 'bow') && c.arrows > 0 ? 'bow' : null; }
+// alte Stände/Ritter: Ausrüstung aus dem Inventar in die Ausrüstungsplätze verschieben
+function migrateGear(c) { if (!c.gear) c.gear = []; if (!c.inv) c.inv = []; const keep = []; for (const t of c.inv) { if (GEAR.has(t) && !c.gear.includes(t)) c.gear.push(t); else if (!GEAR.has(t)) keep.push(t); } c.inv = keep; if ((c.slot || 0) >= INV_MAX + GEAR_SEL.length) c.slot = 0; return c; }
+function selSlots(c) { const L = []; for (let i = 0; i < INV_MAX; i++) if (i < c.inv.length || i === 0) L.push(i); GEAR_SEL.forEach((g, i) => { if (hasG(c, g)) L.push(INV_MAX + i); }); return L; }
+const PRICE_CLONK = 60, PRICE_KNIGHT = 110, PRICE_BRIDGE = 12;
 // Fahrzeuge (Lore, Katapult, Kanone)
 const VEH = {
-  lorry: { name: 'Lore', price: 25, w: 14, h: 8, hp: 80, cap: 25, res: 'lorry' },
-  catapult: { name: 'Katapult', price: 45, w: 18, h: 12, hp: 90, wood: 1, gun: 1, speed: 4.9, cd: 70, amin: 0.3, amax: 1.35, ang: 0.8, res: 'catapult' },
-  cannon: { name: 'Kanone', price: 80, w: 16, h: 9, hp: 150, gun: 1, speed: 6.6, cd: 100, amin: 0, amax: 1.1, ang: 0.3, res: 'cannon' },
+  lorry: { name: 'Lore', price: 30, w: 14, h: 8, hp: 80, cap: 25, res: 'lorry' },
+  catapult: { name: 'Katapult', price: 55, w: 18, h: 12, hp: 90, wood: 1, gun: 1, speed: 4.9, cd: 70, amin: 0.3, amax: 1.35, ang: 0.8, res: 'catapult' },
+  cannon: { name: 'Kanone', price: 95, w: 16, h: 9, hp: 150, gun: 1, speed: 6.6, cd: 100, amin: 0, amax: 1.1, ang: 0.3, res: 'cannon' },
 };
 const VEH_CODES = ['lorry', 'catapult', 'cannon'];
 const VSTEP = 5; // Fahrzeuge erklimmen Stufen bis 5 px (Räder)
@@ -45,27 +63,27 @@ const MAP_SIZES = { klein: { n: 'Klein', f: 0.85, h: 580 }, mittel: { n: 'Mittel
 function mapDims(baseW, size) { const S = MAP_SIZES[size] || MAP_SIZES.mittel; return { W: Math.round(baseW * S.f / 10) * 10, H: S.h, size: MAP_SIZES[size] ? size : 'mittel' }; }
 const BUILD = {
   hut: { name: 'Hütte', price: 60, w: 30, h: 24, hp: 120, time: 360, base: 1, wood: 1 },
-  tower: { name: 'Wachturm', price: 80, w: 18, h: 50, hp: 220, time: 600, wood: 1, res: 'tower' },
-  castle: { name: 'Burg', price: 150, w: 64, h: 46, hp: 600, time: 1000, base: 1, res: 'castle' },
+  tower: { name: 'Wachturm', price: 90, w: 18, h: 50, hp: 220, time: 600, wood: 1, res: 'tower' },
+  castle: { name: 'Burg', price: 170, w: 64, h: 46, hp: 600, time: 1000, base: 1, res: 'castle' },
 };
 // Forschungsbaum
 const RESEARCH = [
-  { k: 'lorry', name: 'Lore', cost: 20, time: 12, desc: 'Fahrzeug: sammelt Gold, Steine & Gegenstände ein' },
-  { k: 'tower', name: 'Wachturm', cost: 35, time: 18, desc: 'Gebäude: betretbar, von oben werfen/schießen' },
-  { k: 'tnt', name: 'Sprengstoff', cost: 30, time: 15, desc: 'TNT im Laden' },
-  { k: 'weapons', name: 'Waffenschmiede', cost: 45, time: 20, desc: 'Schwert, Schild, Bogen, Pfeile, Rüstung' },
-  { k: 'catapult', name: 'Katapult', cost: 40, time: 20, req: ['lorry'], desc: 'Fahrzeug: schleudert Steine & Feuersteine' },
-  { k: 'castle', name: 'Burg', cost: 70, time: 30, req: ['tower'], desc: 'Gebäude: Heimatbasis, Laden, Rüstung, Heilung' },
-  { k: 'cannon', name: 'Kanone', cost: 70, time: 30, req: ['catapult', 'weapons'], desc: 'Fahrzeug: schießt flach und hart' },
-  { k: 'knight', name: 'Ritter', cost: 60, time: 25, req: ['castle', 'weapons'], desc: 'Ritter mit Schwert, Schild, Bogen & Rüstung kaufen' },
-  { k: 'balloon', name: 'Ballonbau', cost: 25, time: 12, desc: 'Ballon im Laden: schwebt langsam nach oben (raus aus Gruben)' },
+  { k: 'lorry', name: 'Lore', cost: 35, time: 18, desc: 'Fahrzeug: sammelt Gold, Steine & Gegenstände ein' },
+  { k: 'tower', name: 'Wachturm', cost: 60, time: 27, desc: 'Gebäude: betretbar, von oben werfen/schießen' },
+  { k: 'tnt', name: 'Sprengstoff', cost: 50, time: 22, desc: 'TNT im Laden' },
+  { k: 'weapons', name: 'Waffenschmiede', cost: 80, time: 30, desc: 'Schwert, Schild, Bogen, Pfeile, Rüstung' },
+  { k: 'catapult', name: 'Katapult', cost: 70, time: 30, req: ['lorry'], desc: 'Fahrzeug: schleudert Steine & Feuersteine' },
+  { k: 'castle', name: 'Burg', cost: 120, time: 45, req: ['tower'], desc: 'Gebäude: Heimatbasis, Laden, Rüstung, Heilung' },
+  { k: 'cannon', name: 'Kanone', cost: 125, time: 45, req: ['catapult', 'weapons'], desc: 'Fahrzeug: schießt flach und hart' },
+  { k: 'knight', name: 'Ritter', cost: 105, time: 38, req: ['castle', 'weapons'], desc: 'Ritter mit Schwert, Schild, Bogen & Rüstung kaufen' },
+  { k: 'balloon', name: 'Ballonbau', cost: 45, time: 18, desc: 'Ballon im Laden: schwebt langsam nach oben (raus aus Gruben)' },
 ];
 const RES_BY = Object.fromEntries(RESEARCH.map(r => [r.k, r]));
 const SHOP_ALL = [
   { k: 'flint' }, { k: 'superflint' }, { k: 'tnt', res: 'tnt' }, { k: 'rock' }, { k: 'hook' }, { k: 'balloon', res: 'balloon' }, { k: 'clonk' },
   { k: 'lorry', res: 'lorry' }, { k: 'catapult', res: 'catapult' }, { k: 'cannon', res: 'cannon' },
   { k: 'sword', res: 'weapons' }, { k: 'shield', res: 'weapons' }, { k: 'bow', res: 'weapons' }, { k: 'arrows', res: 'weapons' }, { k: 'armor', res: 'weapons' },
-  { k: 'knight', res: 'knight' },
+  { k: 'knight', res: 'knight' }, { k: 'earth' },
 ];
 function shopList(t) { return SHOP_ALL.filter(e => !e.res || (t.res && t.res[e.res])); }
 function shopName(k) { return k === 'clonk' ? 'Buddler (neuer Arbeiter)' : k === 'knight' ? 'Ritter (Schwert, Schild, Bogen, Rüstung)' : VEH[k] ? VEH[k].name + ' (Fahrzeug)' : ITEMS[k].name; }
@@ -85,8 +103,10 @@ const BLOCK_SLOT = new Set(['sword', 'shield']);
 // Namen säubern (für HUD/Netz): keine Steuerzeichen/HTML-Zeichen, max. 16 Zeichen
 function cleanName(s, def) { const r = String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f-\u009f<>&"'`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16).trim(); return r || def; }
 function newStats() { return { gold: 0, earned: 0, built: 0, builtList: [], research: 0, kills: 0, deaths: 0, bought: 0, stuckEv: 0, maxStuck: 0, paths: 0, bonus: 0 }; }
-function actIdx(c) { return Math.max(0, Math.min(c.slot || 0, c.inv.length - 1)); }
-function actItem(c) { return c.inv.length ? c.inv[actIdx(c)] : null; }
+function actIdx(c) { return (c.slot || 0) >= INV_MAX ? 0 : Math.max(0, Math.min(c.slot || 0, c.inv.length - 1)); }
+function actGear(c) { const s = c.slot || 0; if (s < INV_MAX) return null; const g = GEAR_SEL[s - INV_MAX]; return hasG(c, g) ? g : null; }
+// aktiver Gegenstand: gewählte Ausrüstung (4–6) oder Inventarplatz (1–3); leere Hand → beste Waffe
+function actItem(c) { const g = actGear(c); if (g) return g; return c.inv.length ? c.inv[actIdx(c)] : bestWeapon(c); }
 const invEnc = a => a.map(t => String.fromCharCode(97 + ITEM_CODES.indexOf(t))).join('');
 const invDec = s => s ? s.split('').map(ch => ITEM_CODES[ch.charCodeAt(0) - 97]) : [];
 
@@ -342,7 +362,7 @@ class World {
     cfg.sharedBase = true; // ein Lager je Lobby-Team (Seite): gemeinsame Hütte, Kasse, Forschung
     this.generate(this.sideList(cfg.teams).length);
     cfg.teams.forEach((tc, ti) => {
-      const team = { id: ti, side: Number.isInteger(tc.side) ? tc.side : ti, hdiff: AI_LEVELS.includes(tc.hdiff) ? tc.hdiff : 'normal', name: cleanName(tc.name, 'Team ' + (ti + 1)), color: tc.color || TEAM_COLORS[ti % 6], ai: !!tc.ai, diff: AI_LEVELS.includes(tc.diff) ? tc.diff : 'normal', helper: !tc.ai && !!(tc.helper != null ? tc.helper : cfg.helpers), cname: tc.ai ? '' : cleanName(tc.cname, ''), cnum: 0, pid: tc.pid || null, money: cfg.money != null ? cfg.money : 50, sel: -1, keys: { ...NOKEYS }, elim: false, aiT: 0, nameIdx: ti * 5, res: {}, rq: '', rp: 0, stat: '', stats: newStats() };
+      const team = { id: ti, side: Number.isInteger(tc.side) ? tc.side : ti, hdiff: AI_LEVELS.includes(tc.hdiff) ? tc.hdiff : 'normal', name: cleanName(tc.name, 'Team ' + (ti + 1)), color: tc.color || TEAM_COLORS[ti % 6], ai: !!tc.ai, diff: AI_LEVELS.includes(tc.diff) ? tc.diff : 'normal', helper: !tc.ai && !!(tc.helper != null ? tc.helper : cfg.helpers), cname: tc.ai ? '' : cleanName(tc.cname, ''), cnum: 0, pid: tc.pid || null, money: cfg.money != null ? cfg.money : 50, sel: -1, keys: { ...NOKEYS }, elim: false, aiT: 0, nameIdx: ti * 5, res: {}, rq: '', rp: 0, stat: '', stats: newStats(), autoSell: { ...AUTO_SELL_DEFAULT } };
       if (cfg.allResearch) for (const r of RESEARCH) team.res[r.k] = 1;
       this.teams.push(team);
     });
@@ -393,13 +413,13 @@ class World {
   }
   spawnClonk(team, x, y) {
     const t = this.teams[team];
-    const c = { id: this.id(), team, x, y, vx: 0, vy: 0, dir: 1, act: 'jump', hp: 100, breath: 100, inv: [], anim: 0, digA: 0, gold: 0, fightT: 0, cd: 0, tumbleT: 0, deadT: 0, name: t.cname ? (t.cnum++ ? cleanName(t.cname.slice(0, 13) + ' ' + t.cnum, t.cname) : t.cname) : NAMES[(t.nameIdx++) % NAMES.length], aiKeys: { ...NOKEYS }, punch: 0, digIdle: 0, armor: 0, knight: 0, arrows: 0, block: 0, inside: 0, fire: 0, swing: 0, bowT: 0, veh: 0, blockT: 0 };
+    const c = { id: this.id(), team, x, y, vx: 0, vy: 0, dir: 1, act: 'jump', hp: 100, breath: 100, inv: [], gear: [], anim: 0, digA: 0, gold: 0, fightT: 0, cd: 0, tumbleT: 0, deadT: 0, name: t.cname ? (t.cnum++ ? cleanName(t.cname.slice(0, 13) + ' ' + t.cnum, t.cname) : t.cname) : NAMES[(t.nameIdx++) % NAMES.length], aiKeys: { ...NOKEYS }, punch: 0, digIdle: 0, armor: 0, knight: 0, arrows: 0, block: 0, inside: 0, fire: 0, swing: 0, bowT: 0, veh: 0, blockT: 0 };
     while (this.boxHit(c.x, c.y) && c.y > 2) c.y--;
     this.clonks.push(c); return c;
   }
   spawnKnight(team, x, y) {
     const c = this.spawnClonk(team, x, y);
-    c.knight = 1; c.armor = 1; c.inv = ['sword', 'shield', 'bow']; c.arrows = 15;
+    c.knight = 1; c.armor = 1; c.inv = []; c.gear = ['sword', 'shield', 'bow']; c.arrows = 15;
     return c;
   }
   spawnItem(type, x, y) {
@@ -457,7 +477,9 @@ class World {
       for (const c of this.clonks) if (c.team === teamId) { c.ai = null; c.aiKeys = { ...NOKEYS }; }
       this.msg(on ? 'KI-Helfer: ' + aiDiffName(arg) : 'KI-Helfer aus – nicht gesteuerte Buddler warten.', teamId); return;
     }
-    if (a === 'slot' || a === 'slotd') { const c = this.selClonk(t); if (!c) return; c.slot = a === 'slot' ? Math.max(0, Math.min(INV_MAX - 1, arg | 0)) : ((c.slot || 0) + (arg > 0 ? 1 : INV_MAX - 1)) % INV_MAX; return; }
+    if (a === 'slot' || a === 'slotd') { const c = this.selClonk(t); if (!c) return; if (a === 'slot') { const n = Math.max(0, Math.min(INV_MAX + GEAR_SEL.length - 1, arg | 0)); if (n >= INV_MAX && !hasG(c, GEAR_SEL[n - INV_MAX])) { if (!t.ai) this.msg('Kein ' + ITEMS[GEAR_SEL[n - INV_MAX]].name + ' – im Laden kaufen.', teamId); return; } c.slot = n; } else { const L = selSlots(c), k = L.indexOf(c.slot || 0); c.slot = L[((k < 0 ? 0 : k) + (arg > 0 ? 1 : L.length - 1)) % L.length]; } return; }
+    if (a === 'autosell') { if (!Array.isArray(arg) || !SELLABLE.includes(arg[0])) return; if (!t.autoSell) t.autoSell = { ...AUTO_SELL_DEFAULT }; t.autoSell[arg[0]] = arg[1] ? 1 : 0; return; }
+    if (a === 'sellone') { const c = this.selClonk(t); if (c) this.sellOne(c, arg); return; }
     if (a === 'research') return this.research(t, arg);
     const c = this.selClonk(t); if (!c) return;
     this.clonkAction(c, a, arg);
@@ -550,10 +572,8 @@ class World {
       wf.remove = true; c.inv.push('wipf'); this.snd('grab', c.x, c.y); if (!this.teams[c.team].ai) this.msg('Wipf gefangen! (Ablegen lässt ihn frei, an der Hütte verkaufen)', c.team); return true;
     }
     if (!best) return false;
-    if (best.type === 'arrows') { c.arrows += 10; best.remove = true; this.snd('grab', c.x, c.y); return true; }
-    if (best.type === 'armor' && !c.armor) { c.armor = 1; best.remove = true; this.snd('grab', c.x, c.y); return true; }
-    if (c.inv.length >= INV_MAX) { if (!this.teams[c.team].ai) this.msg('Inventar voll (3 Plätze)!', c.team); return true; }
-    c.inv.push(best.type); best.remove = true; this.snd('grab', c.x, c.y); return true;
+    if (!giveItem(c, best.type)) { if (!this.teams[c.team].ai) this.msg(GEAR.has(best.type) || best.type === 'armor' ? ITEMS[best.type].name + ' hast du schon.' : 'Inventar voll (3 Plätze)!', c.team); return true; }
+    best.remove = true; this.snd('grab', c.x, c.y); return true;
   }
   leave(c) {
     const s = this.structById(c.inside); c.inside = 0; c.act = 'walk'; c.vy = 0;
@@ -607,16 +627,34 @@ class World {
     return this.structs.find(s => BUILD[s.type].base && this.ally(s.team, tm) && !s.remove && s.prog >= 1 && Math.abs(c.x - s.x) < s.w / 2 + 12 && c.y > s.y - 30 && c.y < s.y + 8);
   }
   nearHut(c, team) { return this.nearBase(c, team); }
-  sell(c) {
+  sell(c, only) {
     const t = this.teams[c.team];
     if (!this.nearBase(c)) { this.msg('Zum Verkaufen zur Hütte/Burg gehen!', c.team); this.snd('error', c.x, c.y); return; }
     const v = c.act === 'push' ? this.vehById(c.veh) : null;
     const lor = v && v.type === 'lorry' ? v.inv : [];
     if (!c.inv.length && !lor.length) { this.msg('Nichts zu verkaufen.', c.team); return; }
-    let sum = 0; for (const ty of c.inv) sum += ITEMS[ty].sell; for (const ty of lor) sum += ITEMS[ty].sell;
-    c.inv = []; if (v && v.type === 'lorry') v.inv = [];
+    // nur gewählte Typen verkaufen (Standard: Wertgegenstände); only = feste Liste (KI)
+    const set = t.autoSell || AUTO_SELL_DEFAULT, pick = only ? (ty => only.includes(ty)) : (ty => !!set[ty]);
+    const keepC = c.inv.filter(ty => !pick(ty)), keepL = lor.filter(ty => !pick(ty));
+    const sold = c.inv.filter(pick).concat(lor.filter(pick));
+    if (!sold.length) { if (!t.ai) this.msg('Nichts zum Verkaufen ausgewählt – im Laden unter „Verkaufen“ einstellen.', c.team); return; }
+    let sum = 0; for (const ty of sold) sum += ITEMS[ty].sell;
+    c.inv = keepC; if (v && v.type === 'lorry') v.inv = keepL;
+    if ((c.slot || 0) < INV_MAX && c.slot >= c.inv.length) c.slot = Math.max(0, c.inv.length - 1);
     t.money += sum; if (t.stats) { t.stats.earned += sum; } this.snd('cash', c.x, c.y); this.msg('+' + sum + ' Geld', c.team);
     this.checkGoal();
+  }
+  // einzelnen Gegenstand verkaufen: Zahl = Inventarplatz, Text = Ausrüstung ('sword', 'shield', 'bow', 'hook', 'armor')
+  sellOne(c, what) {
+    const t = this.teams[c.team];
+    if (!this.nearBase(c)) { this.msg('Zum Verkaufen zur Hütte/Burg gehen!', c.team); this.snd('error', c.x, c.y); return; }
+    let ty = null;
+    if (typeof what === 'number') { if (what >= 0 && what < c.inv.length) ty = c.inv.splice(what, 1)[0]; }
+    else if (what === 'armor') { if (c.armor && !c.knight) { c.armor = 0; ty = 'armor'; } }
+    else if (GEAR.has(what) && hasG(c, what)) { c.gear.splice(c.gear.indexOf(what), 1); ty = what; if (actGear(c) === null && c.slot >= INV_MAX) c.slot = 0; }
+    if (!ty) return;
+    const sum = ITEMS[ty].sell; t.money += sum; if (t.stats) t.stats.earned += sum;
+    this.snd('cash', c.x, c.y); this.msg(ITEMS[ty].name + ' verkauft: +' + sum + ' Geld', c.team); this.checkGoal();
   }
   buy(t, what) {
     let bases = this.structs.filter(s => BUILD[s.type].base && s.team === t.id && s.prog >= 1 && !s.remove);
@@ -636,9 +674,7 @@ class World {
     } else if (VEH[what]) {
       let vx = base.x + base.w / 2 + 10, n = 0; while (n++ < 6 && this.vehicles.some(o => Math.abs(o.x - vx) < 17)) vx += 18;
       this.spawnVehicle(what, Math.min(this.W - 12, vx), base.y - 2, t.id); this.msg(VEH[what].name + ' steht bereit.', t.id);
-    } else if (what === 'arrows' && sc && this.nearBase(sc)) sc.arrows += 10;
-    else if (what === 'armor' && sc && this.nearBase(sc) && !sc.armor) sc.armor = 1;
-    else if (sc && this.nearBase(sc) && sc.inv.length < INV_MAX) sc.inv.push(what);
+    } else if (sc && this.nearBase(sc) && giveItem(sc, what)) { if (!t.ai && GEAR.has(what)) this.msg(ITEMS[what].name + ' ausgerüstet' + (GEAR_SEL.includes(what) ? ' (Taste ' + (INV_MAX + 1 + GEAR_SEL.indexOf(what)) + ')' : '') + '.', t.id); }
     else { const it = this.spawnItem(what, base.x + (this.rand() * 10 - 5), base.y - 6); it.pickCd = 10; }
     this.snd('uncash', base.x, base.y);
   }
@@ -741,20 +777,24 @@ class World {
     this.snd('throw', c.x, c.y); c.punch = 10; c.cd = 12;
   }
   dropItem(c) {
-    if (!c.inv.length || c.act === 'dead' || c.inside) return;
+    if (c.act === 'dead' || c.inside) return;
+    const g = actGear(c);
+    if (g) { c.gear.splice(c.gear.indexOf(g), 1); c.slot = 0; const it = this.spawnItem(g, c.x, c.y - 4); it.pickCd = 80; this.snd('drop', c.x, c.y); return; }
+    if (!c.inv.length) return;
+    if (c.inv[actIdx(c)] === 'earth' && this.placeEarth) { if (this.placeEarth(c)) return; }
     const type = c.inv.splice(actIdx(c), 1)[0];
     const it = this.spawnItem(type, c.x, c.y - 4); it.pickCd = 80;
     if (type === 'tnt') { it.fuse = 150; this.snd('fuse', c.x, c.y); }
   }
   // Schild: blockt, wenn Träger blockt (oder zufällig im Nahkampf) und zum Angreifer schaut
   blocks(target, fromDir, auto) {
-    if (!target.inv || !target.inv.includes('shield') || target.act === 'dead' || target.act === 'tumble') return false;
+    if (!target.inv || !hasG(target, 'shield') || target.act === 'dead' || target.act === 'tumble') return false;
     if (target.dir !== -fromDir) return false;
     return !!target.block || (auto && this.rand() < 0.3);
   }
   attack(c, melee) {
     if (c.act === 'dead' || c.cd > 0) return;
-    const hasSword = c.inv.includes('sword'), hasBow = c.inv.includes('bow') && c.arrows > 0;
+    const hasSword = hasG(c, 'sword'), hasBow = hasG(c, 'bow') && c.arrows > 0;
     if (c.inside) { if (hasBow) this.shoot(c); else if (c.inv.length) this.throwItem(c); return; }
     if (c.act === 'push' || c.act === 'climb' || c.act === 'hangle') return;
     const foe = this.clonks.find(o => !this.ally(o.team, c.team) && o.act !== 'dead' && !o.inside && Math.abs(o.x - c.x) < 16 && Math.abs(o.y - c.y) < 10 && Math.sign(o.x - c.x) === c.dir)
@@ -817,8 +857,8 @@ class World {
   kill(c) {
     if (c.act === 'push') this.release(c);
     c.hp = 0; c.act = 'dead'; c.deadT = 0; c.vx = 0; c.fire = 0; c.block = 0; c.hk = null; c.bl = null; c.invT = 0;
-    for (const ty of c.inv) { const it = this.spawnItem(ty, c.x, c.y - 5); it.vx = (this.rand() - 0.5) * 1.5; it.vy = -1.5; it.pickCd = 30; }
-    c.inv = [];
+    for (const ty of c.inv.concat(c.gear || [])) { const it = this.spawnItem(ty, c.x, c.y - 5); it.vx = (this.rand() - 0.5) * 1.5; it.vy = -1.5; it.pickCd = 30; }
+    c.inv = []; c.gear = [];
     this.snd('die', c.x, c.y);
     this.msg(c.name + ' (' + this.teams[c.team].name + ') ist gestorben.');
     const t = this.teams[c.team];
@@ -1152,8 +1192,8 @@ class World {
     if (headWater) { c.breath -= 0.16; if (c.breath <= 0) { c.breath = 0; this.hurt(c, 0.25, 'fire'); if (c.act === 'dead') return; } } else c.breath = Math.min(100, c.breath + 1);
     if (inWater && (c.act === 'walk' || c.act === 'jump' || c.act === 'hangle' || c.act === 'fight')) { if (c.act === 'jump' && c.vy > 1.5) this.snd('splash', c.x, c.y); c.act = 'swim'; }
     if (c.hk || c.bl || c.act === 'rope' || c.act === 'float') { this.updGear(c, k, inWater, inLava); if (c.act === 'rope' || c.act === 'float') return; }
-    const hasShield = c.inv.includes('shield');
-    const secBlock = k.g && hasShield && BLOCK_SLOT.has(actItem(c));
+    const hasShield = hasG(c, 'shield');
+    const secBlock = k.g && hasShield && !c.ai && actGear(c) === 'sword'; // Rechtsklick blockt nur mit gewähltem Schwert (sonst graben)
     c.block = ((k.b || secBlock) && hasShield && (c.act === 'walk' || c.act === 'fight')) ? 1 : 0;
     if (k.g && !secBlock) { // Graben halten (Rechtsklick / LT)
       if ((c.act === 'walk' || c.act === 'fight') && (!c.digHold || this.tick % 15 === 0)) { c.act = 'dig'; c.digHold = 1; c.digIdle = 0; c.vx = 0; if (k.am) c.digA = digAngle(c, k.ax, k.ay); }
@@ -1269,7 +1309,7 @@ class World {
         c.dir = Math.sign(foe.x - c.x) || c.dir;
         if (Math.abs(foe.x - c.x) < 5) this.walkStep(c, -c.dir * 0.5);
         c.fightT++;
-        const sword = c.inv.includes('sword');
+        const sword = hasG(c, 'sword');
         if (!c.block && c.fightT % (sword ? 30 : 34) === 0) {
           c.punch = 10; if (sword) c.swing = 10;
           if (this.blocks(foe, c.dir, true)) { this.snd('shield', foe.x, foe.y); foe.blockT = 10; }
@@ -1305,10 +1345,8 @@ class World {
     for (const it of this.items) {
       if (it.remove || it.stuck || it.pickCd > 0 || it.fuse > 0 || it.chain || it.type === 'arrow') continue;
       if (Math.abs(it.x - c.x) < 6 && it.y > c.y - 12 && it.y < c.y + 3 && Math.hypot(it.vx, it.vy) < 2.5) {
-        if (it.type === 'arrows') { c.arrows += 10; it.remove = true; this.snd('grab', c.x, c.y); continue; }
-        if (it.type === 'armor' && !c.armor) { c.armor = 1; it.remove = true; this.snd('grab', c.x, c.y); continue; }
-        if (c.inv.length >= INV_MAX) continue;
-        c.inv.push(it.type); it.remove = true; this.snd('grab', c.x, c.y);
+        if (!giveItem(c, it.type)) continue;
+        it.remove = true; this.snd('grab', c.x, c.y);
       }
     }
   }
@@ -1334,6 +1372,7 @@ class World {
       if (this.solid(nx, ny)) {
         if (it.armed && (it.type === 'flint' || it.type === 'superflint')) { it.remove = true; this.explode(it.x, it.y, ITEMS[it.type].blast + (it.shot === 2 ? 4 : 0), it.owner); return; }
         if (it.armed && it.shot === 2 && (it.type === 'rock' || it.type === 'gold')) { it.remove = true; this.explode(it.x, it.y, 8, it.owner); return; }
+        if (it.armed && it.type === 'earth' && this.splatEarth && this.splatEarth(it)) return;
         if (isArrow) { it.x = nx; it.y = ny; it.landed = true; it.armed = false; it.age = 0; this.snd('arrowhit', it.x, it.y); return; }
         const sp = Math.hypot(it.vx, it.vy);
         if (sp > 1.5) this.snd('rock', it.x, it.y);
@@ -1551,13 +1590,13 @@ class World {
     return {
       c: this.clonks.map(c => [c.id, c.team, r1(c.x), r1(c.y), c.dir, ACTS.indexOf(c.act), Math.ceil(c.hp), r1(c.anim), invEnc(c.inv), Math.round(c.breath), c.name, c.punch, r1(c.digA),
         (c.armor ? 1 : 0) | (c.knight ? 2 : 0) | (c.block ? 4 : 0) | (c.bowT > 0 ? 8 : 0) | (c.fire > 0 ? 16 : 0) | (c.blockT > 0 ? 32 : 0) | (c.invT > 0 ? 64 : 0), c.arrows, c.inside, c.swing, c.veh, c.slot || 0,
-        c.hk ? c.hk.st : 0, c.hk ? r1(c.hk.x) : 0, c.hk ? r1(c.hk.y) : 0, c.bl ? (c.bl.gas > 0 ? 1 : 2) : 0, (c.escCd || 0) > this.tick ? Math.ceil((c.escCd - this.tick) / 60) : 0, c.help ? (this.rescuerOf && this.rescuerOf(c) ? 2 : 1) : 0]),
+        c.hk ? c.hk.st : 0, c.hk ? r1(c.hk.x) : 0, c.hk ? r1(c.hk.y) : 0, c.bl ? (c.bl.gas > 0 ? 1 : 2) : 0, (c.escCd || 0) > this.tick ? Math.ceil((c.escCd - this.tick) / 60) : 0, c.help ? (this.rescuerOf && this.rescuerOf(c) ? 2 : 1) : 0, invEnc(c.gear || [])]),
       i: this.items.map(i => [i.id, ITEM_CODES.indexOf(i.type), r1(i.x), r1(i.y), i.fuse, i.stuck ? 1 : 0, r1(i.vx), r1(i.vy), i.landed ? 1 : 0]),
       m: this.monsters.map(m => [m.id, r1(m.x), r1(m.y), m.dir, Math.ceil(m.hp), r1(m.anim), m.bite > 0 ? m.bite : m.wind > 0 ? -m.wind : 0, m.fire > 0 ? 1 : 0]),
       a: this.animals.map(a => [a.id, ANIMAL_KINDS.indexOf(a.k), r1(a.x), r1(a.y), a.dir, r1(a.anim), (a.flee > 0 ? 1 : 0) | (a.flop ? 2 : 0) | (a.bite > 0 ? 4 : 0) | (a.perch ? 8 : 0) | (a.gold ? 16 : 0)]),
       s: this.structs.map(s => [s.id, s.type, s.x, s.y, s.team, Math.round(s.prog * 100) / 100, Math.ceil(s.hp), s.fire > 0 ? 1 : 0, s.lv ? 1 : 0]),
       v: this.vehicles.map(v => [v.id, VEH_CODES.indexOf(v.type), r1(v.x), r1(v.y), v.dir, v.team, Math.ceil(v.hp), Math.round(v.ang * 100) / 100, invEnc(v.inv), v.fire > 0 ? 1 : 0, v.pusher, v.cd]),
-      t: this.teams.map(t => [t.money, t.sel, t.elim ? 1 : 0, Object.keys(t.res).join(','), t.rq, Math.round(t.rp * 1000) / 1000, t.ai ? 1 : 0, t.diff || '', t.stat || '', t.helper ? 1 : 0, t.hdiff || '']),
+      t: this.teams.map(t => [t.money, t.sel, t.elim ? 1 : 0, Object.keys(t.res).join(','), t.rq, Math.round(t.rp * 1000) / 1000, t.ai ? 1 : 0, t.diff || '', t.stat || '', t.helper ? 1 : 0, t.hdiff || '', SELLABLE.filter(k => (t.autoSell || AUTO_SELL_DEFAULT)[k]).join(',')]),
       f: fl, b: this.burntNew && this.burntNew.length ? this.burntNew.splice(0) : undefined,
       st: this.state, w: this.winner, tk: this.tick,
     };
@@ -1569,7 +1608,7 @@ class World {
       const fl = a[13] || 0;
       Object.assign(c, { id: a[0], team: a[1], x: a[2], y: a[3], dir: a[4], act: ACTS[a[5]], hp: a[6], anim: a[7], inv: invDec(a[8]), breath: a[9], name: a[10], punch: a[11], digA: a[12],
         armor: fl & 1, knight: fl & 2, block: fl & 4, bowT: fl & 8 ? 1 : 0, fire: fl & 16 ? 1 : 0, blockT: fl & 32 ? 1 : 0, invT: fl & 64 ? 1 : 0, arrows: a[14], inside: a[15], swing: a[16], veh: a[17], slot: a[18] || 0 });
-      c.hk = a[19] ? { st: a[19], x: a[20], y: a[21] } : null; c.bl = a[22] ? { gas: a[22] === 1 ? 1 : 0 } : null; c.escCd = a[23] ? this.tick + a[23] * 60 : 0; c.helpS = a[24] || 0;
+      c.hk = a[19] ? { st: a[19], x: a[20], y: a[21] } : null; c.bl = a[22] ? { gas: a[22] === 1 ? 1 : 0 } : null; c.escCd = a[23] ? this.tick + a[23] * 60 : 0; c.helpS = a[24] || 0; c.gear = invDec(a[25] || '');
       return c;
     });
     const oi = new Map(this.items.map(c => [c.id, c]));
@@ -1581,7 +1620,7 @@ class World {
     this.structs = s.s.map(a => { const B = BUILD[a[1]]; return { id: a[0], type: a[1], x: a[2], y: a[3], team: a[4], prog: a[5], hp: a[6], fire: a[7], lv: a[8] || 0, w: B.w, h: B.h }; });
     const ov = new Map(this.vehicles.map(c => [c.id, c]));
     this.vehicles = (s.v || []).map(a => { const v = ov.get(a[0]) || { rx: a[2], ry: a[3] }; Object.assign(v, { id: a[0], type: VEH_CODES[a[1]], x: a[2], y: a[3], dir: a[4], team: a[5], hp: a[6], ang: a[7], inv: invDec(a[8]), fire: a[9], pusher: a[10], cd: a[11] }); return v; });
-    s.t.forEach((a, i) => { const t = this.teams[i]; if (t) { t.money = a[0]; t.sel = a[1]; t.elim = !!a[2]; t.res = {}; if (a[3]) for (const k of a[3].split(',')) t.res[k] = 1; t.rq = a[4]; t.rp = a[5]; t.ai = !!a[6]; t.diff = a[7] || ''; t.stat = a[8] || ''; t.helper = !!a[9]; t.hdiff = a[10] || 'normal'; } });
+    s.t.forEach((a, i) => { const t = this.teams[i]; if (t) { t.money = a[0]; t.sel = a[1]; t.elim = !!a[2]; t.res = {}; if (a[3]) for (const k of a[3].split(',')) t.res[k] = 1; t.rq = a[4]; t.rp = a[5]; t.ai = !!a[6]; t.diff = a[7] || ''; t.stat = a[8] || ''; t.helper = !!a[9]; t.hdiff = a[10] || 'normal'; if (a[11] != null) { t.autoSell = {}; for (const k of String(a[11]).split(',')) if (k) t.autoSell[k] = 1; } } });
     const fs = [], f = s.f || [];
     for (let k = 0; k < f.length; k += 3) fs.push({ x: f[k], y: f[k + 1], k: f[k + 2] });
     if (s.b) for (const x of s.b) this.markBurnt(x);

@@ -10,6 +10,7 @@ const ITEM_DRAW = {
   shield(g, x, y) { g.fillStyle = '#7a4a20'; g.fillRect(x - 2, y - 5, 4, 5); g.fillStyle = '#c0c4c8'; g.fillRect(x - 2, y - 5, 4, 1); g.fillRect(x - 1, y - 3, 2, 1); },
   bow(g, x, y) { g.fillStyle = '#8a5a26'; g.fillRect(x - 1, y - 5, 1, 1); g.fillRect(x, y - 4, 1, 3); g.fillRect(x - 1, y - 1, 1, 1); g.fillStyle = '#eee'; g.fillRect(x - 2, y - 5, 1, 5); },
   arrows(g, x, y) { g.fillStyle = '#6a4a22'; g.fillRect(x - 2, y - 4, 3, 4); g.fillStyle = '#ddd'; g.fillRect(x - 2, y - 6, 1, 2); g.fillRect(x, y - 6, 1, 2); g.fillStyle = '#c33'; g.fillRect(x - 1, y - 5, 1, 1); },
+  earth(g, x, y) { g.fillStyle = '#7a5230'; g.fillRect(x - 3, y - 3, 6, 3); g.fillRect(x - 2, y - 4, 4, 1); g.fillStyle = '#9c6c40'; g.fillRect(x - 2, y - 3, 2, 1); g.fillStyle = '#5a3a20'; g.fillRect(x - 3, y - 1, 6, 1); },
   armor(g, x, y) { g.fillStyle = '#9aa0a8'; g.fillRect(x - 2, y - 4, 4, 4); g.fillStyle = '#d0d4da'; g.fillRect(x - 2, y - 4, 1, 3); g.fillStyle = '#5a6068'; g.fillRect(x - 2, y - 1, 4, 1); },
   wipf(g, x, y) { drawWipf(g, { dir: 1, anim: 0 }, x, y + 1); },
   hook(g, x, y) { g.fillStyle = '#8a6a3a'; g.fillRect(x - 3, y - 2, 4, 1); g.fillStyle = '#c8ccd2'; g.fillRect(x + 1, y - 4, 1, 4); g.fillRect(x + 2, y - 4, 1, 1); g.fillRect(x, y - 4, 1, 1); g.fillRect(x + 2, y - 1, 1, 1); g.fillRect(x, y - 1, 1, 1); g.fillStyle = '#d8c08a'; g.fillRect(x - 4, y - 3, 1, 3); },
@@ -86,7 +87,7 @@ function drawClonk(g, c, col, x, y) {
   // Rüstung / Helm
   if (c.armor) { R('#a8aeb6', -2, -7 + bob, 4, 3); R('#d4d8de', -2, -7 + bob, 1, 3); R('#7a8088', -2, -12 + bob, 4, 2); R('#a8aeb6', -2, -11 + bob, 1, 1); if (c.knight) R(col, -1, -13 + bob, 2, 1); }
   // Waffen
-  const inv = c.inv || [];
+  const inv = (c.inv || []).concat(c.gear || []);
   if (a !== 'dig' && a !== 'climb' && a !== 'hangle' && a !== 'swim' && a !== 'rope' && a !== 'float') {
     if (c.swing > 0 && inv.includes('sword')) { const s = c.swing > 6; if (s) { R('#e0e4ea', 1, -13, 1, 6); R('#8a6a2a', 0, -7, 3, 1); } else { R('#e0e4ea', 2, -6, 6, 1); R('#8a6a2a', 1, -7, 1, 3); } }
     else if (c.bowT > 0 && inv.includes('bow')) { R('#8a5a26', 3, -10, 1, 1); R('#8a5a26', 4, -9, 1, 5); R('#8a5a26', 3, -4, 1, 1); R('#eee', 3, -9, 1, 5); R(skin, 1, -7, 3, 1); }

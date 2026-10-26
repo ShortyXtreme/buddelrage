@@ -173,10 +173,10 @@ Object.assign(World.prototype, {
   aiStat(t, s) { const B = this.aiBrain(t); B.stat = s; t.stat = s; },
   aiBases(tid) { return this.structs.filter(s => this.ally(s.team, tid) && BUILD[s.type].base && s.prog >= 1 && !s.remove); },
   aiHome(c) { let best = null, bd = 1e9; for (const s of this.aiAllyBases(c.team)) { const d = Math.abs(s.x - c.x) + Math.abs(s.y - c.y) * 2; if (d < bd) { bd = d; best = s; } } return best; },
-  aiArmed(c) { return c.inv.includes('sword') || (c.inv.includes('bow') && c.arrows > 0) || c.inv.some(x => THROWABLE.has(x)); },
+  aiArmed(c) { return hasG(c, 'sword') || (hasG(c, 'bow') && c.arrows > 0) || c.inv.some(x => THROWABLE.has(x)); },
   aiStrength(tid) {
     let s = 0;
-    for (const c of this.clonks) if (c.team === tid && c.act !== 'dead') s += (0.4 + c.hp / 100) * (1 + (c.knight ? 1.2 : 0) + (c.inv.includes('sword') ? 0.5 : 0) + (c.inv.includes('shield') ? 0.3 : 0) + c.inv.filter(x => THROWABLE.has(x)).length * 0.35 + (c.armor ? 0.3 : 0));
+    for (const c of this.clonks) if (c.team === tid && c.act !== 'dead') s += (0.4 + c.hp / 100) * (1 + (c.knight ? 1.2 : 0) + (hasG(c, 'sword') ? 0.5 : 0) + (hasG(c, 'shield') ? 0.3 : 0) + c.inv.filter(x => THROWABLE.has(x)).length * 0.35 + (c.armor ? 0.3 : 0));
     for (const st of this.structs) if (st.team === tid && st.prog >= 1) s += st.type === 'castle' ? 1.5 : st.type === 'tower' ? 0.7 : 0.3;
     return s;
   },
@@ -192,7 +192,7 @@ Object.assign(World.prototype, {
     const keep = c.inv.filter(x => x !== 'gold' && x !== 'rock'), sellIt = c.inv.filter(x => x === 'gold' || x === 'rock');
     const v = c.act === 'push' ? this.vehById(c.veh) : null;
     if (!sellIt.length && !(v && v.type === 'lorry' && v.inv.length)) return false;
-    c.inv = sellIt; this.sell(c); c.inv = keep.concat(c.inv); return true;
+    c.inv = sellIt; this.sell(c, ITEM_CODES); c.inv = keep.concat(c.inv); return true; /* KI: feste Liste, Ausrüstung liegt eh in c.gear */
   },
 
   // ---------- Team-Planung (Hauptquartier) ----------
@@ -218,7 +218,7 @@ Object.assign(World.prototype, {
     const fighters = [], workers = [];
     for (const c of own) (c.knight ? fighters : workers).push(c);
     const want = helper ? 0 : (own.length < 3 && !B.defend && !B.attack) ? 0 : Math.round(own.length * (t.res.weapons || t.res.knight ? D.fighterShare : 0)) + (B.attack ? 1 : 0); // früh: alle bauen ab (Wirtschaft zuerst)
-    workers.sort((a, b) => (b.inv.includes('sword') ? 1 : 0) - (a.inv.includes('sword') ? 1 : 0));
+    workers.sort((a, b) => (hasG(b, 'sword') ? 1 : 0) - (hasG(a, 'sword') ? 1 : 0));
     while (fighters.length < want && workers.length > 1) fighters.push(workers.shift());
     B.roles.clear();
     for (const c of fighters) B.roles.set(c.id, 'fighter');
@@ -403,7 +403,7 @@ Object.assign(World.prototype, {
     const lorry = this.vehicles.find(v => v.team === t.id && v.type === 'lorry' && !v.pusher && !v.remove && v.inv.filter(x => x === 'gold').length >= 6 && !(v.haulBlock > this.tick));
     if (lorry && role !== 'fighter') add('haul', 0.88, { veh: lorry.id });
     const it = this.aiFindItem(c, B);
-    if (it && c.inv.length < INV_MAX) add('collect', 0.62, { item: it.id });
+    if (it && canTake(c, it.type)) add('collect', 0.62, { item: it.id });
     const fullNoGold = c.inv.length >= INV_MAX && !golds; // Taschen voll mit Waffen: kann nicht abbauen → Wache halten
     if (fullNoGold) { if (home) add('guard', 0.42); }
     else if (role !== 'fighter' || !B.attack || !this.aiArmedEnough(c)) add('mine', role === 'fighter' ? (B.attack ? 0.5 : 0.3) : 0.5); // unbewaffnete Kämpfer arbeiten statt untätig zu warten
@@ -429,7 +429,7 @@ Object.assign(World.prototype, {
     if (best.item) B.itemClaims.set(best.item, c.id);
     A.task = best; A.path = null;
   },
-  aiArmedEnough(c) { return c.knight || c.inv.includes('sword') || c.inv.filter(x => THROWABLE.has(x)).length >= 1 || (c.inv.includes('bow') && c.arrows > 3); },
+  aiArmedEnough(c) { return c.knight || hasG(c, 'sword') || c.inv.filter(x => THROWABLE.has(x)).length >= 1 || (hasG(c, 'bow') && c.arrows > 3); },
   aiNearestFoe(c, r, helper) {
     let best = null, bd = r;
     for (const o of this.clonks) { if (this.ally(o.team, c.team) || o.act === 'dead' || o.inside) continue; const d = Math.hypot(o.x - c.x, (o.y - c.y) * 1.6); if (d < bd) { bd = d; best = o; } }
@@ -462,9 +462,9 @@ Object.assign(World.prototype, {
       return;
     }
     // Goldvogel abschießen (nur mit Bogen), sonst sammeln sie das fallengelassene Gold ohnehin ein
-    if (c.inv.includes('bow') && c.arrows > 0) for (const a of this.animals) if (a.k === 'bird' && a.steal && !a.remove && Math.abs(a.x - c.x) < 170 && Math.abs(a.y - c.y) < 110) { add('fight', 0.7, { target: a, animal: 1, hunt: 1, until: A.t + 300 }); return; }
+    if (hasG(c, 'bow') && c.arrows > 0) for (const a of this.animals) if (a.k === 'bird' && a.steal && !a.remove && Math.abs(a.x - c.x) < 170 && Math.abs(a.y - c.y) < 110) { add('fight', 0.7, { target: a, animal: 1, hunt: 1, until: A.t + 300 }); return; }
     // Gelegenheitsjagd: ruhiges Wildschwein in der Nähe, gut bewaffnet, keine Eile
-    if (!helper && (A.huntCd || 0) < A.t && c.hp > 60 && (c.inv.includes('sword') || (c.inv.includes('bow') && c.arrows > 2) || c.knight)) {
+    if (!helper && (A.huntCd || 0) < A.t && c.hp > 60 && (hasG(c, 'sword') || (hasG(c, 'bow') && c.arrows > 2) || c.knight)) {
       for (const m of this.monsters) if (!m.remove && !m.flee && !m.chg && Math.abs(m.x - c.x) < 110 && Math.abs(m.y - c.y) < 40) { add('fight', 0.6, { target: m, animal: 1, hunt: 1, until: A.t + 600 }); A.huntCd = A.t + 2400; break; }
     }
   },
@@ -473,7 +473,8 @@ Object.assign(World.prototype, {
     let best = null, bd = 160;
     for (const it of this.items) {
       if (it.remove || it.stuck || it.armed || it.fuse > 0 || it.chain || it.type === 'arrow') continue;
-      if (it.type !== 'gold' && !THROWABLE.has(it.type) && it.type !== 'arrows') continue;
+      if (it.type !== 'gold' && !THROWABLE.has(it.type) && it.type !== 'arrows' && !(GEAR.has(it.type) && it.type !== 'hook') && it.type !== 'armor') continue;
+      if (!canTake(c, it.type)) continue;
       const cl = B.itemClaims.get(it.id); if (cl && cl !== c.id) continue;
       const d = Math.hypot(it.x - c.x, (it.y - c.y) * 1.5); if (d < bd && !(c.ai.black.get('i' + it.id) > this.tick)) { bd = d; best = it; }
     }
@@ -507,7 +508,7 @@ Object.assign(World.prototype, {
         { const sp = this.aiBaseSpot(c, home); if (this.aiGoto(c, A, k, sp.x, sp.y, 2) && !this.nearBase(c)) { A.arrived = false; A.moving = true; k[home.x > c.x ? 'r' : 'l'] = 1; } } return;
       case 'collect': {
         const it = this.items.find(i => i.id === T.item);
-        if (!it || it.remove || it.stuck || c.inv.length >= INV_MAX) { B.itemClaims.delete(T.item); A.task = null; return; }
+        if (!it || it.remove || it.stuck || !canTake(c, it.type)) { B.itemClaims.delete(T.item); A.task = null; return; }
         if (this.aiGoto(c, A, k, it.x, it.y, 3)) { if (!this.grabNear(c)) { A.black.set('i' + it.id, this.tick + 1800); A.task = null; } }
         return;
       }
@@ -562,11 +563,11 @@ Object.assign(World.prototype, {
     const Bt = t.brain, R = Math.max(0, D.reserve - 10) + (Bt && !Bt.defend ? (Bt.keep || 0) : 0);
     if (c.knight && c.arrows < 6 && t.money >= 6 + R) this.aiBuy(t, c, 'arrows');
     // wer schon öfter feststeckte, nimmt einen Enterhaken mit (Mittel/Schwer)
-    if (D.k !== 'easy' && (c.stuckN || 0) >= 2 && !c.inv.includes('hook') && c.inv.length < INV_MAX && t.money >= ITEMS.hook.price + R) this.aiBuy(t, c, 'hook');
-    if (t.res.weapons && !c.inv.includes('sword') && c.inv.length < INV_MAX && t.money >= 15 + R) this.aiBuy(t, c, 'sword');
-    if (t.res.weapons && c.inv.includes('sword') && !c.inv.includes('shield') && c.inv.length < INV_MAX && t.money >= 12 + R) this.aiBuy(t, c, 'shield');
-    if (t.res.weapons && !c.armor && t.money >= 25 + R + 20) this.aiBuy(t, c, 'armor');
-    let g = 0; while (c.inv.length < INV_MAX && g++ < 3) { const it = t.res.tnt && t.money >= 25 + R + 30 && this.rand() < 0.3 ? 'tnt' : 'flint'; if (t.money < ITEMS[it].price + R) break; this.aiBuy(t, c, it); }
+    if (D.k !== 'easy' && (c.stuckN || 0) >= 2 && !hasG(c, 'hook') && t.money >= ITEMS.hook.price + R) this.aiBuy(t, c, 'hook');
+    if (t.res.weapons && !hasG(c, 'sword') && t.money >= ITEMS.sword.price + R) this.aiBuy(t, c, 'sword');
+    if (t.res.weapons && hasG(c, 'sword') && !hasG(c, 'shield') && t.money >= ITEMS.shield.price + R) this.aiBuy(t, c, 'shield');
+    if (t.res.weapons && !c.armor && t.money >= ITEMS.armor.price + R + 20) this.aiBuy(t, c, 'armor');
+    let g = 0; const keep = (hasG(c, 'sword') ? 1 : 0) + (hasG(c, 'shield') ? 1 : 0); /* Platz für Gold lassen wie früher (Schwert/Schild belegten Inventar) */ while (c.inv.length + keep < INV_MAX && g++ < 3) { const it = t.res.tnt && t.money >= ITEMS.tnt.price + R + 30 && this.rand() < 0.3 ? 'tnt' : 'flint'; if (t.money < ITEMS[it].price + R) break; this.aiBuy(t, c, it); }
   },
   // Bergbau: nächste Goldzelle wählen (mit Reservierung, damit sich die Bergleute verteilen), hingraben, voll → verkaufen
   aiMine(c, t, B, D, A, k, home) {
@@ -699,8 +700,8 @@ Object.assign(World.prototype, {
   },
   // Projektile erkennen: mit Schild blocken (zum Werfer drehen) oder wegspringen
   aiProtect(c, t, D, A, k) {
-    if (A.blockT > 0) { A.blockT--; if (c.inv.includes('shield')) { k.b = 1; c.dir = A.blockDir || c.dir; } return; }
-    if (!D.evade && !c.inv.includes('shield')) return;
+    if (A.blockT > 0) { A.blockT--; if (hasG(c, 'shield')) { k.b = 1; c.dir = A.blockDir || c.dir; } return; }
+    if (!D.evade && !hasG(c, 'shield')) return;
     if ((A.t + c.id) % 3) return;
     for (const it of this.items) {
       if (!it.armed || it.remove) continue;
@@ -709,7 +710,7 @@ Object.assign(World.prototype, {
       let x = it.x, y = it.y, vx = it.vx, vy = it.vy, hit = false;
       for (let s = 0; s < 18; s++) { vy += 0.1; x += vx; y += vy; if (Math.abs(x - c.x) < 7 && y > c.y - 13 && y < c.y + 3) { hit = true; break; } }
       if (!hit) continue;
-      if (c.inv.includes('shield') && this.rand() < D.blockP && (c.act === 'walk' || c.act === 'fight')) { A.blockT = 16; A.blockDir = Math.sign(it.x - c.x) || c.dir; k.b = 1; c.dir = A.blockDir; }
+      if (hasG(c, 'shield') && this.rand() < D.blockP && (c.act === 'walk' || c.act === 'fight')) { A.blockT = 16; A.blockDir = Math.sign(it.x - c.x) || c.dir; k.b = 1; c.dir = A.blockDir; }
       else if (this.rand() < D.evade && c.act === 'walk' && A.jumpCd <= 0) { k[it.vx > 0 ? 'r' : 'l'] = 1; this.clonkAction(c, 'jump'); A.jumpCd = 30; }
       return;
     }
@@ -744,7 +745,7 @@ Object.assign(World.prototype, {
     }
     if (!tgt) { A.task = null; return; }
     const dx = tgt.x - c.x, dy = tgt.y - c.y, ad = Math.abs(dx);
-    const hasSword = c.inv.includes('sword'), hasBow = c.inv.includes('bow') && c.arrows > 0, ammo = c.inv.some(x => THROWABLE.has(x));
+    const hasSword = hasG(c, 'sword'), hasBow = hasG(c, 'bow') && c.arrows > 0, ammo = c.inv.some(x => THROWABLE.has(x));
     if (!hasSword && !hasBow && !ammo && !tgt.struct && T.type === 'attack' && home) { A.task = { type: 'arm', s: 0.86 }; return; }
     // Fernkampf
     if ((ammo || hasBow) && ad > 22 && ad < (hasBow ? 210 : 140) && Math.abs(dy) < 90 && c.cd <= 0 && (c.act === 'walk' || c.act === 'fight') && A.t >= A.react) {
@@ -755,7 +756,7 @@ Object.assign(World.prototype, {
     if (ad < 15 && Math.abs(dy) < 10 && !tgt.struct) {
       if (Math.abs(dx) > 1) c.dir = Math.sign(dx);
       if (hasSword && c.cd <= 0 && c.act !== 'climb' && c.act !== 'hangle' && A.t >= A.react) { A.react = A.t + Math.ceil(D.react / 2); this.aiSlot(c, 'sword'); this.primary(c, [tgt.x, tgt.y]); }
-      if (c.inv.includes('shield') && tgt.swing > 0 && this.rand() < D.blockP) { A.blockT = 12; A.blockDir = Math.sign(dx) || c.dir; }
+      if (hasG(c, 'shield') && tgt.swing > 0 && this.rand() < D.blockP) { A.blockT = 12; A.blockDir = Math.sign(dx) || c.dir; }
       if (!hasSword && tgt.team === undefined && tgt.hp !== undefined && c.cd <= 0 && c.act === 'walk' && A.t >= A.react) { A.react = A.t + D.react; this.strike(c); return; } // Tiere: Faustschlag
       if (!hasSword && c.act === 'walk') k[dx > 0 ? 'r' : 'l'] = 1; // hineinlaufen = Faustkampf
       return;
@@ -766,10 +767,10 @@ Object.assign(World.prototype, {
     if (T.type === 'fight' && home && T.defend && Math.abs(tgt.x - home.x) > 320) { A.task = null; return; }
     this.aiGoto(c, A, k, tgt.x, tgt.y, keep ? 50 : 3);
   },
-  aiSlot(c, type) { const i = c.inv.indexOf(type); if (i >= 0) c.slot = i; },
+  aiSlot(c, type) { const g = GEAR_SEL.indexOf(type); if (g >= 0 && hasG(c, type)) { c.slot = INV_MAX + g; return; } const i = c.inv.indexOf(type); if (i >= 0) c.slot = i; },
   // Ballistisch zielen (mit Vorhalt) und werfen/schießen
   aiRanged(c, tgt, D, inside) {
-    const hasBow = c.inv.includes('bow') && c.arrows > 0;
+    const hasBow = hasG(c, 'bow') && c.arrows > 0;
     const throwIt = c.inv.find(x => THROWABLE.has(x)) || (inside ? c.inv.find(x => AMMO.has(x)) : null);
     const useBow = hasBow && (!throwIt || Math.abs(tgt.x - c.x) > 120 || this.rand() < 0.5);
     if (!useBow && !throwIt) return false;
@@ -813,7 +814,7 @@ Object.assign(World.prototype, {
     const st = A.t - A.impT;
     // Rampe: Ziel weit oben und Klettern klappt nicht → schräge, begehbare Treppe graben (wie ein Spieler)
     if (A.ramp) { if (this.aiRamp(c, A, k, x, y)) return false; }
-    else if (st > 120 && dyg < -30 && Math.abs(dxg) < 160 && (c.inv.includes('hook') || c.inv.includes('balloon')) && this.aiGearUp(c, A, x, y)) return false;
+    else if (st > 120 && dyg < -30 && Math.abs(dxg) < 160 && (hasG(c, 'hook') || c.inv.includes('balloon')) && this.aiGearUp(c, A, x, y)) return false;
     else if (st > 160 && dyg < -24 && Math.abs(dxg) < 140 && !c.inside && !(A.rampCd > A.t)) { if (this.aiRampStart(c, A, dxg)) return false; }
     if (st > 90 && A.lvl < 1) { A.lvl = 1; A.path = null; if (c.act === 'walk') { k[dxg > 0 ? 'r' : 'l'] = 1; this.clonkAction(c, 'jump'); } }
     else if (st > 200 && A.lvl < 2) { // Problemstelle für die Wegsuche merken, dann freigraben

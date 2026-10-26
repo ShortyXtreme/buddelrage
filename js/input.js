@@ -8,7 +8,7 @@ const ACTIONS = [
   { k: 'jump', n: 'Springen (an Wänden halten = klettern)', g: 'Bewegung', def: ['Space'] },
   { k: 'sprint', n: 'Sprinten (halten)', g: 'Bewegung', def: ['ShiftLeft', 'ShiftRight'] },
   { k: 'primary', n: 'Aktion: Werfen / Schlagen / Schießen / Feuern (zum Mauszeiger)', g: 'Aktionen', def: ['Mouse0'] },
-  { k: 'secondary', n: 'Graben halten (zum Mauszeiger) · mit Schwert/Schild: Blocken', g: 'Aktionen', def: ['Mouse2'] },
+  { k: 'secondary', n: 'Graben halten (zum Mauszeiger) · mit gewähltem Schwert (4) + Schild: Blocken', g: 'Aktionen', def: ['Mouse2'] },
   { k: 'interact', n: 'Benutzen: Fahrzeug, Tür, Gebäude, Aufheben', g: 'Aktionen', def: ['KeyE'] },
   { k: 'drop', n: 'Ablegen · Lore ausladen', g: 'Aktionen', def: ['KeyQ'] },
   { k: 'attack', n: 'Nahkampf (Schwert / Faust)', g: 'Aktionen', def: ['KeyF'] },
@@ -16,6 +16,9 @@ const ACTIONS = [
   { k: 'slot1', n: 'Inventarplatz 1', g: 'Inventar', def: ['Digit1'] },
   { k: 'slot2', n: 'Inventarplatz 2', g: 'Inventar', def: ['Digit2'] },
   { k: 'slot3', n: 'Inventarplatz 3', g: 'Inventar', def: ['Digit3'] },
+  { k: 'slot4', n: 'Ausrüstung: Schwert', g: 'Inventar', def: ['Digit4'] },
+  { k: 'slot5', n: 'Ausrüstung: Bogen', g: 'Inventar', def: ['Digit5'] },
+  { k: 'slot6', n: 'Ausrüstung: Enterhaken', g: 'Inventar', def: ['Digit6'] },
   { k: 'nextclonk', n: 'Nächster Buddler', g: 'Inventar', def: ['Tab'] },
   { k: 'shop', n: 'Laden (Kaufen)', g: 'Menüs', def: ['KeyB'] },
   { k: 'sell', n: 'Verkaufen (an Hütte/Burg)', g: 'Menüs', def: ['KeyV'] },
@@ -127,7 +130,7 @@ function press(code, repeat) {
       case 'drop': if (canPlay()) act('drop'); break;
       case 'attack': if (canPlay()) act('attack'); break;
       case 'dig': if (canPlay()) act('dig'); break;
-      case 'slot1': case 'slot2': case 'slot3': if (canPlay()) act('slot', +a.slice(4) - 1); break;
+      case 'slot1': case 'slot2': case 'slot3': case 'slot4': case 'slot5': case 'slot6': if (canPlay()) act('slot', +a.slice(4) - 1); break;
       case 'nextclonk': if (canPlay()) act('next'); break;
       case 'shop': if (G.world && G.world.state === 'run') toggleMenu('shop'); break;
       case 'build': if (G.world && G.world.state === 'run') toggleMenu('buildmenu'); break;

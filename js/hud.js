@@ -48,7 +48,7 @@ function fakeClonk(o) { return Object.assign({ act: 'walk', dir: 1, anim: 0.5, i
 function entIcon(k, col) {
   col = col || '#2f5fe0';
   if (k === 'clonk') return pixIcon('cl' + col, 16, 22, g => drawClonk(g, fakeClonk({}), col, 8, 20));
-  if (k === 'knight') return pixIcon('kn' + col, 16, 22, g => drawClonk(g, fakeClonk({ knight: 1, armor: 1, inv: ['sword', 'shield', 'bow'] }), col, 8, 20));
+  if (k === 'knight') return pixIcon('kn' + col, 16, 22, g => drawClonk(g, fakeClonk({ knight: 1, armor: 1, gear: ['sword', 'shield', 'bow'] }), col, 8, 20));
   if (VEH[k]) return pixIcon('v_' + k + col, 26, 18, g => drawVehicle(g, { type: k, dir: 1, ang: VEH[k].ang || 0.6, inv: k === 'lorry' ? ['gold', 'gold', 'gold', 'gold', 'gold'] : [], cd: 0, fire: 0, hp: VEH[k].hp, id: 1 }, col, 13, 16));
   if (BUILD[k]) { const B = BUILD[k]; return pixIcon('b_' + k + col, B.w + 6, B.h + 22, g => drawStruct(g, { type: k, x: (B.w + 6) / 2, y: B.h + 20, w: B.w, h: B.h, prog: 1, hp: B.hp, id: 1, fire: 0 }, col)); }
   if (k === 'bridge') return pixIcon('bridge', 30, 10, g => { g.fillStyle = '#8a6038'; g.fillRect(1, 4, 28, 3); g.fillStyle = '#a07040'; for (let x = 2; x < 29; x += 4) g.fillRect(x, 4, 2, 1); g.fillStyle = '#5a3a1a'; g.fillRect(1, 7, 28, 1); });
@@ -107,6 +107,7 @@ function primaryLabel(c) {
   if (it === 'hook') return c.hk ? 'Haken einholen' : 'Enterhaken schießen';
   if (it === 'balloon') return 'Ballon aufblasen';
   if (it === 'wipf') return 'Wipf werfen';
+  if (it === 'earth') return 'Erdklumpen werfen (füllt Löcher)';
   if (!it || it === 'shield' || it === 'bow') return 'Schlagen';
   return (THROWABLE.has(it) ? 'Werfen: ' : 'Werfen: ') + ITEMS[it].name;
 }
@@ -126,7 +127,7 @@ function buildPrompts(w, c) {
   if (c.act === 'push') {
     const v = w.vehicles.find(o => o.id === c.veh); if (!v) return P;
     if (VEH[v.type].gun) { P.push(pr(prim, 'Feuern', true)); P.push(pr('', 'Maus zielt · Winkel ' + Math.round(v.ang * 57) + '°')); }
-    else { P.push(pr(prim, 'Einladen (' + v.inv.length + '/' + VEH.lorry.cap + ')', true)); P.push(pr(bindCap('drop'), 'Ausladen')); if (near) P.push(pr(bindCap('sell'), 'Alles verkaufen')); }
+    else { P.push(pr(prim, 'Einladen (' + v.inv.length + '/' + VEH.lorry.cap + ')', true)); P.push(pr(bindCap('drop'), 'Ausladen')); if (near) P.push(pr(bindCap('sell'), 'Markierte verkaufen')); }
     P.push(pr(E, 'Loslassen'));
     return P;
   }
@@ -135,10 +136,11 @@ function buildPrompts(w, c) {
   if (c.act === 'hangle') { P.push(pr(bindCap('left') + bindCap('right'), 'Hangeln', true)); P.push(pr(bindCap('down'), 'Loslassen')); return P; }
   if (c.act === 'swim') { P.push(pr(bindCap('up'), 'Auftauchen', true)); return P; }
   const tg = interactTarget(w, c); if (tg) P.push(pr(E, tg.label, true));
-  if (near) { P.push(pr(bindCap('shop'), 'Kaufen', !tg)); if (c.inv.length) P.push(pr(bindCap('sell'), 'Verkaufen')); }
+  if (near) { P.push(pr(bindCap('shop'), 'Kaufen', !tg)); if (c.inv.some(x => (w.teams[c.team].autoSell || AUTO_SELL_DEFAULT)[x])) P.push(pr(bindCap('sell'), 'Verkaufen')); }
   P.push(pr(prim, primaryLabel(c), !tg && !near));
-  const blk = c.inv.includes('shield') && BLOCK_SLOT.has(actItem(c));
+  const blk = hasG(c, 'shield') && actGear(c) === 'sword';
   P.push(pr(sec, blk ? 'Blocken (halten)' : 'Graben (halten)'));
+  if (actItem(c) === 'earth') P.push(pr(bindCap('drop'), 'Loch füllen'));
   return P;
 }
 function updateHUD() {
@@ -171,11 +173,19 @@ function updateHUD() {
     const hp = Math.max(0, c.hp), bar = $('h-hp').parentNode;
     $('h-hp').style.width = hp + '%'; setHTML('h-hpt', Math.ceil(hp)); bar.className = 'bar hp' + (hp < 25 ? ' low' : hp < 50 ? ' mid' : '');
     $('h-airrow').style.display = c.breath < 99 ? 'flex' : 'none'; $('h-air').style.width = c.breath + '%';
-    const sl = actIdx(c), hb = [];
+    const sl = (c.slot || 0) >= INV_MAX && actGear(c) ? -1 : actIdx(c), hb = [];
     for (let s = 0; s < INV_MAX; s++) { const it = c.inv[s]; hb.push('<div class="slot' + (it && s === sl ? ' sel' : '') + (it ? '' : ' empty') + '" data-s="' + s + '">' + bindCap('slot' + (s + 1)) + (it ? '<img src="' + itemIcon(it) + '" alt="">' : '') + '<span class="nm">' + (it ? (ITEMS[it] ? ITEMS[it].name : it) : 'leer') + '</span></div>'); }
+    // Ausrüstungsplätze (getrennt vom Inventar): Waffe · Schild · Bogen · Rüstung · Werkzeug
+    const ag = actGear(c), auto = !ag && !c.inv.length ? bestWeapon(c) : null;
+    hb.push('<div class="eqsep"></div>');
+    for (const q of EQ_SLOTS) {
+      const has = q.k === 'armor' ? !!c.armor : hasG(c, q.k), gi = GEAR_SEL.indexOf(q.k), key = gi >= 0 ? 'slot' + (INV_MAX + 1 + gi) : '';
+      const on = has && (ag === q.k || auto === q.k), sub = q.k === 'bow' && has ? ' <b>' + c.arrows + '</b>' : '';
+      hb.push('<div class="slot eq' + (on ? ' sel' : '') + (has ? '' : ' empty') + (gi < 0 ? ' passive' : '') + '"' + (gi >= 0 ? ' data-s="' + (INV_MAX + gi) + '"' : '') + ' title="' + q.n + (gi < 0 ? ' (wirkt automatisch)' : '') + '">' + (key ? bindCap(key) : '') + (has ? '<img src="' + itemIcon(q.k) + '" alt="">' : '<span class="eqph">' + q.n + '</span>') + '<span class="nm">' + (has ? ITEMS[q.k].name + sub : '–') + '</span></div>');
+    }
     const hbs = hb.join('');
-    if (HUD.sig.hb !== hbs) { HUD.sig.hb = hbs; $('hotbar').innerHTML = hbs; for (const el of $('hotbar').querySelectorAll('.slot')) el.onclick = e => { e.stopPropagation(); act('slot', +el.dataset.s); }; }
-    const ex = []; if (c.knight) ex.push('<span>⚔ Ritter</span>'); if (c.armor) ex.push('<span>🛡 Rüstung</span>'); if (c.arrows || c.inv.includes('bow')) ex.push('<span>➶ Pfeile: ' + c.arrows + '</span>'); if (c.fire) ex.push('<span style="color:#ff9a6a">Brennt! Ins Wasser!</span>');
+    if (HUD.sig.hb !== hbs) { HUD.sig.hb = hbs; $('hotbar').innerHTML = hbs; for (const el of $('hotbar').querySelectorAll('.slot[data-s]')) el.onclick = e => { e.stopPropagation(); act('slot', +el.dataset.s); }; }
+    const ex = []; if (c.knight) ex.push('<span>⚔ Ritter</span>'); if (c.arrows && !hasG(c, 'bow')) ex.push('<span>➶ Pfeile: ' + c.arrows + '</span>'); if (c.fire) ex.push('<span style="color:#ff9a6a">Brennt! Ins Wasser!</span>');
     setHTML('h-extra', ex.join(''));
     setHTML('prompts', settings.hints ? buildPrompts(w, c).join('') : '');
   } else if (me && w.state === 'run' && !G.spectate && !w.clonks.some(o => o.team === me.id && o.act !== 'dead')) {

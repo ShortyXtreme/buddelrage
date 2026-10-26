@@ -48,7 +48,7 @@ function aiDefP(D) { return AI_DEF[D && D.k] || AI_DEF.normal; }
         const cap = Math.max(1, Math.round(own.length * P.share));
         let need = Math.min(cap, Math.max(1, Math.ceil(B.threatS * P.need)));
         const cx = B.threat.reduce((a, e) => a + e.x, 0) / B.threat.length;
-        const sc = c => (c.knight ? 3 : 0) + (this.aiArmedEnough(c) ? 2 : 0) + (c.inv.includes('shield') ? 0.5 : 0) + c.hp / 60 - Math.abs(c.x - cx) / 300 - (B.roles.get(c.id) === 'builder' ? 1.5 : 0);
+        const sc = c => (c.knight ? 3 : 0) + (this.aiArmedEnough(c) ? 2 : 0) + (hasG(c, 'shield') ? 0.5 : 0) + c.hp / 60 - Math.abs(c.x - cx) / 300 - (B.roles.get(c.id) === 'builder' ? 1.5 : 0);
         const cand = own.filter(c => !c.inside || (this.structById(c.inside) || {}).type !== 'hut' || c.hp > 50).sort((a, b) => sc(b) - sc(a));
         const canArm = t.res.weapons && t.money >= 15;
         let armBudget = Math.floor(t.money / 20);
@@ -122,7 +122,7 @@ function aiDefP(D) { return AI_DEF[D && D.k] || AI_DEF.normal; }
       // unbewaffnet, aber Geld und Hütte nah: erst ausrüsten
       if (!this.aiArmedEnough(c) && !c.knight && home && t.res.weapons && t.money >= 15 && Math.abs(home.x - c.x) < 260 && (A.armT || 0) < A.t) { A.armT = A.t + 900; set({ type: 'arm', s: 0.95 }); return; }
       // Fernkämpfer besetzen Turm/Burg nahe der Bedrohung
-      if (P.post && c.inv.includes('bow') && c.arrows > 2 && !c.inv.includes('sword')) {
+      if (P.post && hasG(c, 'bow') && c.arrows > 2 && !hasG(c, 'sword')) {
         const busy = id => this.clonks.some(o => o !== c && o.inside === id);
         const post = this.aiDefPosts(t.id).find(s => Math.abs(s.x - tgt.x) < 200 && Math.abs(s.x - c.x) < 260 && Math.abs(s.y - c.y) < 40 && !busy(s.id));
         if (post) { set({ type: 'tower', sid: post.id, s: 0.95, until: A.t + 1500 }); return; }
@@ -158,11 +158,11 @@ function aiDefP(D) { return AI_DEF[D && D.k] || AI_DEF.normal; }
         if (T.defend && P.leash && home && Math.abs(tg.x - home.x) > P.leash && Math.abs(c.x - home.x) > P.leash - 40) {
           const R = B.rally || home;
           this.aiGoto(c, A, k, R.x + ((c.id % 3) - 1) * 8, R.y, 10); if (A.arrived && c.act === 'dig') c.act = 'walk';
-          if ((c.inv.includes('bow') && c.arrows > 0 || c.inv.some(x => THROWABLE.has(x))) && Math.abs(tg.x - c.x) < 200 && c.cd <= 0 && (c.act === 'walk' || c.act === 'fight') && A.t >= A.react) { A.react = A.t + D.react; if (this.rand() < D.throwP) this.aiRanged(c, tg, D, false); }
+          if ((hasG(c, 'bow') && c.arrows > 0 || c.inv.some(x => THROWABLE.has(x))) && Math.abs(tg.x - c.x) < 200 && c.cd <= 0 && (c.act === 'walk' || c.act === 'fight') && A.t >= A.react) { A.react = A.t + D.react; if (this.rand() < D.throwP) this.aiRanged(c, tg, D, false); }
           return;
         }
       }
-      if (T && T.type === 'heal' && T.retreat && c.inv.includes('shield')) { // Rückzug mit Schild: Rücken decken
+      if (T && T.type === 'heal' && T.retreat && hasG(c, 'shield')) { // Rückzug mit Schild: Rücken decken
         const e = this.aiNearestFoe(c, 40, false); if (e && e.swing > 0 && this.rand() < aiDefP(D).block) { A.blockT = 8; A.blockDir = Math.sign(e.x - c.x) || c.dir; }
       }
       return _exec.call(this, c, t, B, D, A, helper, k);
@@ -181,12 +181,12 @@ function aiDefP(D) { return AI_DEF[D && D.k] || AI_DEF.normal; }
     // Schild im Nahkampf (Mittel/Schwer): decken, solange das eigene Schwert nachlädt – Treffer kommen sofort beim Schlag, Reagieren auf das Ausholen ist zu spät
     aiProtect(c, t, D, A, k) {
       const r = _protect.call(this, c, t, D, A, k), P = aiDefP(D);
-      if (!P.block || !c.inv.includes('shield') || (c.act !== 'walk' && c.act !== 'fight')) return r;
+      if (!P.block || !hasG(c, 'shield') || (c.act !== 'walk' && c.act !== 'fight')) return r;
       let e = null;
-      for (const o of this.clonks) { if (o.act === 'dead' || o.inside || this.ally(o.team, c.team) || !o.inv.includes('sword')) continue; if (Math.abs(o.x - c.x) < 18 && Math.abs(o.y - c.y) < 10) { e = o; break; } }
+      for (const o of this.clonks) { if (o.act === 'dead' || o.inside || this.ally(o.team, c.team) || !hasG(o, 'sword')) continue; if (Math.abs(o.x - c.x) < 18 && Math.abs(o.y - c.y) < 10) { e = o; break; } }
       if (!e) return r;
       if (!A.mcyc || A.mcyc.t < A.t) A.mcyc = { t: A.t + 90, on: this.rand() < P.block };
-      if (A.mcyc.on && (c.cd > 2 || !c.inv.includes('sword'))) { k.b = 1; c.dir = Math.sign(e.x - c.x) || c.dir; }
+      if (A.mcyc.on && (c.cd > 2 || !hasG(c, 'sword'))) { k.b = 1; c.dir = Math.sign(e.x - c.x) || c.dir; }
       return r;
     },
   });

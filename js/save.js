@@ -27,7 +27,7 @@ function deserializeWorld(S, matSrc) {
   w.teams = S.teams || [];
   for (const t of w.teams) { t.keys = { ...NOKEYS }; t.brain = null; if (!t.stats) t.stats = newStats(); if (!t.res) t.res = {}; }
   w.setupPools(!cfg.sharedBase); // Teamkasse; alte Stände (eigene Kassen je Spieler) werden zusammengelegt
-  for (const c of w.clonks) { c.aiKeys = { ...NOKEYS }; c.ai = null; c.digHold = 0; }
+  for (const c of w.clonks) { c.aiKeys = { ...NOKEYS }; c.ai = null; c.digHold = 0; migrateGear(c); }
   w.rand = mulberry32(((cfg.seed * 7 + 1) ^ (S.tick * 2654435761)) | 0);
   w.frng = mulberry32(((cfg.seed | 0) ^ (S.tick * 40503)) | 0);
   w.fireSet = new Set(w.fires.map(f => (f.y >> 1) * 4096 + (f.x >> 1)));
@@ -50,7 +50,8 @@ function mergeLive(w, L) {
   w.clonks = L.clonks.map(l => {
     seen(l); let c = mc.get(l.id);
     if (!c) { c = { id: l.id, team: l.team, vx: 0, vy: 0, gold: 0, fightT: 0, cd: 0, tumbleT: 0, deadT: 0, aiKeys: { ...NOKEYS }, punch: 0, digIdle: 0, armor: 0, knight: 0, arrows: 0, block: 0, inside: 0, fire: 0, swing: 0, bowT: 0, veh: 0, blockT: 0 }; }
-    Object.assign(c, { x: l.x, y: l.y, dir: l.dir, act: l.act || 'walk', hp: l.hp, anim: l.anim || 0, inv: (l.inv || []).slice(), breath: l.breath, name: l.name, armor: l.armor ? 1 : 0, knight: l.knight ? 1 : 0, arrows: l.arrows || 0, inside: l.inside || 0, veh: l.veh || 0, slot: l.slot || 0 });
+    Object.assign(c, { x: l.x, y: l.y, dir: l.dir, act: l.act || 'walk', hp: l.hp, anim: l.anim || 0, inv: (l.inv || []).slice(), gear: (l.gear || []).slice(), breath: l.breath, name: l.name, armor: l.armor ? 1 : 0, knight: l.knight ? 1 : 0, arrows: l.arrows || 0, inside: l.inside || 0, veh: l.veh || 0, slot: l.slot || 0 });
+    migrateGear(c);
     if (!l.fire) c.fire = 0; else if (!c.fire) c.fire = 60;
     if (l.hk && l.hk.st === 2) { const len = Math.hypot(c.x - l.hk.x, c.y - 7 - l.hk.y); c.hk = { st: 2, x: l.hk.x, y: l.hk.y, len: Math.max(8, Math.min(HOOK_MAX, len)) }; } else c.hk = null;
     if (l.bl) c.bl = c.bl && c.bl.gas !== undefined ? c.bl : { gas: l.bl.gas ? 600 : 0 }; else c.bl = null;

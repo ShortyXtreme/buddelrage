@@ -64,3 +64,23 @@ Backup: /workspace/clonk-game.bak7 (= Zip 0493259…)
 - 16:55 Regressionen (alle Exit 0, ERRS []): teambase, mpteam (3 Tabs, Teamkasse gleich auf allen Tabs, Kauf/Verkauf, Host-Wechsel, Sieg), sptest (Helfer, Übernahme, Speichern/Laden identisch, v1-Upgrade), smoke2, feat2, allysim, allycoop, aiui, ui1, ui2, touch, buildui, pinch, wipfthrow, sprite, helpchk, mpui, mp3, mp4, p2p, mpfeat, birdtest, boartest, rescuetest.
 - 17:00 Weitere Tests: vehtest (alle erreichen das Ziel, clip 0), aiveh, musictest, fpsbig (Riesig 60 fps), castlecheck 10/20 Seeds 1600/1600 Starts ok (Jeder gegen jeden), teamcastle.js (3 Teams × 3 KI, alle Größen: je Team eine Hütte + gültiger Burgplatz), Überfall Mittel nach Abstimmung 13/20 (vorher 10/20). Alles ERRS [].
 - 17:03 Zip gebaut: /workspace/buddelrage-site.zip (nicht hochgeladen, nichts gepusht).
+
+# Fortschritt (Ausrüstung, Verkauf, Wirtschaft, Löcher füllen) – Start 26.10.2026 20:31
+Backup: /workspace/clonk-game.bak8 (= Zip 5000b67…)
+
+## Stand (siehe Uhrzeit unten)
+- [x] 1 Ausrüstungsplätze: c.gear (sword/shield/bow/hook), Rüstung = c.armor, Pfeile = c.arrows; Tasten 4–6 (Schwert/Bogen/Haken), Wechsel per Rad/LB/RB/Touch über selSlots; HUD-Ausrüstungsleiste (5 Plätze, gestrichelt), giveItem/canTake überall (Kauf, Aufheben), Tod wirft auch gear ab, Snapshot a[25], Save + migrateGear (alte Stände), KI aiSlot/aiArm/aiFindItem angepasst. Rechtsklick blockt nur mit gewähltem Schwert (4), sonst graben.
+- [x] 2 Verkaufen: t.autoSell (Standard {gold}), sell(c, only), sellOne (Inv-Index oder Ausrüstungstyp), Aktionen 'autosell'/'sellone', Snapshot-Team a[11], Laden: Box „Verkaufen“ (Automatik-Chips + Einzeln-Chips). KI verkauft fest Gold/Stein + Lore.
+- [x] 3 Wirtschaft: Forschung ×~1,75 Kosten / ×1,5 Zeit, Laden teurer (s. Tabelle im Abschlussbericht).
+- [x] 4 Erdklumpen (js/fill.js): Laden 2 Geld, Q = Loch vor/unter füllen, Werfen = platscht; blockiert nie Buddler/Tiere/Fahrzeuge/Gebäude.
+- [x] test/gear.js grün
+- [ ] KI-Sims alle Stufen, Goldziel SP, Regression, MP 3 Spieler TURN, Screenshots, Doku, Zip
+- [x] MP 3 Spieler + TURN (test/mpgear.js = mpteam + R3-Teil): Kauf/Ausrüstung/Slot sync, Standardverkauf nur Gold, autosell sync, sellone, Erdklumpen füllt bei Host/A/B gleich (359→222 px) – ERRS []
+- [x] Screenshots test/shots9/*.png (HUD Ausrüstung desk/phone, Verkaufsbox, Erdklumpen vorher/nachher, mp-anna-shop)
+- [x] Doku: README, Hilfe (Tipps, Gamepad), Ladentexte
+- [ ] läuft: r8/sims (aisim3 neu vs bak8), r8/settle (Goldrausch erreichbar), dann r8/reg3.sh (Raids + Regression + castlecheck)
+- 21:22 Regression reg3 komplett grün (castlecheck, fpsbig 60 fps, mpfeat nur alter Digit10-Testfehler → Erdklumpen ans Ende von SHOP_ALL verschoben). sptest/ui2 auf neues Ausrüstungsmodell umgestellt: grün.
+- KI-Fixes: aiArm hält Platz für Gold (Flints nur bis inv+Schwert+Schild<3); Rechtsklick-Block nur für Menschen (!c.ai). Versuch fullNoGold mit Ausrüstung → schlechter, zurückgenommen.
+- läuft: r8/raid4.sh (raidH_*), danach Zip
+- 21:36 Raids final (raidH_*): Ritter-Überfall 20 Seeds leicht 9 / mittel 7 / schwer 11 (Release 2: 11/10/15; mit alter Wirtschaft + neuem Code 11/9/12 → Rückgang = teurere Forschung, Ritter seltener erforscht nach 3 min). Bewaffnete Buddler 12 Seeds: 0/12/10 (R2: 4/8/9).
+- [x] Zip gebaut (sha256 im Bericht)

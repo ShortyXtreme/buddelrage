@@ -210,3 +210,8 @@ Nicht gebaut trotz Forschung: Team wurde vorher eliminiert/belagert oder hatte z
 - Erster Tick nach dem Start ~49 ms (einmalig).
 - Helfer-KI steuert nur nicht ausgewählte Buddler und gibt kein Geld aus.
 - Ältere Testskripte (feat.js, smoke.js, sp.js) zielen auf die alte UI/Port 8080 und sind veraltet.
+
+## Ausrüstung & Verkaufen (Release 3)
+- Waffen/Schild/Bogen/Haken liegen in c.gear (aiSlot wählt Slot 3+i), Rüstung c.armor. aiArm kauft Feuersteine nur, solange inv + Schwert + Schild < 3 (Platz für Gold wie früher).
+- KI verkauft fest Gold/Steine (+ Lore), behält Werkzeug und Waffen; Spieler-Automatik (t.autoSell) gilt nicht für die KI.
+- Rechtsklick-Blocken (secBlock) nur für Menschen; KI blockt über k.b.

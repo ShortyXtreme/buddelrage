@@ -224,7 +224,7 @@ Object.assign(World.prototype, {
   // aus aiGoto: Ziel liegt hoch über dem Buddler und er kommt nicht weiter → Haken oder Ballon
   aiGearUp(c, A, x, y) {
     if ((A.gearCd || 0) > A.t || !['walk', 'jump', 'swim', 'climb', 'hangle'].includes(c.act) || c.inside || c.hk || c.bl) return false;
-    const hi = c.inv.indexOf('hook'), bi = c.inv.indexOf('balloon');
+    const hi = hasG(c, 'hook') ? INV_MAX + GEAR_SEL.indexOf('hook') : -1, bi = c.inv.indexOf('balloon');
     if (hi >= 0) {
       const anc = this.aiHookAnchor(c, x, y);
       if (anc) { if (c.act === 'climb' || c.act === 'hangle') { c.act = 'jump'; c.vx = 0; c.vy = 0; } c.slot = hi; c.cd = 0; this.fireHook(c, anc); this.aiGearStat(c, 'hook'); A.gear = { k: 'rope', t0: A.t, gx: x, gy: y }; A.gearCd = A.t + 150; return true; }

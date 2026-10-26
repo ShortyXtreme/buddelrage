@@ -39,6 +39,19 @@ Beim ersten Start führt ein kurzes Tutorial durch die Steuerung (in den Einstel
   mit **Tab** (Gamepad L3, Touch „Buddler“) wechselst du – der vorherige arbeitet dann als Helfer weiter.
 * **Übernahme beim Tod:** Stirbt dein Buddler, übernimmst du automatisch den besten Helfer (nah + gesund, Ritter bevorzugt) –
   Meldung „Du steuerst jetzt …“, die Kamera springt hin. Verloren ist erst, wenn kein eigener Buddler mehr lebt (und kein Geld für einen neuen).
+* **Ausrüstung getrennt vom Inventar:** Schwert, Schild, Bogen, Rüstung und Enterhaken liegen in eigenen **Ausrüstungsplätzen**
+  (HUD rechts neben den 3 Inventarplätzen; je Sorte einer). Das 3er-Inventar bleibt für Verbrauchsgüter: Steine, Feuersteine,
+  Superflint, TNT, Gold, Wipf, Ballon, Erdklumpen. Wählen: **1–3** Inventar, **4** Schwert, **5** Bogen, **6** Enterhaken
+  (Shift+Mausrad / LB·RB / Touch „Platz ⟳“ wechseln durch alles). Leere Hand = beste Waffe (Schwert, sonst Bogen).
+  Schild und Rüstung wirken automatisch; **Blocken** = Schwert wählen (4) + Rechtsklick halten. Pfeile stehen am Bogen-Platz.
+  **Q** mit gewählter Ausrüstung legt sie ab; beim Tod fällt alles heraus. Alte Spielstände werden automatisch umsortiert.
+* **Steuerbares Verkaufen:** [V] / „Verkaufen“ verkauft nur die im Laden markierten Sorten – Standard: **nur Gold**
+  (Wertgegenstände). Im Laden unter „Verkaufen“: Automatik-Schalter je Sorte (Stein, Feuerstein, TNT, Wipf …) und
+  Einzelverkauf jedes getragenen Gegenstands **inkl. Ausrüstung**. Die Einstellung gilt pro Spieler, auch im Mehrspieler.
+  Die KI verkauft Gold/Steine und behält Werkzeug und Waffen.
+* **Erdklumpen – Löcher wieder schließen:** im Laden für 2 Geld (ohne Forschung). **Q** (Ablegen) füllt das Loch vor bzw.
+  unter dem Buddler mit Erde, **Werfen** lässt ihn beim Aufprall platschen. Ein Klumpen füllt etwa eine Scheibe mit 8 px Radius
+  (Tunnel, Wasser, Krater unter der Oberfläche). Buddler, Tiere, Fahrzeuge und Gebäude werden nie eingeschlossen – dort bleibt frei.
 * **Inventar gehört jedem Buddler:** Plätze, gewählter Platz, gefangener Wipf, Enterhaken/Ballon bleiben beim Buddler – beim Wechseln,
   bei der Übernahme, bei KI-Übernahme nach Verbindungsabbruch, beim Host-Wechsel und im Spielstand. Die KI nutzt, was ihr Buddler trägt.
 * **Rettung:** Sitzt ein Buddler (Spieler oder KI) unter der Erde fest, erscheint „Hilfe!“ über ihm, ein freier KI-Teamkollege in der
@@ -115,10 +128,10 @@ Der Ordner `server/` ist nur noch ein optionaler lokaler Webserver (`cd server &
 für den Mehrspieler wird er nicht mehr gebraucht. Lokal geht auch `python3 -m http.server`.
 
 ## Neue Spielelemente
-* **Forschung [T]**: Lore → Katapult → Kanone, Wachturm → Burg, Waffenschmiede (Schwert, Schild, Bogen, Pfeile, Rüstung), Ritter, Sprengstoff (TNT). Kostet Geld und Zeit, braucht Hütte/Burg, ein Projekt gleichzeitig. Option „Alles erforscht“ im Hauptmenü/in der Lobby.
-* **Fahrzeuge** (im Laden [B]): *Lore* sammelt herumliegende Objekte ein (25 Plätze), wird geschoben, an der Basis mit [V] samt Inhalt verkauft; beim Graben mit vollem Inventar landet Gold in einer nahen Lore. *Katapult* (Bogenwurf) und *Kanone* (flach, Steine werden zu Kanonenkugeln) feuern Steine, Gold, Feuersteine, TNT – aus dem Inventar des Schiebenden.
+* **Forschung [T]**: Lore → Katapult → Kanone, Wachturm → Burg, Waffenschmiede (Schwert, Schild, Bogen, Pfeile, Rüstung), Ritter, Sprengstoff (TNT). Kostet Geld und Zeit (Lore 35/18 s, Wachturm 60/27 s, Sprengstoff 50/22 s, Waffenschmiede 80/30 s, Katapult 70/30 s, Burg 120/45 s, Kanone 125/45 s, Ritter 105/38 s, Ballonbau 45/18 s), braucht Hütte/Burg, ein Projekt gleichzeitig. Option „Alles erforscht“ im Hauptmenü/in der Lobby.
+* **Fahrzeuge** (im Laden [B]): *Lore* sammelt herumliegende Objekte ein (25 Plätze), wird geschoben, an der Basis mit [V] verkauft (nur markierte Sorten, der Rest bleibt in der Lore); beim Graben mit vollem Inventar landet Gold in einer nahen Lore. *Katapult* (Bogenwurf) und *Kanone* (flach, Steine werden zu Kanonenkugeln) feuern Steine, Gold, Feuersteine, TNT – aus dem Inventar des Schiebenden.
 * **Gebäude** [C] als Baustelle: *Hütte*, *Wachturm* (betretbar, man wirft/schießt von oben, sicher, Heilung), *Burg* (Stein, Heimatbasis mit Laden/Verkauf/Forschung, viel Struktur, schnelle Heilung, gibt Rüstung beim Betreten). Gebäude können brennen (Holz) und gesprengt werden.
-* **Ritter** (Laden): Schwert, Schild, Bogen + 15 Pfeile, Rüstung (−40 % Schaden). Nahkampf automatisch beim Gegeneinanderlaufen oder gezielt mit Linksklick/[F]; Blocken mit Schild (Rechtsklick halten, Schwert/Schild gewählt) gegen Hiebe, Pfeile, Würfe und Bisse von vorne.
+* **Ritter** (Laden): Schwert, Schild, Bogen + 15 Pfeile, Rüstung (−40 % Schaden). Nahkampf automatisch beim Gegeneinanderlaufen oder gezielt mit Linksklick/[F]; Blocken mit Schild (Schwert wählen, Rechtsklick halten) gegen Hiebe, Pfeile, Würfe und Bisse von vorne.
 * **Lava**: fließt langsam, verbrennt Buddler/Tiere/Fahrzeuge, lässt Feuersteine explodieren, wird mit Wasser zu Fels (Wasser verdampft).
 * **Feuer**: Gras, Holzbrücken, Holzhütten, Türme, Katapulte brennen; Feuer breitet sich aus, Explosionen und Lava entzünden, Wasser löscht.
 * **Tag & Nacht** (4 Minuten pro Tag): Himmel, Sterne, Sonne/Mond, Dunkelheit mit Lichtquellen (Buddler, Gebäude, Feuer, Lava, Explosionen).
@@ -139,10 +152,10 @@ für den Mehrspieler wird er nicht mehr gebraucht. Lokal geht auch `python3 -m h
   angreift oder lange in die Enge treibt, stürmen sie höchstens zweimal los (8 Schaden, Stoß) und fliehen dann – sie verfolgen niemanden.
   Jagbar: ein erlegtes Wildschwein lässt 1–2 Gold fallen. Wenige Tiere (Standard 2), keine nächtlichen Zusatz-Spawns.
   Alte Spielstände mit Monstern werden beim Laden in Wildschweine umgewandelt.
-* **Enterhaken** (Laden, 15 Geld): **Linksklick** schießt den Haken zum Mauszeiger (Vorschau: grüner Kreis = trifft, rotes X = zu weit).
+* **Enterhaken** (Laden, 20 Geld, Ausrüstungsplatz – Taste 6): **Linksklick** schießt den Haken zum Mauszeiger (Vorschau: grüner Kreis = trifft, rotes X = zu weit).
   Er hält an festem Material (Erde, Fels, Holz …). Am Seil: **W/S** einholen/ablassen, **A/D** schwingen, **Leertaste** abspringen,
   **Linksklick/E** Seil lösen. Bricht der Ankerpunkt weg, fällt man.
-* **Ballon** (Forschung „Ballonbau“, dann Laden, 12 Geld): **Linksklick** bläst ihn auf (braucht etwas Platz nach oben), der Buddler
+* **Ballon** (Forschung „Ballonbau“, dann Laden, 15 Geld): **Linksklick** bläst ihn auf (braucht etwas Platz nach oben), der Buddler
   schwebt ~24 s langsam nach oben. **A/D** lenken, **S** sinken, **Leertaste/E** am Boden einpacken bzw. in der Luft loslassen.
   Pfeile, Würfe, Explosionen, Feuer und Lava lassen ihn platzen.
 * **Notausgang**: unter der Erde **N 1,5 s halten** (oder Pause › Notausgang) → der Buddler kehrt zur nächsten eigenen Basis zurück
@@ -175,7 +188,7 @@ für den Mehrspieler wird er nicht mehr gebraucht. Lokal geht auch `python3 -m h
 
 ## Oberfläche
 * Modernes „Glas“-Design, Schriften Inter und Lilita One (OFL), alles responsiv (Desktop, Tablet, Handy quer).
-* HUD: Geld mit Symbol, Uhrzeit/Tag, Gesundheits- und Luftbalken, **Schnellleiste mit 3 Inventarplätzen** (Symbole + Tasten 1–3),
+* HUD: Geld mit Symbol, Uhrzeit/Tag, Gesundheits- und Luftbalken, **Schnellleiste mit 3 Inventarplätzen** (Symbole + Tasten 1–3) plus 5 **Ausrüstungsplätzen** (Waffe, Schild, Bogen mit Pfeilzahl, Rüstung, Werkzeug; Tasten 4–6),
   gerahmte Minikarte, Toast-Meldungen, Forschungsfortschritt.
 * **Dock** (rechts) zum Anklicken: Kaufen, Verkaufen, Bauen, Forschung, Hilfe, Einstellungen, Pause – jeweils mit Tastenkürzel.
 * **Kontext-Hinweise** mit Tastensymbolen („E Betreten“, „LMT Werfen“ …), Zielkreuz und **Wurfbahn-Vorschau**; abschaltbar.
@@ -194,9 +207,11 @@ für den Mehrspieler wird er nicht mehr gebraucht. Lokal geht auch `python3 -m h
 | Leertaste | Springen (an der Wand halten = klettern) |
 | Shift (halten) | Sprinten |
 | **Linke Maustaste** | Aktion zum Mauszeiger: Werfen · Schwert · Bogen · Faust · Katapult/Kanone feuern · Lore beladen |
-| **Rechte Maustaste (halten)** | In Richtung Mauszeiger graben · mit Schwert/Schild: Blocken |
+| **Rechte Maustaste (halten)** | In Richtung Mauszeiger graben · mit gewähltem Schwert (4) + Schild: Blocken |
 | Maus bewegen | Zielen (auch Katapult-/Kanonenwinkel) |
 | 1 / 2 / 3 oder Shift + Mausrad | Inventarplatz wählen |
+| 4 / 5 / 6 | Ausrüstung wählen: Schwert / Bogen / Enterhaken |
+| Q | Ablegen · mit Erdklumpen: Loch füllen |
 | Mausrad · + / − | Zoomen |
 | N (1,5 s halten) | Notausgang |
 | Enter / G (halten) | Chat / Emote-Rad (Mehrspieler) |

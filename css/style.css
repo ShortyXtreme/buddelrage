@@ -206,6 +206,14 @@ select option{background:#222;color:#eee}
 .slot kbd.k{position:absolute;left:-6px;top:-8px;height:20px;min-width:20px;font-size:11px;padding:0 5px;border-radius:6px}
 .slot .nm{position:absolute;bottom:-1px;left:0;right:0;text-align:center;font-size:9.5px;font-weight:700;color:var(--mut);white-space:nowrap;overflow:hidden}
 .slot.empty .nm{opacity:.5}
+.eqsep{width:2px;align-self:stretch;margin:4px 2px;border-radius:2px;background:linear-gradient(transparent,rgba(255,194,74,.45),transparent)}
+.slot.eq{width:50px;height:50px;align-self:flex-end;border-style:dashed}
+.slot.eq img{width:34px;height:34px}
+.slot.eq:not(.empty){border-style:solid;border-color:rgba(160,190,255,.45)}
+.slot.eq.sel{border-color:var(--acc)}
+.slot.eq.passive{cursor:default}
+.slot.eq .eqph{font-size:9px;opacity:.45;font-weight:700}
+.slot.eq .nm b{color:var(--acc)}
 #h-extra{display:flex;gap:8px;font-size:12px;font-weight:700;color:var(--mut)}
 #h-extra span{padding:3px 9px;border-radius:99px;background:rgba(18,16,22,.6);border:1px solid var(--line)}
 #dock{position:absolute;right:14px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:4px;padding:6px}
@@ -252,7 +260,7 @@ body.touchui #hud-bottom{bottom:10px}
 .hl-outline{outline:2px solid var(--acc)}
 /* Responsiv */
 @media (max-width:900px){ #hud-clonks{display:none} #dock .lbl{display:none} #dock .dk kbd{display:none} .split{grid-template-columns:1fr} .cards.three{grid-template-columns:1fr} .helpgrid{grid-template-columns:1fr} #bars{width:240px} }
-@media (max-height:620px){ #hud-tl{padding:8px 10px} .slot{width:52px;height:52px} .slot img{width:36px;height:36px} #hud-clonks{top:100px} #dock .dk{padding:5px 8px} }
+@media (max-height:620px){ #hud-tl{padding:8px 10px} .slot{width:52px;height:52px} .slot img{width:36px;height:36px} .slot.eq{width:42px;height:42px} .slot.eq img{width:28px;height:28px} #hud-clonks{top:100px} #dock .dk{padding:5px 8px} }
 @media (max-width:560px){ #hud-tr .mapframe{display:none} #hud-teams{display:none} .menu-screen{padding-left:0;align-items:center} #mainmenu .menu-col{align-items:center} }
 
 /* Bauen: Menü unten andocken, Welt mit Vorschau bleibt sichtbar */
@@ -404,3 +412,15 @@ input[type=range]:focus-visible{box-shadow:none;outline:2px solid var(--acc);out
 /* Teamkasse */
 .money .mlbl{display:none;margin-left:6px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#ffd970;background:rgba(255,200,60,.16);border:1px solid rgba(255,200,60,.35);border-radius:999px;padding:1px 6px;vertical-align:middle}
 .money.teamcash .mlbl{display:inline-block}
+
+/* Verkaufsmenü */
+.sellbox{margin-top:12px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--line2)}
+.sellhd{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px}
+.sellrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+.schip{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:999px;border:1px solid var(--line2);background:rgba(0,0,0,.25);color:inherit;font:inherit;font-size:12px;cursor:pointer}
+.schip img{width:16px;height:16px;image-rendering:pixelated}
+.schip small{opacity:.7}
+.schip.on{border-color:var(--acc);background:rgba(255,194,74,.16);color:#ffe2a0}
+.schip.eqc{border-style:dashed}
+.schip.dis{opacity:.45;pointer-events:none}
+.schip:focus-visible,.schip.focus{outline:2px solid var(--acc)}
