@@ -25,10 +25,17 @@ Burg, Wachturm, Ritter, Forschung, Lava, Feuer, Tag/Nacht) orientieren
 sich am Spielprinzip von Clonk/OpenClonk; es wurde kein OpenClonk-Code übernommen.
 Figuren, Ritter, Wildschweine, Hütte, Wachturm, Burg, Fahrzeuge, Waffen, Feuer und Gegenstände sind eigene, prozedural gezeichnete
 Pixel-Grafik. Lava wird prozedural eingefärbt (keine Lava-Textur).
+Die Sprites für Hütte, Wachturm (inkl. Ausbaustufen, Turmschütze, Pechkessel), Burg (inkl. Mauern, Tor, Schützen, Balliste),
+Baustellen-Gerüst, Schadens-Risse, Lore, Katapult, Kanone, Ballon, Brücke und alle Gegenstände sind eigene, im Code erzeugte
+Pixel-Grafik (`js/sprites.js`, Pixel-Arrays und Zeichenbefehle, zur Laufzeit in Offscreen-Canvas gerendert; eigener Code, ISC) –
+keine fremden Grafikdateien.
 Neu und ebenfalls eigene, prozedural gezeichnete Pixel-Grafik bzw. eigener Code: Tiere (Wipf, Vogel, Fisch, Fledermaus, Hai),
 das Wildschwein (ersetzt das frühere Monster), der Gold-Dieb-Vogel, Enterhaken mit Seil, Ballon, Notausgang-Effekt, Chat-Sprechblasen und Emote-Rad.
 Die Geräusche „Ballon platzt“ und „Chat-Ping“ werden zur Laufzeit per WebAudio synthetisiert (keine Dateien).
 Emotes sind Unicode-Emojis und werden mit der Emoji-Schrift des jeweiligen Systems dargestellt (es wird keine Emoji-Grafik mitgeliefert).
+
+Spezialisten-Figuren (Zeugmeister, Sanitäter, Goldgräber, `js/helpers.js`/`js/sprites.js`), große Karte (`js/bigmap.js`), Nebel des Krieges (`js/fog.js`),
+Weltstile, Schichtung, Goldadern und Golderz-Brocken (`js/worlds.js`) sowie die KI (`js/ai.js`, `js/aidef.js`) sind eigener Code (ISC) – keine fremden Dateien.
 
 ## Assets aus OpenClonk (https://github.com/openclonk/openclonk, Commit 36de799)
 Lizenz: **Creative Commons Attribution 3.0** (CC-BY 3.0, https://creativecommons.org/licenses/by/3.0/),

@@ -73,7 +73,7 @@ function startSingle(mode) {
     ? { mode, W: 1800, H: 640, seed: newSeed(), teams: [{ name: 'Siedler' }], clonks: 1, money: 40, goal: spGoal(), monsters: $('optmon1').checked, monsterCount: 2 }
     : { mode: 'melee', W: 1700, H: 620, seed: newSeed(), teams: [{ name: 'Du' }, { name: 'KI Rot', ai: true, diff: $('spdiff1').value }], clonks: 1, money: 40, monsters: false };
   if (mode === 'melee3') { cfg.teams.push({ name: 'KI Grün', ai: true, diff: $('spdiff2').value }); cfg.W = 2300; }
-  applySize(cfg, $('spsize').value);
+  applySize(cfg, $('spsize').value); cfg.style = $('spstyle').value;
   const cn = cleanName($('spcname').value, ''); $('spcname').value = cn; try { localStorage.setItem('br_cname', cn); } catch (e) {}
   cfg.teams[0].cname = cn; const hv = $('opthelper').value; cfg.teams[0].helper = hv !== 'off'; cfg.teams[0].hdiff = hv !== 'off' ? hv : 'normal';
   cfg.allResearch = $('optallres').checked; cfg.daynight = $('optday').checked; cfg.lava = true; cfg.animals = $('optanimals').checked;
@@ -99,7 +99,7 @@ function launchWorld(cfg, remote, map, prebuilt) {
   if (!prebuilt) { CHAT.log = []; CHAT.bubbles = {}; if (typeof renderChatLog === 'function') renderChatLog(); }
   if (prebuilt) { if (G.role !== 'single') addMsg('Spiel geht weiter.'); }
   else {
-    if (cfg.size && MAP_SIZES[cfg.size]) addMsg('Karte: ' + MAP_SIZES[cfg.size].n + ' (' + cfg.W + ' × ' + cfg.H + ')');
+    if (cfg.size && MAP_SIZES[cfg.size]) addMsg('Karte: ' + MAP_SIZES[cfg.size].n + ' (' + cfg.W + ' × ' + cfg.H + ')' + (typeof worldStyleLabel === 'function' ? ' · Welt: ' + worldStyleLabel(cfg) : ''));
     addMsg(cfg.mode === 'settle' ? 'Goldrausch: Verdiene ' + cfg.goal + ' Geld! Grabe Gold und verkaufe es an der Hütte.' : 'Melee: Das letzte überlebende Team gewinnt!');
   }
   input.lastSent = ''; pushKeys(true);
@@ -118,7 +118,7 @@ function menuBack() { if (G.menu) { closeAllMenus(); return; } if ($('lobby').st
 // ---------- Hintergrund-Demo im Hauptmenü (KI gegen KI) ----------
 function startDemo() {
   try {
-    const cfg = { mode: 'melee', W: 1500, H: 560, seed: newSeed(), teams: [{ name: 'A', ai: true, diff: 'hard' }, { name: 'B', ai: true, diff: 'normal' }], clonks: 3, money: 80, monsters: false, allResearch: true, daynight: true, lava: true, dayStart: 0.32 };
+    const cfg = { mode: 'melee', W: 1500, H: 560, seed: newSeed(), teams: [{ name: 'A', ai: true, diff: 'hard' }, { name: 'B', ai: true, diff: 'normal' }], clonks: 3, money: 80, monsters: false, allResearch: true, daynight: true, lava: true, dayStart: 0.32, style: 'zufall' };
     const w = new World(cfg, false); w.setup(); w.goal = 1e9; G.demo = w; G.demoT = 0; R.attach(w); R.miniDom = null; R.resize();
     R.cam.x = 200; R.cam.y = w.surf[700] - 160;
   } catch (e) { G.demo = null; console.warn('Demo', e); }

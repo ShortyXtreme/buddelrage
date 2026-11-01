@@ -57,6 +57,7 @@ const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e)
 $('spcname').value = $('mpcname').value = cleanName(lsGet('br_cname', ''), '');
 $('spdiff1').value = lsGet('br_diff1', 'normal'); $('spdiff2').value = lsGet('br_diff2', 'normal'); $('opttakeover').value = lsGet('br_takeover', 'normal');
 for (const id of ['opthelper', 'opthelper2']) { $(id).innerHTML = '<option value="off">Aus</option>' + AI_LEVELS.map(k => '<option value="' + k + '">' + aiDiffName(k) + '</option>').join(''); const v = lsGet('br_helperdiff', 'normal'); $(id).value = v === 'off' || AI_DIFF[v] ? v : 'normal'; }
+for (const [id, k] of [['spstyle', 'br_style'], ['optstyle', 'br_style2']]) { const v = lsGet(k, 'zufall'); $(id).value = v === 'zufall' || WORLD_STYLES[v] ? v : 'zufall'; $(id).addEventListener('change', () => { try { localStorage.setItem(k, $(id).value); } catch (e) {} }); }
 for (const [id, k] of [['spsize', 'br_size'], ['optsize', 'br_size2']]) { const v = lsGet(k, 'mittel'); $(id).value = MAP_SIZES[v] ? v : 'mittel'; $(id).addEventListener('change', () => { try { localStorage.setItem(k, $(id).value); } catch (e) {} }); }
 for (const id of ['spcname', 'mpcname']) $(id).addEventListener('change', () => { const n = cleanName($(id).value, ''); $(id).value = n; $('spcname').value = $('mpcname').value = n; localStorage.setItem('br_cname', n); });
 for (const [id, k] of [['spdiff1', 'br_diff1'], ['spdiff2', 'br_diff2'], ['opttakeover', 'br_takeover']]) $(id).addEventListener('change', () => localStorage.setItem(k, $(id).value));

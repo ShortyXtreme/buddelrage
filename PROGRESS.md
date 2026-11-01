@@ -98,3 +98,11 @@ Backup: /workspace/clonk-game.bak8 (= Zip 5000b67…)
 - 22:30 KI-Sims aisim3 (alle Stufen) + settlesim (Goldziel ai/helper) ERRS [], Goldziel wie vorher erreichbar.
 - 22:33 Regression reg4 alle Exit 0 / ERRS []: castleup, gear, mpgear, sptest, smoke2, mpteam, feat2, ui2, helpchk, mpfeat, aiui. mpgear Erdklumpen-Kauf robuster (Wiederholung), Lauf 4: 361→224 px auf allen Tabs; Burg-Zustand nach Host-Wechsel gleich.
 - nächster Schritt: Zip bauen
+- 22:34 Zip gebaut: /workspace/buddelrage-site.zip sha256 3d2ce7bdd2edf71cddaf040d6a6addb84e1937db5f3a06f86464dca42e0f4af6 (nicht deployt, nichts gepusht)
+
+## Release 01.11.2026 – Team-Integration (sachen + welten + ki)
+- Integration über /workspace/merge-build.sh (welten → sachen → ki, Tests aus den Test-Diffs, 3-Wege-Merge für gemeinsam geänderte Tests).
+- sachen: Pixel-Sprites (js/sprites.js), Wachturm-Ausbau (3 Stufen + Turmvorrat), Spezialisten (js/helpers.js: Zeugmeister, Sanitäter, Goldgräber), große Karte M (js/bigmap.js), Ton auf L, Nebel des Krieges (js/fog.js).
+- welten: 6 Weltstile (js/worlds.js, Inselwelt entfernt, alte Stände → Klassisch), faire Goldverteilung, Goldadern und Golderz-Brocken, Burgplatz-Plateau in allen Stilen.
+- ki: Anti-Stuck (Sprengen/Graben/Notausgang), frühere Burg, Wachturm-Ausbau und Spezialisten, Golderz-API, alle Weltstile; Kaufregel: verbündete reine KI-Teams kaufen Figuren, Helfer im Menschen-Team kaufen nie (Umschalter AI_US.off.allyBuy=1 = altes Verhalten).
+- Lokaler TURN für MP-Tests: /workspace/start-turn.sh (pion/turn).

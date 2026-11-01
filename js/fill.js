@@ -37,12 +37,12 @@ Object.assign(World.prototype, {
     const d = c.dir || 1, C = [[d * 10, 5], [d * 10, -3], [0, 9], [d * 16, 8], [-d * 10, 5]];
     let best = null, bn = 14;
     for (const [ox, oy] of C) { const n = this.fillEarth(c.x + ox, c.y + oy, EARTH_R, true); if (n > bn) { bn = n; best = [c.x + ox, c.y + oy]; } }
-    if (!best) { if (!this.teams[c.team].ai) this.msg('Hier ist kein Loch zum Füllen – Erdklumpen werfen geht auch.', c.team); this.snd('error', c.x, c.y); return true; }
+    const t = c.team === undefined ? null : this.teams[c.team];
+    if (!best) { if (t && !t.ai) this.msg('Hier ist kein Loch zum Füllen – Erdklumpen werfen geht auch.', c.team); this.snd('error', c.x, c.y); return true; }
     c.inv.splice(actIdx(c), 1);
     this.fillEarth(best[0], best[1], EARTH_R);
     this.snd('dump', c.x, c.y); c.punch = 10; c.cd = 12;
-    if (c.team === undefined) return true;
-    const t = this.teams[c.team]; if (t.stats) t.stats.filled = (t.stats.filled || 0) + 1;
+    if (t && t.stats) t.stats.filled = (t.stats.filled || 0) + 1;
     return true;
   },
   // geworfener Klumpen trifft Boden → platscht

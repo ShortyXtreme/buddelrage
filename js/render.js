@@ -1,49 +1,5 @@
-// BuddelRage – Darstellung (prozedurale Pixel-Grafik)
+// BuddelRage – Darstellung (prozedurale Pixel-Grafik; Gebäude, Fahrzeuge und Gegenstände: vorgerenderte Sprites in js/sprites.js)
 'use strict';
-const ITEM_DRAW = {
-  rock(g, x, y) { g.fillStyle = '#7d7a74'; g.fillRect(x - 2, y - 3, 4, 3); g.fillStyle = '#a5a29b'; g.fillRect(x - 1, y - 3, 2, 1); g.fillStyle = '#55524d'; g.fillRect(x - 2, y - 1, 4, 1); },
-  flint(g, x, y) { g.fillStyle = '#5a5654'; g.fillRect(x - 2, y - 3, 4, 3); g.fillStyle = '#c23a1a'; g.fillRect(x - 1, y - 3, 2, 2); g.fillStyle = '#ff9a40'; g.fillRect(x, y - 3, 1, 1); },
-  superflint(g, x, y) { g.fillStyle = '#6a5a20'; g.fillRect(x - 2, y - 4, 4, 4); g.fillStyle = '#ffd030'; g.fillRect(x - 1, y - 4, 2, 3); g.fillStyle = '#fff6a0'; g.fillRect(x, y - 4, 1, 1); },
-  tnt(g, x, y, it) { g.fillStyle = '#b01818'; g.fillRect(x - 2, y - 6, 4, 6); g.fillStyle = '#e8d8b0'; g.fillRect(x - 2, y - 4, 4, 1); g.fillStyle = '#333'; g.fillRect(x, y - 7, 1, 1); if (it && it.fuse > 0 && (it.fuse >> 2) % 2) { g.fillStyle = '#ffee55'; g.fillRect(x, y - 8, 1, 1); } },
-  gold(g, x, y) { g.fillStyle = '#9a7010'; g.fillRect(x - 2, y - 3, 4, 3); g.fillStyle = '#f5c823'; g.fillRect(x - 2, y - 3, 3, 2); g.fillStyle = '#fff3a0'; g.fillRect(x - 1, y - 3, 1, 1); },
-  sword(g, x, y) { g.fillStyle = '#d8dde4'; g.fillRect(x - 3, y - 2, 6, 1); g.fillStyle = '#8a6a2a'; g.fillRect(x + 2, y - 3, 1, 3); g.fillStyle = '#5a3a1a'; g.fillRect(x + 3, y - 2, 1, 1); },
-  shield(g, x, y) { g.fillStyle = '#7a4a20'; g.fillRect(x - 2, y - 5, 4, 5); g.fillStyle = '#c0c4c8'; g.fillRect(x - 2, y - 5, 4, 1); g.fillRect(x - 1, y - 3, 2, 1); },
-  bow(g, x, y) { g.fillStyle = '#8a5a26'; g.fillRect(x - 1, y - 5, 1, 1); g.fillRect(x, y - 4, 1, 3); g.fillRect(x - 1, y - 1, 1, 1); g.fillStyle = '#eee'; g.fillRect(x - 2, y - 5, 1, 5); },
-  arrows(g, x, y) { g.fillStyle = '#6a4a22'; g.fillRect(x - 2, y - 4, 3, 4); g.fillStyle = '#ddd'; g.fillRect(x - 2, y - 6, 1, 2); g.fillRect(x, y - 6, 1, 2); g.fillStyle = '#c33'; g.fillRect(x - 1, y - 5, 1, 1); },
-  earth(g, x, y) { g.fillStyle = '#7a5230'; g.fillRect(x - 3, y - 3, 6, 3); g.fillRect(x - 2, y - 4, 4, 1); g.fillStyle = '#9c6c40'; g.fillRect(x - 2, y - 3, 2, 1); g.fillStyle = '#5a3a20'; g.fillRect(x - 3, y - 1, 6, 1); },
-  armor(g, x, y) { g.fillStyle = '#9aa0a8'; g.fillRect(x - 2, y - 4, 4, 4); g.fillStyle = '#d0d4da'; g.fillRect(x - 2, y - 4, 1, 3); g.fillStyle = '#5a6068'; g.fillRect(x - 2, y - 1, 4, 1); },
-  wipf(g, x, y) { drawWipf(g, { dir: 1, anim: 0 }, x, y + 1); },
-  hook(g, x, y) { g.fillStyle = '#8a6a3a'; g.fillRect(x - 3, y - 2, 4, 1); g.fillStyle = '#c8ccd2'; g.fillRect(x + 1, y - 4, 1, 4); g.fillRect(x + 2, y - 4, 1, 1); g.fillRect(x, y - 4, 1, 1); g.fillRect(x + 2, y - 1, 1, 1); g.fillRect(x, y - 1, 1, 1); g.fillStyle = '#d8c08a'; g.fillRect(x - 4, y - 3, 1, 3); },
-  balloon(g, x, y) { g.fillStyle = '#d83a3a'; g.fillRect(x - 2, y - 6, 4, 4); g.fillRect(x - 1, y - 7, 2, 6); g.fillStyle = '#ff8a8a'; g.fillRect(x - 1, y - 6, 1, 1); g.fillStyle = '#ddd'; g.fillRect(x, y - 1, 1, 2); },
-  arrow(g, x, y, it) {
-    const a = it && it.ang !== undefined ? it.ang : 0; g.save(); g.translate(x, y - 1); g.rotate(a);
-    g.fillStyle = '#7a5a30'; g.fillRect(-4, 0, 7, 1); g.fillStyle = '#ccc'; g.fillRect(3, 0, 1, 1); g.fillStyle = '#e44'; g.fillRect(-5, -1, 1, 1); g.fillRect(-5, 1, 1, 1); g.restore();
-  },
-};
-function drawVehicle(g, v, col, x, y) {
-  x = Math.round(x); y = Math.round(y);
-  const R = (cl, xx, yy, w, h) => { g.fillStyle = cl; g.fillRect(x + xx, y + yy, w, h); };
-  const wheel = (xx) => { R('#2a2420', xx - 2, -4, 4, 4); R('#6a5a4a', xx - 1, -3, 2, 2); };
-  if (v.type === 'lorry') {
-    R('#5a5f66', -7, -8, 14, 5); R('#7d848c', -7, -8, 14, 1); R('#3c4046', -7, -4, 14, 1); R('#8a9098', -7, -8, 1, 5); R('#8a9098', 6, -8, 1, 5);
-    const n = (v.inv || []).length; if (n) { R('#9a7010', -6, -9, 12, Math.min(1, n)); if (n > 4) R('#f5c823', -5, -10, 10, 1); if (n > 12) R('#c8a020', -3, -11, 6, 1); }
-    R(col, -2, -6, 4, 1); wheel(-4); wheel(4);
-  } else if (v.type === 'catapult') {
-    g.save(); g.translate(x, y); if (v.dir < 0) g.scale(-1, 1);
-    const Q = (cl, xx, yy, w, h) => { g.fillStyle = cl; g.fillRect(xx, yy, w, h); };
-    Q('#6a4422', -9, -5, 18, 2); Q('#8a5a2e', -9, -5, 18, 1); Q('#6a4422', -3, -11, 2, 6); Q('#6a4422', 1, -11, 2, 6); Q(col, -8, -4, 3, 1);
-    const ready = !v.cd || v.cd < 10; // Wurfarm
-    g.save(); g.translate(0, -10); g.rotate(ready ? Math.PI + 0.15 : -0.4 - v.ang); Q('#9a6a36', 0, -1, 12, 2); Q('#4a2e14', 10, -2, 3, 3); g.restore();
-    g.restore(); wheel(-6); wheel(6);
-  } else {
-    g.save(); g.translate(x, y - 5); if (v.dir < 0) g.scale(-1, 1); g.rotate(-v.ang);
-    g.fillStyle = '#2e3236'; g.fillRect(-4, -2, 14, 4); g.fillStyle = '#50565c'; g.fillRect(-4, -2, 14, 1); g.fillStyle = '#1a1c1e'; g.fillRect(9, -2, 2, 4);
-    g.restore();
-    R('#6a4422', -7, -5, 14, 3); R(col, -6, -4, 3, 1); wheel(-4); wheel(4);
-  }
-  if (v.fire > 0) drawFlame(g, x, y - 6, 5, v.id);
-  if (v.hp < VEH[v.type].hp) { g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(x - 6, y - 15, 12, 1); g.fillStyle = '#e83'; g.fillRect(x - 6, y - 15, Math.max(0, 12 * v.hp / VEH[v.type].hp), 1); }
-}
 function lerpC(a, b, t) { return 'rgb(' + Math.round(a[0] + (b[0] - a[0]) * t) + ',' + Math.round(a[1] + (b[1] - a[1]) * t) + ',' + Math.round(a[2] + (b[2] - a[2]) * t) + ')'; }
 function shade(hex, f) { const n = parseInt(hex.slice(1), 16); let r = n >> 16, g = (n >> 8) & 255, b = n & 255; r = Math.min(255, r * f) | 0; g = Math.min(255, g * f) | 0; b = Math.min(255, b * f) | 0; return 'rgb(' + r + ',' + g + ',' + b + ')'; }
 
@@ -142,14 +98,6 @@ function drawRope(g, c, x, y, hk) {
   g.stroke();
   g.fillStyle = '#c8ccd2'; g.fillRect(Math.round(hk.x) - 1, Math.round(hk.y) - 1, 3, 1); g.fillRect(Math.round(hk.x), Math.round(hk.y) - 2, 1, 3);
 }
-function drawBalloon(g, c, col, x, y, bl) {
-  const t = performance.now() / 400 + (c.id || 0), bx = Math.round(x + Math.sin(t) * 1.2), by = Math.round(y - 25), empty = bl && !bl.gas;
-  g.strokeStyle = 'rgba(230,230,230,.9)'; g.lineWidth = 0.6; g.beginPath(); g.moveTo(x + c.dir, y - 8); g.lineTo(bx, by + 5); g.stroke();
-  const w = empty ? 5 : 7, h = empty ? 6 : 9;
-  g.fillStyle = col; g.beginPath(); g.ellipse(bx, by, w / 2, h / 2, 0, 0, 7); g.fill();
-  g.fillStyle = 'rgba(255,255,255,.45)'; g.fillRect(bx - 2, by - 3, 1, 2);
-  g.fillStyle = shade(col.length === 7 ? col : '#d83a3a', 0.7); g.fillRect(bx - 1, by + h / 2 - 1, 2, 1);
-}
 function drawFlame(g, x, y, s, seed, n) {
   const t = performance.now() / 70 + (seed || 0) * 1.7; n = n || 3;
   for (let k = 0; k < n; k++) {
@@ -193,11 +141,6 @@ function drawMonster(g, m, x, y) {
   // Lebensbalken, wenn verletzt
   if (m.hp < 39.5 && m.hp > 0) { const bx = Math.round(x) - 7, by = Math.round(y) - 16; R('rgba(0,0,0,.6)', bx, by, 14, 2); R(m.hp > 20 ? '#9be35a' : '#ff7a4a', bx, by, Math.max(1, Math.round(14 * m.hp / 40)), 2); }
 }
-function drawStruct(g, s, col) {
-  if (s.type === 'tower') drawTower(g, s, col); else if (s.type === 'castle') { drawCastle(g, s, col); if (s.prog >= 1 && s.up > 0) drawCastleUp(g, s, col); } else drawHut(g, s, col);
-  if (s.fire > 0) for (let k = 0; k < 4; k++) drawFlame(g, s.x + (k - 1.5) * s.w / 4, s.y - s.h * (0.3 + 0.5 * ((k * 7) % 3) / 3), 6, s.id + k);
-  if (s.prog >= 1 && s.hp < structMax(s)) { const x = Math.round(s.x - s.w / 2), y = Math.round(s.y - s.h - 6); g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(x, y, s.w, 2); g.fillStyle = '#e44'; g.fillRect(x, y, Math.max(0, s.w * s.hp / structMax(s)), 2); }
-}
 // Bauvorschau: grün = sofort, gelb = Planieren nötig, rot = unmöglich
 function buildPreviewInfo(world, type) {
   if (!world || G.myTeam < 0 || !BUILD[type]) return null;
@@ -215,90 +158,6 @@ function drawBuildPreview(g, world, type) {
   g.fillStyle = 'rgba(' + col + ',.95)';
   g.fillRect(x - hw, y - B.h + 1, B.w + 1, 1); g.fillRect(x - hw, y, B.w + 1, 1); g.fillRect(x - hw, y - B.h + 1, 1, B.h); g.fillRect(x + hw, y - B.h + 1, 1, B.h);
   if (pc.st === 'level') { g.fillStyle = 'rgba(255,200,60,.5)'; g.fillRect(x - hw, y + 1, B.w + 1, 3); }
-}
-function drawSite(g, s) {
-  const x = Math.round(s.x), y = Math.round(s.y), hw = s.w >> 1, h = Math.round((s.h - 4) * s.prog);
-  const R = (cl, xx, yy, w, hh) => { g.fillStyle = cl; g.fillRect(x + xx, y + yy, w, hh); };
-  if (s.lv) { // Planierphase: Absteckpflöcke + gestrichelter Rahmen + Schaufel-Balken
-    const T = (performance.now() / 120) | 0;
-    for (let k = -hw; k < hw; k += 4) if (((k >> 2) + T) % 2) { R('rgba(255,200,60,.85)', k, -s.h, 2, 1); R('rgba(255,200,60,.85)', k, 0, 2, 1); }
-    R('#c8a050', -hw, -10, 1, 10); R('#c8a050', hw, -10, 1, 10); R('#e33', -hw, -10, 2, 2); R('#e33', hw - 1, -10, 2, 2);
-    R('#222', -12, -s.h - 4, 24, 3); R('#fb3', -12 + (T % 20), -s.h - 4, 4, 3);
-    return;
-  }
-  g.globalAlpha = 0.5 + s.prog * 0.5;
-  R('#7a5530', -hw, -2, s.w, 2);
-  for (let px = -hw + 1; px < hw; px += 10) R('#8a6038', px, -2 - h, 2, h);
-  R('#8a6038', hw - 2, -2 - h, 2, h);
-  for (let k = 0; k < h; k += 5) R('#a07040', -hw + 1, -2 - k, s.w - 2, 1);
-  g.globalAlpha = 1;
-  R('#222', -12, -s.h - 4, 24, 3); R('#5c5', -12, -s.h - 4, 24 * s.prog, 3);
-}
-function drawTower(g, s, col) {
-  if (s.prog < 1) return drawSite(g, s);
-  const x = Math.round(s.x), y = Math.round(s.y);
-  const R = (cl, xx, yy, w, h) => { g.fillStyle = cl; g.fillRect(x + xx, y + yy, w, h); };
-  R('#5c3b1c', -8, -42, 16, 42); for (let k = 0; k < 42; k += 4) R('#7a5228', -8, -42 + k, 16, 2);
-  R('#4a2e14', -8, -42, 1, 42); R('#4a2e14', 7, -42, 1, 42);
-  R('#6a4422', -10, -46, 20, 4); R('#8a5a2e', -10, -46, 20, 1);
-  for (let k = -10; k < 10; k += 4) R('#6a4422', k, -50, 2, 4);
-  R('#3a2210', -3, -10, 6, 10); R('#2a2a40', -2, -30, 4, 5); R('#ffd060', -1, -29, 2, 3);
-  R('#555', 8, -64, 1, 18); R(col, 9, -64, 8, 5); R(shade(col, 0.7), 9, -61, 8, 2);
-}
-function drawCastle(g, s, col) {
-  if (s.prog < 1) return drawSite(g, s);
-  const x = Math.round(s.x), y = Math.round(s.y);
-  const R = (cl, xx, yy, w, h) => { g.fillStyle = cl; g.fillRect(x + xx, y + yy, w, h); };
-  const st = '#8d8a84', st2 = '#a8a59e', dk = '#5e5b56';
-  R(st, -24, -30, 48, 30); for (let k = 0; k < 30; k += 5) for (let j = -24 + (k % 10 ? 0 : 4); j < 24; j += 8) R(dk, j, -30 + k, 1, 5);
-  for (let k = 0; k < 30; k += 5) R(st2, -24, -30 + k, 48, 1);
-  for (let k = -24; k < 24; k += 6) R(st, k, -34, 4, 4);
-  R(st, -32, -44, 12, 44); R(st, 20, -44, 12, 44); R(st2, -32, -44, 12, 1); R(st2, 20, -44, 12, 1);
-  for (let k = 0; k < 3; k++) { R(st, -32 + k * 4.5, -48, 3, 4); R(st, 20 + k * 4.5, -48, 3, 4); }
-  R(dk, -27, -36, 2, 5); R(dk, 25, -36, 2, 5); R('#ffd060', -27, -35, 2, 3); R('#ffd060', 25, -35, 2, 3);
-  R('#2a1c10', -6, -16, 12, 16); R('#3e2814', -6, -18, 12, 2); for (let k = -5; k < 6; k += 3) R('#6a6a6a', k, -16, 1, 16);
-  R('#2a2a40', -15, -24, 4, 5); R('#ffd060', -14, -23, 2, 3); R('#2a2a40', 11, -24, 4, 5); R('#ffd060', 12, -23, 2, 3);
-  R('#555', -1, -62, 1, 28); R(col, 0, -62, 11, 6); R(shade(col, 0.7), 0, -58, 11, 2);
-}
-// Burg-Ausbau: Mauern, Schützen, Balliste, Gerüst während des Ausbaus
-function drawCastleUp(g, s, col) {
-  const x = Math.round(s.x), y = Math.round(s.y), L = castleLevel(s);
-  const R = (cl, xx, yy, w, h) => { g.fillStyle = cl; g.fillRect(x + xx, y + yy, w, h); };
-  if (L >= 1) {
-    R('#4a4844', -32, -44, 12, 2); R('#4a4844', 20, -44, 12, 2); R('#6a5a3a', -25, -31, 50, 1); // Wehrgänge (Hoardings)
-    R('#3a3a3a', -6, -16, 12, 1); for (let k = -4; k < 6; k += 3) R('#888', k, -15, 1, 4); // Fallgitter
-    for (const wl of s.walls || []) {
-      const wx = Math.round(wl.x), wy = Math.round(wl.y);
-      const W = (cl, xx, yy, w, h) => { g.fillStyle = cl; g.fillRect(wx + xx, wy + yy, w, h); };
-      if (wl.br) { W('#6e6b66', -4, -5, 8, 5); W('#8d8a84', -3, -7, 3, 2); W('#5e5b56', 1, -6, 2, 1); continue; }
-      W('#8d8a84', -3, -WALL_H, 6, WALL_H + 1); for (let k = 0; k < WALL_H; k += 5) { W('#a8a59e', -3, -WALL_H + k, 6, 1); W('#5e5b56', (k % 10 ? -1 : 1), -WALL_H + k + 1, 1, 4); }
-      W('#8d8a84', -4, -WALL_H - 3, 2, 3); W('#8d8a84', 2, -WALL_H - 3, 2, 3); W(col, -1, -WALL_H - 2, 2, 2);
-      if (wl.hp < WALL_HP) { W('rgba(0,0,0,.6)', -5, -WALL_H - 7, 10, 1); W('#e44', -5, -WALL_H - 7, Math.max(0, 10 * wl.hp / WALL_HP), 1); }
-    }
-  }
-  if (L >= 2) for (const ox of [-26, 26]) { // Bogenschützen auf den Türmen
-    R('#2f5a2a', ox - 1, -54, 3, 5); R('#e8c8a0', ox - 1, -56, 3, 2); R('#3d6b32', ox - 1, -57, 3, 1); R('#8a5a26', ox + (ox < 0 ? -2 : 2), -55, 1, 4);
-    if (!(s.arrows > 0)) R('#e44', ox, -61, 1, 3);
-  }
-  if (L >= 3) { // Balliste auf dem Bergfried
-    const d = s.bDir || 1;
-    R('#6a4a26', -5, -37, 10, 2); R('#6a4a26', -1, -40, 2, 3); R('#8a6a3a', -6 * d - (d < 0 ? 1 : 0), -42, 12, 1); R('#5a3a16', d > 0 ? 5 : -7, -44, 2, 5);
-    if (s.bolts > 0) R('#d0d4da', d > 0 ? 6 : -9, -42, 3, 1);
-  }
-  if (s.upT > 0) { // Gerüst
-    const k = s.up; R('#9a7040', -34, -50, 1, 50); R('#9a7040', 33, -50, 1, 50); for (let yy = -48; yy < 0; yy += 10) R('#b08050', -34, yy, 68, 1);
-    if (k === 1) { R('#7a7670', -36, -6, 4, 6); R('#7a7670', 32, -6, 4, 6); }
-  }
-}
-function drawHut(g, s, col) {
-  const x = Math.round(s.x), y = Math.round(s.y);
-  const R = (cl, xx, yy, w, h) => { g.fillStyle = cl; g.fillRect(x + xx, y + yy, w, h); };
-  if (s.prog < 1) return drawSite(g, s);
-  R('#5c3b1c', -14, -16, 28, 16); for (let k = 0; k < 16; k += 3) R('#7a5228', -14, -16 + k, 28, 2);
-  R('#3a2210', -3, -9, 6, 9); R('#c09040', 1, -5, 1, 1);
-  R('#2a2a40', -11, -13, 5, 4); R('#ffd060', -10, -12, 3, 2);
-  for (let k = 0; k < 9; k++) R(k % 2 ? '#8a2a1a' : '#a8382a', -16 + k, -17 - k, 32 - 2 * k, 1);
-  R('#555', 9, -40, 1, 24); R(col, 10, -40, 9, 6); R(shade(col, 0.7), 10, -36, 9, 2);
 }
 
 class Renderer {
@@ -348,9 +207,10 @@ class Renderer {
     // Himmel (Tag/Nacht)
     const sky = g.createLinearGradient(0, 0, 0, this.cv.height);
     const dusk = Math.max(0, 1 - Math.abs(light - 0.45) * 3.2);
-    sky.addColorStop(0, lerpC([106, 166, 232], [8, 12, 38], dark));
-    sky.addColorStop(0.6, lerpC(lerpC([185, 220, 245], [20, 28, 64], dark).match(/\d+/g).map(Number), [235, 140, 90], dusk * 0.6));
-    sky.addColorStop(1, lerpC([232, 242, 240], [30, 34, 60], dark));
+    const SK = (world.pal && world.pal.sky) || [[106, 166, 232], [185, 220, 245], [232, 242, 240]]; // Himmel je Weltstil (js/worlds.js)
+    sky.addColorStop(0, lerpC(SK[0], [8, 12, 38], dark));
+    sky.addColorStop(0.6, lerpC(lerpC(SK[1], [20, 28, 64], dark).match(/\d+/g).map(Number), [235, 140, 90], dusk * 0.6));
+    sky.addColorStop(1, lerpC(SK[2], [30, 34, 60], dark));
     g.fillStyle = sky; g.fillRect(0, 0, this.cv.width, this.cv.height);
     if (dark > 0.3) { // Sterne
       g.fillStyle = 'rgba(255,255,240,' + ((dark - 0.3) * 1.2).toFixed(2) + ')';
@@ -392,7 +252,7 @@ class Renderer {
       if (c.hk) drawRope(g, c, x, y, c.hk);
       if (c.bl) drawBalloon(g, c, t.color, x, y, c.bl);
       if (c.invT > 0 && c.act !== 'dead' && (Math.floor(performance.now() / 70) % 2)) g.globalAlpha = 0.35; // Unverwundbar: Blinken
-      drawClonk(g, c, t.color, x, y); g.globalAlpha = 1;
+      drawClonk(g, c, t.color, x, y); if (c.spec) drawSpec(g, c, t.color, x, y); g.globalAlpha = 1;
       if (c.act === 'dead') continue;
       const isSel = t.sel === c.id;
       if (isSel && t.id === myTeam) { g.fillStyle = '#fff'; const by = Math.round(y) - 17 + (Math.floor(world.tick / 15) % 2); g.fillRect(Math.round(x) - 1, by, 3, 1); g.fillRect(Math.round(x), by + 1, 1, 1); }
@@ -413,7 +273,8 @@ class Renderer {
     g.globalAlpha = 1;
     // Namen
     g.font = '5px monospace'; g.textAlign = 'center';
-    for (const st of world.structs) { if (st.type !== 'castle' || st.prog < 1 || !(st.up > 0) || !vis(st.x, st.y, 80)) continue; if (myTeam >= 0 && !world.ally(st.team, myTeam)) continue; const Lv = castleLevel(st); let tx = 'Burg ' + Lv + '/3'; if (st.upT > 0) tx += ' · Ausbau ' + Math.ceil(st.upT / 60) + 's'; if (st.up >= 2) tx += ' · Pfeile ' + (st.arrows | 0); if (st.up >= 3) tx += ' · Bolzen ' + (st.bolts | 0); g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillText(tx, st.x + 0.5, st.y - 66.5); g.fillStyle = (st.up >= 2 && !(st.arrows > 0)) || (st.up >= 3 && !(st.bolts > 0)) ? '#ff9a8a' : '#ffe2a0'; g.fillText(tx, st.x, st.y - 67); }
+    for (const st of world.structs) { if (st.type !== 'castle' || st.prog < 1 || !(st.up > 0) || !vis(st.x, st.y, 80)) continue; if (myTeam >= 0 && !world.ally(st.team, myTeam) && !(typeof fogStructSeen === 'function' && FOG.on && fogStructSeen(st))) continue; /* Gegner: nur in Sichtweite */ const Lv = castleLevel(st); let tx = 'Burg ' + Lv + '/3'; if (st.upT > 0) tx += ' · Ausbau ' + Math.ceil(st.upT / 60) + 's'; if (st.up >= 2) tx += ' · Pfeile ' + (st.arrows | 0); if (st.up >= 3) tx += ' · Bolzen ' + (st.bolts | 0); if (st.rep === 1) tx += ' · Reparatur'; else if (st.rep === 2) tx += ' · Rep. pausiert'; g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillText(tx, st.x + 0.5, st.y - 66.5); g.fillStyle = (st.up >= 2 && !(st.arrows > 0)) || (st.up >= 3 && !(st.bolts > 0)) ? '#ff9a8a' : '#ffe2a0'; g.fillText(tx, st.x, st.y - 67); }
+    for (const st of world.structs) { if (st.type !== 'tower' || st.prog < 1 || !(st.up > 0) || !vis(st.x, st.y, 80)) continue; if (myTeam >= 0 && !world.ally(st.team, myTeam) && !(typeof fogStructSeen === 'function' && FOG.on && fogStructSeen(st))) continue; /* Gegner: nur in Sichtweite */ const Lv = towerLevel(st); let tx = 'Turm ' + Lv + '/' + TUP.length; if (st.upT > 0) tx += ' · Ausbau ' + Math.ceil(st.upT / 60) + 's'; if (Lv >= 2) tx += ' · Pfeile ' + (st.arrows | 0); if (Lv >= 3) tx += ' · Pech ' + (st.pitch | 0); if (st.rep === 1) tx += ' · Ausbessern'; const warn = (Lv >= 2 && !(st.arrows > 0)) || (Lv >= 3 && !(st.pitch > 0)); g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillText(tx, st.x + 0.5, st.y - 69.5); g.fillStyle = warn ? '#ff9a8a' : '#ffe2a0'; g.fillText(tx, st.x, st.y - 70); }
     for (const c of world.clonks) { if (c.act === 'dead' || c.inside) continue; const t = world.teams[c.team]; const sel = t.sel === c.id; if (!sel && t.id !== myTeam) continue; const [x, y] = [c.rx !== undefined && world.remote ? c.rx : c.x, c.ry !== undefined && world.remote ? c.ry : c.y]; g.globalAlpha = sel ? 1 : 0.55; g.fillStyle = 'rgba(0,0,0,0.5)'; const ny = c.bl ? 37 : 20; g.fillText(c.name, Math.round(x) + 0.5, Math.round(y) - ny + 0.5); g.fillStyle = t.id === myTeam ? '#fff' : t.color; g.fillText(c.name, Math.round(x), Math.round(y) - ny); g.globalAlpha = 1; }
     g.restore();
     if (dark > 0.04) this.drawLighting(world, cx, cy, vw, vh, dark, myTeam);

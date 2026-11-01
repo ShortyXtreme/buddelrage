@@ -1,10 +1,21 @@
-# BuddelRage – ein Clonk-inspiriertes 2D-Sandbox-Spiel
+# BuddelRage – ein 2D-Buddel- und Sandbox-Spiel
 
 Graben, Klettern, Gold verkaufen, Feuersteine werfen – plus Loren, Katapulte, Kanonen, Hütten, Wachtürme, Burgen,
 Ritter mit Schwert/Schild/Bogen, Forschungsbaum, Lava, sich ausbreitendes Feuer, Tag/Nacht und Gamepad-Steuerung.
 Alles funktioniert im Einzelspieler und online im Mehrspieler (Peer-to-Peer, Host-autoritativ) – **ohne eigenen Server**.
 
 **Online spielen:** https://shortyxtreme.github.io/buddelrage/
+
+## Neu in diesem Release (01.11.2026)
+* **Spezialisten** im Laden (Box „🧰 Spezialisten“): Zeugmeister, Sanitäter, Goldgräber – arbeiten selbstständig (siehe unten).
+* **Große Karte** auf **M**, **Ton** jetzt auf **L** (alte Belegungen werden automatisch umgezogen).
+* **Nebel des Krieges** für Infos über Gegner (Sichtweite von Buddlern, Gebäuden und Wachtürmen).
+* **Wachturm-Ausbau** in 3 Stufen (Zinnen, Turmschütze, Pechkessel) mit eigenem Turmvorrat.
+* **Pixel-Sprites** für alle Gebäude (mit Ausbau- und Schadensstufen), Fahrzeuge und Gegenstände.
+* **6 Weltstile**: Klassisch, Hügelland, Gebirge, Höhlenwelt, Vulkanland, Wüste (oder Zufall); jede Basis bekommt ein ebenes Plateau mit Burgplatz und fair verteiltes Gold. Die Inselwelt ist entfallen – alte Spielstände mit Inseln laden als Klassisch.
+* **Gold-Brocken und natürliche Schichtung**: Golderz-Brocken geben Hieb für Hieb Gold, bis sie erschöpft sind; der Untergrund ist in natürlichen Schichten aufgebaut (Erde, Sand, Fels, Granit).
+* **KI-Anti-Stuck**: KI-Buddler erkennen, wenn sie feststecken, und sprengen oder graben sich frei (sonst Notausgang); dazu frühere Burg, Wachturm-Ausbau und alle Weltstile.
+* **Kaufregel KI**: Gegnerische und verbündete reine KI-Teams kaufen selbst Buddler, Ritter und Spezialisten. Die Helfer-KI in deinem eigenen Team kauft nie – das entscheidest nur du.
 
 ## Einzelspieler
 Seite öffnen (oder lokal `index.html`) → „Einzelspieler“ → Einstellungen wählen (Name, KI-Helfer, Gegner-Stufe, Kartengröße,
@@ -71,7 +82,20 @@ Beim ersten Start führt ein kurzes Tutorial durch die Steuerung (in den Einstel
   einzelnen Pixeln hängen und sinken nicht ein. Zu steile Hänge (über ca. 50°) schaffen sie nicht – dann rollen sie sanft zurück.
   Auf Gefälle rollen sie leicht von selbst. Gilt beim Schieben durch Spieler und KI, im Mehrspieler synchron.
 
+## Weltstile und Gold
+Im Einzelspieler-Menü bzw. in der Lobby wählst du den **Weltstil**: Klassisch, Hügelland, Gebirge (Schnee, viel Fels), Höhlenwelt
+(Höhlenlabyrinth, unterirdische Seen), Vulkanland (Lavaseen tief unten), Wüste (Sand rieselt nach) oder Zufall. Gold liegt in
+**Adern** und großen **Golderz-Brocken**: jeder Hieb gibt Gold, bis der Brocken erschöpft ist. Jede Startbasis hat ungefähr gleich
+viel Gold in ihrem Abschnitt. Im Mehrspieler sind Stil und Gelände bei allen identisch; Spielstände merken sich den Stil.
+
 ## Karten, Burgplatz und Planieren
+* **Weltstil** (Einzelspieler-Menü bzw. Host in der Lobby, gespeichert): 🎲 Zufall (Standard, aus dem Karten-Seed – im Mehrspieler für alle gleich),
+  🌳 Klassisch (die bisherige Karte, unverändert), 🌄 Hügelland (sanfte Hügel, mehr Seen), 🏔️ Gebirge (hohe Gipfel mit Schnee, viel Fels, Bergseen),
+  🦇 Höhlenwelt (verzweigte Gänge, unterirdische Seen, viele Goldbrocken),
+  🌋 Vulkanland (Aschegelände, Vulkankegel mit Magmakammer, Lavaseen tief unten) und 🏜️ Wüste (Dünen aus rieselndem Sand, Oase).
+  Jeder Stil hat eigene Farben (Gras, Gestein, Himmel). Unter der Erde: waagrechte, leicht gewellte Gesteinsschichten (nach unten felsiger) mit gekörnten Übergängen, flache Sandlinsen,
+  wenige klare Höhlen, Seen und **Golderz** in natürlichen Formen (Klumpen, Bänder, verzweigte Adern) – tiefer liegen größere Vorkommen. Grabe in einen Brocken: jeder Hieb der Schaufel bringt ein Goldstück, bis der Brocken leer ist.
+  Das Gold wird je Basis-Abschnitt angeglichen (jeder Abschnitt ≥ 92 % des reichsten). Der Stil steht im Spielstand und wird beim Mehrspielerstart mitgeschickt; unbekannte Stile (z. B. die entfernte Inselwelt aus älteren Spielständen) laden als Klassisch.
 * **Kartengröße:** Klein / Mittel (Standard, ca. 20 % größer als früher) / Groß / Riesig, im Einzelspieler-Menü bzw. vom Host in der Lobby
   (wird mit der Spielkonfiguration an alle übertragen und gespeichert). Breite: Faktor 0,85 / 1,2 / 1,6 / 2,2 der Grundbreite, Höhe 580 / 660 / 760 / 880 px.
   Höhlen, Gold, Gestein, Lava-Höhlen, Seen, Gegenstände, Tiere und Startabstände wachsen mit.
@@ -145,6 +169,37 @@ Eine fertige Burg lässt sich im Laden (Box „🏰 Burg-Ausbau“) in drei Stuf
 
 **Munition muss gekauft werden:** Pfeilvorrat +20 für 12 (max. 60, ab Stufe 2), Ballistenbolzen +4 für 16 (max. 12, ab Stufe 3). Ist der Vorrat leer, schweigen die Schützen bzw. die Balliste (rote Markierung an der Burg und eine Meldung). Über der eigenen Burg stehen Stufe, Ausbauzeit und Vorrat („Burg 2/3 · Pfeile 40“). Am Sprite sieht man Wehrgänge und Fallgitter, die Mauern samt HP-Balken, Schützen auf den Türmen und die Balliste (mit eingelegtem Bolzen, wenn geladen). Während des Ausbaus steht ein Gerüst.
 Die **KI** baut aus (Leicht bis Stufe 1, Mittel bis 2, Schwer bis 3), sobald genug Geld da ist, und füllt die Munition auf, bei Angriffen mit Vorrang. Im Team nutzt sie die gemeinsame Kasse. Ausbau und Vorrat werden im Mehrspieler synchronisiert, überstehen den Host-Wechsel und werden gespeichert; alte Spielstände laden als Burg ohne Ausbau.
+
+## Wachturm-Ausbau und Turmvorrat
+Ein fertiger Wachturm lässt sich im Laden (Box „🗼 Wachturm-Ausbau“, gilt für den nächsten eigenen Turm beim gewählten Buddler) in drei Stufen ausbauen:
+1. **Zinnen & Beschlag** (50 Geld, 12 s): Turm +150 Struktur, Steinsockel, Zinnen. Ein Trupp flickt den Turm, wenn 5 s kein Gegner in der Nähe ist und er nicht brennt.
+2. **Turmschütze** (80 Geld, 16 s): Ein Bogenschütze auf dem Turm schießt selbst auf Gegner (Reichweite 200, 11 Schaden) und verbraucht **Turmpfeile**.
+3. **Pechkessel** (100 Geld, 20 s): Kippt brennendes Pech auf Gegner direkt am Turmfuß (±15 px, 28 Schaden + Feuer, auch gegen Fahrzeuge) und verbraucht **Pechfässer**.
+
+**Munition muss gekauft werden:** Turmpfeile +15 für 10 (max. 45, ab Stufe 2), Pechfass +2 für 14 (max. 6, ab Stufe 3). Während eines Ausbaus kann für die neue Stufe nichts gekauft werden. Über dem eigenen Turm stehen Stufe und Vorrat („Turm 3/3 · Pfeile 20 · Pech 4“), in der Statusleiste der Turmstatus. Ausbau, Vorrat und Pech-Animation werden im Mehrspieler synchronisiert und gespeichert; alte Spielstände laden als Turm ohne Ausbau.
+
+## Spezialisten
+Im Laden (Box „🧰 Spezialisten“) kaufst du Buddler mit eigenem Beruf. Sie arbeiten selbstständig, solange du sie nicht selbst auswählst (dann steuerst du sie wie jeden Buddler). Limit pro Team, Preise zum Vergleich: Buddler 60, Ritter 110.
+* **Zeugmeister** (95, max. 1, Lederkappe mit Hammer): füllt Pfeile/Bolzen der Burg und Pfeile/Pech der Wachtürme aus der Kasse nach – nie während eines Ausbaus, nie über das Maximum, 20 Geld bleiben immer übrig – und repariert Burg, Mauern und Türme (nicht bei Feuer oder Gegnern direkt daneben).
+* **Sanitäter** (85, max. 1, weiße Kappe mit rotem Kreuz und Sanitätstasche): gräbt eingeschlossene oder verschüttete Buddler deines Teams frei und heilt Verletzte in seiner Nähe langsam (3 LP/s).
+* **Goldgräber** (70, max. 2, gelber Grubenhelm mit Lampe und Spitzhacke): sucht sich Gold (auch die großen Golderz-Brocken), baut es ab und verkauft es an der Hütte oder Burg.
+
+Im Einzelspieler startest du weiter mit einem Buddler; das Inventar bleibt bei 3 Plätzen. Helfer-KIs in deinem Team kaufen keine Buddler oder Spezialisten – das entscheidest nur du. Spezialisten werden im Mehrspieler vom Host gesteuert und synchronisiert, überstehen den Host-Wechsel und werden gespeichert.
+
+## Große Karte
+**M** (Gamepad **LB + RB**, Touch-Knopf **„Karte“** oben) öffnet die ganze Welt als Vollbild-Karte: Materialfarben, **Gold hervorgehoben**, Hütten/Türme/Burgen in Teamfarbe, deine Buddler (ausgewählter mit weißem Rahmen) und Spezialisten (farbiger Punkt), Gegner nach denselben Regeln wie auf der Minikarte, dein Bildausschnitt als Rahmen und eine Legende. Klick/Tippen auf die Karte springt mit der Kamera dorthin (bis du dich bewegst); M, Esc oder Klick neben die Karte schließt sie. Das Spiel läuft weiter (keine Pause, auch im Mehrspieler). Das Weltbild wird vorberechnet und nur bei Geländeänderungen höchstens einmal pro Sekunde neu gezeichnet.
+Tastenbelegung: Karte **M**, Ton **L** (N bleibt Notausgang). Gespeicherte Belegungen werden beim Start umgezogen: alter Standard (Ton = M) → Ton L, Karte M; ist M bei dir anders belegt, landet die Karte auf K (sonst der nächsten freien Taste); eine eigene Kartentaste bleibt, sofern sie nicht doppelt belegt ist.
+
+## Nebel des Krieges (Infos)
+Was der Gegner macht, siehst du nur in **Sichtweite** deiner und verbündeter Buddler (250 px) und Gebäude (Hütte 280, Burg 320 + 30 je Stufe, **Wachturm 380 + 70 je Ausbaustufe**, Baustellen 100):
+- **Teamliste** oben rechts: Gegner ohne Statuszeile und ohne Buddler-Anzahl (nur „●“ im Spiel bzw. „✝“ ausgeschieden – das braucht man fürs Spielziel „letztes Team gewinnt“). Eigenes Team und Verbündete wie bisher.
+- **Minikarte und große Karte**: gegnerische Buddler (auch Spezialisten) und Fahrzeuge nur in Sichtweite; gegnerische Gebäude erst, nachdem du sie gesehen hast, danach mit dem zuletzt gesehenen Stand (zerstörte bleiben, bis du die Stelle wieder siehst). Springst du mit der großen Karte frei irgendwohin, gilt das auch im Bild.
+- **Burg-/Turm-Beschriftung** (Stufe, Munition, Ausbau) von Gegnern nur in Sichtweite.
+- **Meldungen**: Kauf-/Ausbau-/Ankunftsmeldungen bekommt nur das eigene Team; „… ist gestorben“ / „… wurde zerstört“ über Gegner nur, wenn es in Sichtweite passiert. „Team ist ausgeschieden“ und Sieg bleiben für alle.
+- Im Mehrspieler filtert jeder Client lokal für sein Team (die Erinnerung an Gebäude bleibt auch beim Host-Wechsel). **Zuschauer sehen alles.** Die KI ist davon nicht betroffen.
+
+## Grafik der Gebäude, Fahrzeuge und Gegenstände
+Hütte, Wachturm, Burg (alle Ausbaustufen, Mauern, Schützen, Balliste, Pechkessel), Lore, Katapult, Kanone, Ballon, Brücken-Symbol und alle Gegenstände sind eigene Pixel-Sprites aus `js/sprites.js`: Sie werden einmal pro Teamfarbe/Variante in ein Offscreen-Canvas gezeichnet und danach nur noch kopiert. Baustellen wachsen sichtbar von unten mit Gerüst, beschädigte Gebäude zeigen je nach Struktur Risse, Ruß, abgeplatzte Stellen und Rauch.
 
 ## Tiere, Enterhaken, Ballon, Notausgang
 * **Tiere** (Schalter „Tiere“ im Einzelspieler-Menü bzw. in der Lobby, Standard an; Anzahl wächst mit der Kartengröße,
@@ -231,7 +286,8 @@ Die **KI** baut aus (Leicht bis Stufe 1, Mittel bis 2, Schwer bis 3), sobald gen
 | F / X | Nahkampf / Graben an-aus (ohne Maus) |
 | Tab | Nächster Buddler |
 | B / V / C / T | Laden / Verkaufen / Bauen / Forschung |
-| H (F1) / O / M / Esc | Hilfe / Einstellungen / Ton / Pause |
+| H (F1) / O / L / Esc | Hilfe / Einstellungen / Ton / Pause |
+| M | Große Karte öffnen/schließen · Esc schließt nur die Karte |
 
 ## Steuerung (Gamepad, Twin-Stick)
 | Knopf | Aktion |
@@ -243,6 +299,7 @@ Die **KI** baut aus (Leicht bis Stufe 1, Mittel bis 2, Schwer bis 3), sobald gen
 | LB / RB | Inventarplatz wechseln |
 | L3 / R3 | Nächster Buddler / Forschung |
 | Select / Start | Laden / Pause |
+| LB + RB gleichzeitig | Große Karte öffnen/schließen |
 
 ## Touch
 Virtueller Stick links, Knöpfe rechts (Aktion, Sprung, Graben, Benutzen, Ablegen, Platz, Buddler), Dock als Symbolleiste oben.

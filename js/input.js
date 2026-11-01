@@ -26,20 +26,37 @@ const ACTIONS = [
   { k: 'research', n: 'Forschung', g: 'Menüs', def: ['KeyT'] },
   { k: 'help', n: 'Hilfe / Steuerung', g: 'Menüs', def: ['KeyH', 'F1'] },
   { k: 'settings', n: 'Einstellungen', g: 'Menüs', def: ['KeyO'] },
-  { k: 'mute', n: 'Ton an/aus', g: 'Menüs', def: ['KeyM'] },
+  { k: 'mute', n: 'Ton an/aus', g: 'Menüs', def: ['KeyL'] },
   { k: 'zoomin', n: 'Hineinzoomen (auch Mausrad)', g: 'Ansicht', def: ['BracketRight', 'NumpadAdd'] },
   { k: 'zoomout', n: 'Herauszoomen (auch Mausrad)', g: 'Ansicht', def: ['Slash', 'NumpadSubtract'] },
+  { k: 'map', n: 'Große Karte (Vollbild, Spiel läuft weiter)', g: 'Ansicht', def: ['KeyM'] },
   { k: 'chat', n: 'Chat öffnen (Mehrspieler)', g: 'Mehrspieler', def: ['Enter'] },
   { k: 'emote', n: 'Emote-Rad (halten, zeigen, loslassen)', g: 'Mehrspieler', def: ['KeyG'] },
   { k: 'rescue', n: 'Notausgang (1,5 s halten)', g: 'Aktionen', def: ['KeyN'] },
 ];
 const ACT_BY = Object.fromEntries(ACTIONS.map(a => [a.k, a]));
 let binds = {};
-function loadBinds() {
-  let saved = {}; try { saved = JSON.parse(localStorage.getItem('br_binds') || '{}'); } catch (e) { }
-  binds = {}; for (const a of ACTIONS) binds[a.k] = Array.isArray(saved[a.k]) ? saved[a.k].slice(0, 2) : a.def.slice();
+// Belegungs-Version 2: Karte = M, Ton = L (vorher Ton = M; Zwischenstand Karte = K). Alte Speicherstände werden ohne Doppelbelegung umgezogen.
+const BINDS_V = 2, BIND_SPARE = ['KeyL', 'KeyK', 'KeyJ', 'KeyU', 'KeyI', 'KeyY'];
+function migrateBinds(saved) {
+  if (!saved || typeof saved !== 'object' || saved._v >= BINDS_V) return false;
+  const eq = (a, b) => Array.isArray(a) && a.length === b.length && a.every((x, i) => x === b[i]);
+  const eff = k => Array.isArray(saved[k]) ? saved[k] : k === 'map' ? [] : ACT_BY[k].def; // wirksame Belegung (fehlend = Standard; Karte noch offen)
+  const used = (code, self) => ACTIONS.some(a => a.k !== self && eff(a.k).includes(code));
+  const pick = (self, prefer) => { for (const c of prefer) if (!used(c, self)) return [c]; return []; };
+  if (eq(saved.mute, ['KeyM'])) saved.mute = pick('mute', BIND_SPARE); // alter Standard Ton = M → L (oder nächste freie Taste)
+  if (!Array.isArray(saved.map) || eq(saved.map, ['KeyK'])) saved.map = []; // nie gesetzt oder Zwischenstand K → neu vergeben
+  else saved.map = saved.map.filter(c => !used(c, 'map')); // eigene Kartenbelegung behalten, aber ohne Doppelbelegung
+  if (!saved.map.length) saved.map = pick('map', ['KeyM', 'KeyK', ...BIND_SPARE]); // M, sonst K als Ausweichtaste
+  saved._v = BINDS_V; return true;
 }
-function saveBinds() { try { localStorage.setItem('br_binds', JSON.stringify(binds)); } catch (e) { } }
+function loadBinds() {
+  let saved = null; try { saved = JSON.parse(localStorage.getItem('br_binds') || 'null'); } catch (e) { }
+  const mig = migrateBinds(saved); if (!saved) saved = {};
+  binds = {}; for (const a of ACTIONS) binds[a.k] = Array.isArray(saved[a.k]) ? saved[a.k].slice(0, 2) : a.def.slice();
+  if (mig) saveBinds();
+}
+function saveBinds() { try { localStorage.setItem('br_binds', JSON.stringify(Object.assign({ _v: BINDS_V }, binds))); } catch (e) { } }
 function resetBinds() { localStorage.removeItem('br_binds'); loadBinds(); }
 function actionsFor(code) { const r = []; for (const a of ACTIONS) if (binds[a.k].includes(code)) r.push(a.k); return r; }
 loadBinds();

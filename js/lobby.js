@@ -153,7 +153,7 @@ function hostStart() {
   });
   const allRes = $('optallres2').checked;
   const cfg = { mode: 'melee', W: 1100 + sides.length * 380 + (teams.length - sides.length) * 120, H: 620, seed: newSeed(), teams, sides, clonks: cl, money: allRes ? 120 : 60, monsters: mon, monsterCount: 2, allResearch: allRes, daynight: $('optday2').checked, animals: $('optanimals2').checked, lava: true, takeover: $('opttakeover').value };
-  applySize(cfg, $('optsize').value);
+  applySize(cfg, $('optsize').value); cfg.style = $('optstyle').value;
   G.role = 'host'; G.myTeam = teams.findIndex(t => t.pid === net.id); G.spectate = G.myTeam < 0;
   launchWorld(cfg, false);
   netSend({ t: 'start', cfg }); sendMap();

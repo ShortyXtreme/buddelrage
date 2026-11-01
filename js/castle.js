@@ -11,7 +11,16 @@ const CAMMO = { arrows: { n: 'Pfeilvorrat', add: 20, price: 12, max: 60, lvl: 2 
 const CUP_HP = 300, WALL_HP = 300, WALL_H = 26, WALL_OFF = 48;
 const ARCH_R = 230, ARCH_CD = 80, BAL_R = 380, BAL_CD = 210;
 function castleLevel(s) { return s && s.type === 'castle' ? Math.max(0, (s.up | 0) - (s.upT > 0 ? 1 : 0)) : 0; }
-function structMax(s) { return BUILD[s.type].hp + (castleLevel(s) >= 1 ? CUP_HP : 0); }
+// ---------- Wachturm-Ausbau: 3 Stufen (Zinnen & Beschlag → Turmschütze → Pechkessel) + gekaufte Munition ----------
+const TUP = [
+  { k: 'battle', n: 'Zinnen & Beschlag', price: 50, time: 12, desc: 'Turm +150 Struktur · Steinsockel, eisenbeschlagene Balken und Steinzinnen · Turm wird geflickt, wenn 5 s kein Gegner angreift' },
+  { k: 'archer', n: 'Turmschütze', price: 80, time: 16, desc: 'Ein Bogenschütze oben auf dem Turm schießt selbst auf Gegner (Reichweite 200, 11 Schaden) · verbraucht Turmpfeile' },
+  { k: 'pitch', n: 'Pechkessel', price: 100, time: 20, desc: 'Kippt brennendes Pech auf Gegner direkt am Turmfuß (28 Schaden + Feuer, auch gegen Fahrzeuge) · verbraucht Pechfässer' },
+];
+const TAMMO = { arrows: { n: 'Turmpfeile', add: 15, price: 10, max: 45, lvl: 2 }, pitch: { n: 'Pechfass', add: 2, price: 14, max: 6, lvl: 3 } };
+const TUP_HP = 150, TARCH_R = 200, TARCH_CD = 75, PITCH_CD = 150, PITCH_DMG = 28, PITCH_W = 15;
+function towerLevel(s) { return s && s.type === 'tower' ? Math.max(0, (s.up | 0) - (s.upT > 0 ? 1 : 0)) : 0; }
+function structMax(s) { return BUILD[s.type].hp + (castleLevel(s) >= 1 ? CUP_HP : 0) + (towerLevel(s) >= 1 ? TUP_HP : 0); }
 Object.assign(World.prototype, {
   castleOf(tid, near) {
     let best = null, bd = 1e9;
@@ -33,8 +42,8 @@ Object.assign(World.prototype, {
   castleAmmo(t, kind, sid) {
     const A = CAMMO[kind]; if (!A) return false;
     const c = this.selClonk ? this.selClonk(t) : null;
-    const s = (sid && this.structs.find(o => o.id === sid && o.type === 'castle' && this.ally(o.team, t.id))) || this.castleOf(t.id, c);
-    if (!s || (s.up | 0) < A.lvl) { if (!t.ai) this.msg(A.n + ': erst ' + CUP[A.lvl - 1].n + ' ausbauen.', t.id); return false; }
+    const s = (sid && this.structs.find(o => o.id === sid && o.type === 'castle' && o.prog >= 1 && !o.remove && this.ally(o.team, t.id))) || this.castleOf(t.id, c);
+    if (!s || castleLevel(s) < A.lvl) { if (!t.ai) this.msg(A.n + ': ' + (s && (s.up | 0) >= A.lvl ? CUP[A.lvl - 1].n + ' wird noch ausgebaut.' : 'erst ' + CUP[A.lvl - 1].n + ' ausbauen.'), t.id); return false; }
     if ((s[kind] | 0) >= A.max) { if (!t.ai) this.msg(A.n + ' ist voll (' + A.max + ').', t.id); return false; }
     if (t.money < A.price) { if (!t.ai) { this.msg('Zu wenig Geld für ' + A.n + '.', t.id); this.snd('error', s.x, s.y); } return false; }
     t.money -= A.price; s[kind] = Math.min(A.max, (s[kind] | 0) + A.add);
@@ -134,9 +143,18 @@ Object.assign(World.prototype, {
       if (!s.walls) s.walls = this.castleWalls(s);
       this.castleWallTick(s);
       // Reparaturtrupp: flickt Burg und Mauern, wenn 5 s kein Gegner angreift
-      if (this.tick - (s.hitT || -1e9) > 300 && this.tick % 4 === 0) {
-        let foeNear = false; for (const c of this.clonks) if (c.act !== 'dead' && !this.ally(c.team, s.team) && Math.abs(c.x - s.x) < 160 && Math.abs(c.y - s.y) < 80) { foeNear = true; break; }
-        if (!foeNear) { const mx = structMax(s); if (s.hp < mx && !s.fire) s.hp = Math.min(mx, s.hp + 0.12); for (const wl of s.walls) if (wl.hp < WALL_HP) { wl.hp = Math.min(WALL_HP, wl.hp + 0.2); if (wl.br && wl.hp >= WALL_HP * 0.4) { wl.br = 0; this.msgSide('Burgmauer wieder aufgebaut.', s.team); } } }
+      // s.rep (fürs HUD): 0 = nichts zu reparieren, 1 = Reparatur läuft, 2 = pausiert (Angriff/Gegner nah/Feuer)
+      if (this.tick % 4 === 0) {
+        const mx = structMax(s), dmg = s.hp < mx || s.walls.some(wl => wl.hp < WALL_HP);
+        let rep = 0;
+        if (dmg) {
+          rep = 2;
+          if (this.tick - (s.hitT || -1e9) > 300) {
+            let foeNear = false; for (const c of this.clonks) if (c.act !== 'dead' && !this.ally(c.team, s.team) && Math.abs(c.x - s.x) < 160 && Math.abs(c.y - s.y) < 80) { foeNear = true; break; }
+            if (!foeNear) { if (s.hp < mx && !s.fire) { s.hp = Math.min(mx, s.hp + 0.12); rep = 1; } for (const wl of s.walls) if (wl.hp < WALL_HP) { rep = 1; wl.hp = Math.min(WALL_HP, wl.hp + 0.2); if (wl.br && wl.hp >= WALL_HP * 0.4) { wl.br = 0; this.msgSide('Burgmauer wieder aufgebaut.', s.team); } } }
+          }
+        }
+        s.rep = rep;
       }
       if (s.hitBy && this.tick - s.hitBy.t < 5) s.hitT = this.tick;
       if (L >= 2) {
@@ -159,7 +177,92 @@ Object.assign(World.prototype, {
         }
       }
     }
+    this.towerTick();
     this.castleShotTick();
+  },
+  // ---------- Wachturm-Ausbau ----------
+  towerOf(tid, near) {
+    let best = null, bd = 1e9;
+    for (const s of this.structs) if (s.type === 'tower' && s.prog >= 1 && !s.remove && this.ally(s.team, tid)) { const d = (s.team === tid ? 0 : 5000) + (near ? Math.abs(s.x - near.x) : 0); if (d < bd) { bd = d; best = s; } }
+    return best;
+  },
+  towerById(tid, sid) { return sid ? this.structs.find(o => o.id === sid && o.type === 'tower' && o.prog >= 1 && !o.remove && this.ally(o.team, tid)) || null : null; },
+  towerUpgrade(t, sid) {
+    const c = this.selClonk ? this.selClonk(t) : null;
+    const s = this.towerById(t.id, sid) || this.towerOf(t.id, c);
+    if (!s) { if (!t.ai) this.msg('Kein fertiger Wachturm – erst einen Wachturm bauen.', t.id); return false; }
+    if (s.upT > 0) { if (!t.ai) this.msg('Der Turm-Ausbau läuft noch.', t.id); return false; }
+    const lvl = s.up | 0; if (lvl >= TUP.length) { if (!t.ai) this.msg('Wachturm ist voll ausgebaut.', t.id); return false; }
+    const U = TUP[lvl];
+    if (t.money < U.price) { if (!t.ai) { this.msg('Zu wenig Geld für ' + U.n + ' (' + U.price + ').', t.id); this.snd('error', s.x, s.y); } return false; }
+    t.money -= U.price; s.up = lvl + 1; s.upT = U.time * 60;
+    this.msgSide('Turm-Ausbau begonnen: ' + U.n + ' (' + U.time + ' s)', t.id); this.snd('build', s.x, s.y);
+    return true;
+  },
+  towerAmmo(t, kind, sid) {
+    const A = TAMMO[kind]; if (!A) return false;
+    const c = this.selClonk ? this.selClonk(t) : null;
+    const s = this.towerById(t.id, sid) || this.towerOf(t.id, c);
+    if (!s || towerLevel(s) < A.lvl) { if (!t.ai) this.msg(A.n + ': ' + (s && (s.up | 0) >= A.lvl ? TUP[A.lvl - 1].n + ' wird noch ausgebaut.' : 'erst Turm-Ausbau „' + TUP[A.lvl - 1].n + '“.'), t.id); return false; }
+    if ((s[kind] | 0) >= A.max) { if (!t.ai) this.msg(A.n + ' ist voll (' + A.max + ').', t.id); return false; }
+    if (t.money < A.price) { if (!t.ai) { this.msg('Zu wenig Geld für ' + A.n + '.', t.id); this.snd('error', s.x, s.y); } return false; }
+    t.money -= A.price; s[kind] = Math.min(A.max, (s[kind] | 0) + A.add);
+    if (!t.ai) this.msg(A.n + ': ' + s[kind] + '/' + A.max, t.id); this.snd('grab', s.x, s.y);
+    return true;
+  },
+  // Gegner direkt am Turmfuß (für den Pechkessel)
+  towerFootFoes(s) {
+    const C = [], V = [];
+    for (const c of this.clonks) if (c.act !== 'dead' && !c.inside && !this.ally(c.team, s.team) && Math.abs(c.x - s.x) <= PITCH_W && c.y >= s.y - 16 && c.y <= s.y + 6) C.push(c);
+    for (const v of this.vehicles) if (!this.ally(v.team, s.team) && Math.abs(v.x - s.x) <= PITCH_W + VEH[v.type].w / 2 && v.y >= s.y - 16 && v.y <= s.y + 6) V.push(v);
+    return { C, V };
+  },
+  towerPitch(s, F) {
+    s.pitch--; s.pCd = PITCH_CD; s.pDir = (F.C[0] || F.V[0]).x >= s.x ? 1 : -1; s.pT = 30;
+    for (const c of F.C) { this.hurt(c, PITCH_DMG, { team: s.team, id: 0 }); if (c.act !== 'dead') c.fire = Math.max(c.fire || 0, 150); }
+    for (const v of F.V) { v.hp -= PITCH_DMG; if (VEH[v.type].wood) v.fire = Math.max(v.fire || 0, 300); }
+    this.ev({ e: 'boom', x: Math.round(s.x + s.pDir * 6), y: Math.round(s.y - 6), r: 3 }); this.snd('sizzle', s.x, s.y - 10);
+    if (s.pitch === 0) this.msgSide('Wachturm: kein Pech mehr – im Laden nachkaufen!', s.team);
+  },
+  towerTick() {
+    for (const s of this.structs) {
+      if (s.type !== 'tower' || s.prog < 1 || s.remove || !(s.up > 0)) continue;
+      if (s.upT > 0) {
+        s.upT--;
+        if (s.upT === 0) {
+          const U = TUP[s.up - 1];
+          if (s.up === 1) s.hp += TUP_HP;
+          this.msgSide('Turm-Ausbau fertig: ' + U.n + '!' + (s.up >= 2 ? ' Munition im Laden kaufen.' : ''), s.team); this.snd('build', s.x, s.y);
+        }
+      }
+      const L = towerLevel(s); if (!L) continue;
+      if (s.hitBy && this.tick - s.hitBy.t < 5) s.hitT = this.tick;
+      if (s.pT > 0) s.pT--;
+      // Ausbesserung (wie die Burg): 0 = nichts zu tun, 1 = läuft, 2 = pausiert
+      if (this.tick % 4 === 0) {
+        const mx = structMax(s); let rep = 0;
+        if (s.hp < mx) {
+          rep = 2;
+          if (this.tick - (s.hitT || -1e9) > 300 && !s.fire) {
+            let foeNear = false; for (const c of this.clonks) if (c.act !== 'dead' && !this.ally(c.team, s.team) && Math.abs(c.x - s.x) < 120 && Math.abs(c.y - s.y) < 80) { foeNear = true; break; }
+            if (!foeNear) { s.hp = Math.min(mx, s.hp + 0.08); rep = 1; }
+          }
+        }
+        s.rep = rep;
+      }
+      if (L >= 2) {
+        if (s.aCd > 0) s.aCd--;
+        else if (s.arrows > 0) {
+          const x = s.x, y = s.y - 52, tg = this.castleFoes(s, x, y, TARCH_R, false);
+          if (tg) { this.castleFire(s, x, y, tg, 0); s.arrows--; s.aCd = TARCH_CD + (this.rand() * 20 | 0); s.bDir = Math.sign(tg.x - x) || 1; if (s.arrows === 0) this.msgSide('Wachturm: Turmpfeile leer – im Laden nachkaufen!', s.team); }
+          else s.aCd = 10;
+        }
+      }
+      if (L >= 3) {
+        if (s.pCd > 0) s.pCd--;
+        else if (s.pitch > 0) { const F = this.towerFootFoes(s); if (F.C.length || F.V.length) this.towerPitch(s, F); else s.pCd = 8; }
+      }
+    }
   },
 });
 // Explosionen beschädigen Mauern

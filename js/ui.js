@@ -51,6 +51,7 @@ function setupFancyUI() {
   for (const id of ['spdiff1', 'spdiff2', 'opttakeover', 'coopdiff', 'opthelper', 'opthelper2']) segify($(id), diffMeta, { line: true });
   segify($('pausehelper'), diffMeta, { opt: true, nodesc: true, cls: 'compact' });
   for (const id of ['spsize', 'optsize']) segify($(id), sizeMeta);
+  for (const id of ['spstyle', 'optstyle']) segify($(id), styleMeta, { line: true, cls: 'styles' });
   segify($('optclonks'), null, { cls: 'num' }); segify($('coopn'), null, { cls: 'num' });
   segify($('spgoal'), (v, t) => v === 'custom' ? { ic: '✏️', n: 'Eigenes' } : { n: t + ' 🪙' }, { cls: 'num' });
   // Goldziel

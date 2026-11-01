@@ -12,7 +12,7 @@ function serializeWorld(w, withMap) {
     v: SAVE_VER, cfg: w.cfg, tick: w.tick, nextId: w.nextId, state: w.state, winner: w.winner, mode: w.mode, goal: w.goal,
     clonks: w.clonks, items: w.items, monsters: w.monsters, animals: w.animals, structs: w.structs, teams: w.teams, vehicles: w.vehicles, fires: w.fires,
     bases: w.bases, baseDir: w.baseDir, plats: w.plats, castleSites: w.castleSites, faunaT: w.faunaT || null,
-    surf: Array.from(w.surf), burnt: rleEncode(w.burnt),
+    surf: Array.from(w.surf), burnt: rleEncode(w.burnt), ores: w.oresEncode ? w.oresEncode() : undefined, // Golderz (Info; maßgeblich sind die Goldpixel der Karte)
   };
   if (withMap) S.mat = rleEncode(w.mat);
   return JSON.parse(JSON.stringify(S, saveReplacer)); // tiefe, saubere Kopie
@@ -30,7 +30,8 @@ function deserializeWorld(S, matSrc) {
   for (const c of w.clonks) { c.aiKeys = { ...NOKEYS }; c.ai = null; c.digHold = 0; migrateGear(c); }
   w.rand = mulberry32(((cfg.seed * 7 + 1) ^ (S.tick * 2654435761)) | 0);
   w.frng = mulberry32(((cfg.seed | 0) ^ (S.tick * 40503)) | 0);
-  w.fireSet = new Set(w.fires.map(f => (f.y >> 1) * 4096 + (f.x >> 1)));
+  w.fireSet = new Set(w.fires.map(f => (f.y >> 1) * 8192 + (f.x >> 1)));
+  if (w.buildOres) w.buildOres(); // Golderz-Brocken aus den Goldpixeln (auch alte Spielstände ohne Erz-Liste); volle Liste geht an die Clients
   w.recolorAll(); w.activeNext.fill(1);
   return w;
 }
@@ -50,7 +51,7 @@ function mergeLive(w, L) {
   w.clonks = L.clonks.map(l => {
     seen(l); let c = mc.get(l.id);
     if (!c) { c = { id: l.id, team: l.team, vx: 0, vy: 0, gold: 0, fightT: 0, cd: 0, tumbleT: 0, deadT: 0, aiKeys: { ...NOKEYS }, punch: 0, digIdle: 0, armor: 0, knight: 0, arrows: 0, block: 0, inside: 0, fire: 0, swing: 0, bowT: 0, veh: 0, blockT: 0 }; }
-    Object.assign(c, { x: l.x, y: l.y, dir: l.dir, act: l.act || 'walk', hp: l.hp, anim: l.anim || 0, inv: (l.inv || []).slice(), gear: (l.gear || []).slice(), breath: l.breath, name: l.name, armor: l.armor ? 1 : 0, knight: l.knight ? 1 : 0, arrows: l.arrows || 0, inside: l.inside || 0, veh: l.veh || 0, slot: l.slot || 0 });
+    Object.assign(c, { x: l.x, y: l.y, dir: l.dir, act: l.act || 'walk', hp: l.hp, anim: l.anim || 0, inv: (l.inv || []).slice(), gear: (l.gear || []).slice(), breath: l.breath, name: l.name, armor: l.armor ? 1 : 0, armorFree: l.armorFree ? 1 : 0, knight: l.knight ? 1 : 0, arrows: l.arrows || 0, inside: l.inside || 0, veh: l.veh || 0, slot: l.slot || 0, spec: l.spec || '', sp: l.sp && typeof l.sp === 'object' ? { job: l.sp.job | 0, buyT: l.sp.buyT | 0 } : (l.spec ? { job: 0, buyT: 0 } : undefined) });
     migrateGear(c);
     if (!l.fire) c.fire = 0; else if (!c.fire) c.fire = 60;
     if (l.hk && l.hk.st === 2) { const len = Math.hypot(c.x - l.hk.x, c.y - 7 - l.hk.y); c.hk = { st: 2, x: l.hk.x, y: l.hk.y, len: Math.max(8, Math.min(HOOK_MAX, len)) }; } else c.hk = null;
@@ -63,11 +64,11 @@ function mergeLive(w, L) {
   w.items = L.items.map(l => { seen(l); const o = mi.get(l.id) || { armed: false, owner: 0, age: 30, pickCd: 20, chain: 0, shot: 0 }; return Object.assign(o, { id: l.id, type: l.type, x: l.x, y: l.y, vx: l.vx || 0, vy: l.vy || 0, fuse: l.fuse || 0, stuck: !!l.stuck, landed: !!l.landed }); });
   w.monsters = L.monsters.map(l => { seen(l); const o = mm.get(l.id) || { vx: 0, vy: 0, act: 'walk', cd: 0, think: 0, fire: 0 }; return Object.assign(o, { id: l.id, x: l.x, y: l.y, dir: l.dir, hp: l.hp, anim: l.anim || 0 }); });
   w.animals = L.animals.map(l => { seen(l); const o = ma.get(l.id) || { vx: 0, vy: 0, hp: (ANIMAL[l.k] || ANIMAL.wipf).hp, t: 0, think: 0, flee: 0, cd: 0, bite: 0, flop: 0, air: 1, perch: 0 }; return Object.assign(o, { id: l.id, k: l.k, x: l.x, y: l.y, dir: l.dir, anim: l.anim || 0 }); });
-  w.structs = L.structs.map(l => { seen(l); const o = ms.get(l.id) || {}; return Object.assign(o, { id: l.id, type: l.type, x: l.x, y: l.y, team: l.team, prog: l.prog, hp: l.hp, fire: l.fire ? (o.fire || 200) : 0, lv: l.lv || 0, up: l.up | 0, upT: l.upT || 0, arrows: l.arrows | 0, bolts: l.bolts | 0, walls: l.walls ? l.walls.map(q => ({ x: q.x, y: q.y, hp: q.hp, br: q.br ? 1 : 0, d: q.d })) : null, bDir: l.bDir || 0, w: BUILD[l.type].w, h: BUILD[l.type].h, lvD: o.lvD || 0, lvN: o.lvN || 0 }); });
+  w.structs = L.structs.map(l => { seen(l); const o = ms.get(l.id) || {}; return Object.assign(o, { id: l.id, type: l.type, x: l.x, y: l.y, team: l.team, prog: l.prog, hp: l.hp, fire: l.fire ? (o.fire || 200) : 0, lv: l.lv || 0, up: l.up | 0, upT: l.upT || 0, arrows: l.arrows | 0, bolts: l.bolts | 0, pitch: l.pitch | 0, walls: l.walls ? l.walls.map(q => ({ x: q.x, y: q.y, hp: q.hp, br: q.br ? 1 : 0, d: q.d })) : null, bDir: l.bDir || 0, w: BUILD[l.type].w, h: BUILD[l.type].h, lvD: o.lvD || 0, lvN: o.lvN || 0 }); });
   w.vehicles = L.vehicles.map(l => { seen(l); const o = mv.get(l.id) || { vx: 0, vy: 0 }; return Object.assign(o, { id: l.id, type: l.type, x: l.x, y: l.y, dir: l.dir, team: l.team, hp: l.hp, ang: l.ang, inv: (l.inv || []).slice(), fire: l.fire ? (o.fire || 200) : 0, pusher: l.pusher || 0, cd: l.cd || 0 }); });
   L.teams.forEach((l, i) => { const t = w.teams[i]; if (!t) return; Object.assign(t, { money: l.money, sel: l.sel, elim: !!l.elim, res: Object.assign({}, l.res), rq: l.rq || '', rp: l.rp || 0, ai: !!l.ai, diff: l.diff || t.diff, stat: l.stat || '', helper: !!l.helper }); t.brain = null; t.keys = { ...NOKEYS }; });
   w.fires = L.fires.map(f => ({ x: f.x, y: f.y, k: f.k, t: f.k ? 150 : 60 }));
-  w.fireSet = new Set(w.fires.map(f => (f.y >> 1) * 4096 + (f.x >> 1)));
+  w.fireSet = new Set(w.fires.map(f => (f.y >> 1) * 8192 + (f.x >> 1)));
   w.tick = Math.max(w.tick, L.tick); w.state = L.state; w.winner = L.winner; w.nextId = maxId + 5;
   return w;
 }
@@ -84,7 +85,7 @@ async function saveGame(n) {
   let body;
   try { body = typeof CompressionStream !== 'undefined' ? { z: await deflateB64(raw) } : { raw }; } catch (e) { body = { raw }; }
   const me = w.teams[G.myTeam] || w.teams[0];
-  const rec = Object.assign({ v: SAVE_VER, t: Date.now(), mode: G.spMode || w.mode, size: w.cfg.size || '', tick: w.tick, money: me ? me.money : 0, clonks: w.clonks.filter(c => c.team === G.myTeam && c.act !== 'dead').length, my: G.myTeam }, body);
+  const rec = Object.assign({ v: SAVE_VER, t: Date.now(), mode: G.spMode || w.mode, size: w.cfg.size || '', style: w.cfg.style || '', tick: w.tick, money: me ? me.money : 0, clonks: w.clonks.filter(c => c.team === G.myTeam && c.act !== 'dead').length, my: G.myTeam }, body);
   try { localStorage.setItem(saveKey(n), JSON.stringify(rec)); }
   catch (e) { toast('Speichern fehlgeschlagen: Browser-Speicher voll. Einen anderen Spielstand löschen.', 'warn'); return false; }
   toast('Gespeichert in Platz ' + n + '.', 'good'); return true;
@@ -108,7 +109,7 @@ function renderSaves() {
   let h = head('Spielstände', inGame ? 'Speichern oder einen Stand laden (nur Einzelspieler, im Browser gespeichert)' : 'Einen gespeicherten Einzelspieler-Stand laden') + '<div class="slots">';
   for (let n = 1; n <= SAVE_SLOTS; n++) {
     const m = saveMeta(n);
-    const info = m ? '<b>' + modeName(m.mode) + '</b>' + (m.size && MAP_SIZES[m.size] ? ' · ' + MAP_SIZES[m.size].n : '') + ' · Spielzeit ' + fmtTime(m.tick) + '<div class="muted small">' + new Date(m.t).toLocaleString('de-AT', { dateStyle: 'short', timeStyle: 'short' }) + ' · Geld ' + m.money + ' · ' + m.clonks + ' Buddler · ' + Math.round(((m.z || m.raw || '').length) / 1024) + ' KB</div>' : '<span class="muted">leer</span>';
+    const info = m ? '<b>' + modeName(m.mode) + '</b>' + (m.size && MAP_SIZES[m.size] ? ' · ' + MAP_SIZES[m.size].n : '') + (m.style && typeof worldStyleName === 'function' ? ' · ' + worldStyleName(m.style) : '') + ' · Spielzeit ' + fmtTime(m.tick) + '<div class="muted small">' + new Date(m.t).toLocaleString('de-AT', { dateStyle: 'short', timeStyle: 'short' }) + ' · Geld ' + m.money + ' · ' + m.clonks + ' Buddler · ' + Math.round(((m.z || m.raw || '').length) / 1024) + ' KB</div>' : '<span class="muted">leer</span>';
     h += '<div class="slot-row"><span class="slotnum">' + n + '</span><div class="slotinfo">' + info + '</div><div class="slotbtns">' +
       (inGame ? '<button class="btn sm primary opt" data-save="' + n + '">Speichern</button>' : '') +
       (m ? '<button class="btn sm opt" data-load="' + n + '">Laden</button><button class="btn sm ghost opt" data-del="' + n + '" title="Löschen">✕</button>' : '') + '</div></div>';

@@ -34,12 +34,15 @@ const EQ_SLOTS = [{ k: 'sword', n: 'Waffe' }, { k: 'shield', n: 'Schild' }, { k:
 const SELLABLE = ['gold', 'rock', 'flint', 'superflint', 'tnt', 'wipf', 'balloon']; // Verkaufsmenü: Automatik je Typ
 const AUTO_SELL_DEFAULT = { gold: 1 }; // Standard: nur Wertgegenstände
 function hasG(c, k) { return !!(c && c.gear && c.gear.includes(k)); }
-function canTake(c, type) { if (type === 'arrows') return true; if (type === 'armor') return !c.armor; if (GEAR.has(type)) return !hasG(c, type); return c.inv.length < INV_MAX; }
+const ARROW_MAX = 30; // Pfeile pro Buddler höchstens (Kauf, Aufheben)
+function canTake(c, type) { if (type === 'arrows') return (c.arrows | 0) < ARROW_MAX; if (type === 'armor') return !c.armor; if (GEAR.has(type)) return !hasG(c, type); return c.inv.length < INV_MAX; }
 function giveItem(c, type) {
   if (!canTake(c, type)) return false;
-  if (type === 'arrows') c.arrows += 10; else if (type === 'armor') c.armor = 1; else if (GEAR.has(type)) (c.gear || (c.gear = [])).push(type); else c.inv.push(type);
+  if (type === 'arrows') c.arrows = Math.min(ARROW_MAX, (c.arrows | 0) + 10); else if (type === 'armor') c.armor = 1; else if (GEAR.has(type)) (c.gear || (c.gear = [])).push(type); else c.inv.push(type);
   return true;
 }
+// Kauf für den gewählten Buddler sinnlos (hat er schon / Köcher voll)? → Meldung, sonst ''
+function buyBlocked(c, k) { if (!c) return ''; if (GEAR.has(k) && hasG(c, k)) return ITEMS[k].name + ': hat ' + c.name + ' schon – kein Kauf.'; if (k === 'armor' && c.armor) return c.name + ' trägt schon eine Rüstung – kein Kauf.'; if (k === 'arrows' && (c.arrows | 0) >= ARROW_MAX) return 'Köcher von ' + c.name + ' ist voll (' + ARROW_MAX + ' Pfeile) – kein Kauf.'; return ''; }
 function bestWeapon(c) { return hasG(c, 'sword') ? 'sword' : hasG(c, 'bow') && c.arrows > 0 ? 'bow' : null; }
 // alte Stände/Ritter: Ausrüstung aus dem Inventar in die Ausrüstungsplätze verschieben
 function migrateGear(c) { if (!c.gear) c.gear = []; if (!c.inv) c.inv = []; const keep = []; for (const t of c.inv) { if (GEAR.has(t) && !c.gear.includes(t)) c.gear.push(t); else if (!GEAR.has(t)) keep.push(t); } c.inv = keep; if ((c.slot || 0) >= INV_MAX + GEAR_SEL.length) c.slot = 0; return c; }
@@ -150,6 +153,7 @@ function rleDecode(b64, target) {
 
 // Texturen (werden von main.js gesetzt): TEX[mat] = {d:Uint8ClampedArray, s:size}
 const TEX = {};
+const DITHER_NB = [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0], [0, 2], [0, -2]];
 
 class World {
   constructor(cfg, remote) {
@@ -173,10 +177,13 @@ class World {
     this.mode = cfg.mode; this.goal = cfg.goal || 300;
     this.rand = mulberry32(cfg.seed * 7 + 1);
     this.lastSizzle = 0;
+    // Weltstil (js/worlds.js): „zufall“ wird hier deterministisch aus dem Seed aufgelöst und in cfg festgeschrieben (Netz/Speicherstand)
+    this.style = typeof resolveWorldStyle === 'function' ? resolveWorldStyle(cfg) : 'klassisch';
+    this.pal = typeof WORLD_STYLES !== 'undefined' && WORLD_STYLES[this.style] ? WORLD_STYLES[this.style].pal || null : null;
   }
   id() { return this.nextId++; }
   ev(o) { this.events.push(o); }
-  msg(s, team) { this.ev({ e: 'msg', s, team: team === undefined ? -1 : team }); }
+  msg(s, team, at) { const e = { e: 'msg', s, team: team === undefined ? -1 : team }; if (at) e.at = at; this.ev(e); } // at = {t, x, y}: Ort/Team für den Nebel (fog.js)
   snd(n, x, y) { this.ev({ e: 'snd', n, x: x | 0, y: y | 0 }); }
   // Tag/Nacht: 0 = tiefe Nacht, 1 = voller Tag
   dayPhase() { return ((this.tick / DAY_LEN) + (this.cfg.dayStart != null ? this.cfg.dayStart : 0.3)) % 1; }
@@ -204,9 +211,12 @@ class World {
   setMat(x, y, m) {
     const i = y * this.W + x;
     if (this.mat[i] === m) return;
+    const om = this.mat[i];
+    if (om === MAT.GOLD && this.oreGrid) this.oreTouch(x, y); // Golderz-Brocken: Restmenge nachzählen
     this.mat[i] = m;
     if (this.nav) this.nav.mark(x, y);
     this.colorPixel(x, y);
+    if (typeof SHADE_MAT !== 'undefined' && (SHADE_MAT[om] || SHADE_MAT[m]) && x > 2 && y > 2 && x < this.W - 3 && y < this.H - 3) for (const [dx, dy] of DITHER_NB) { this.colorPixel(x + dx, y + dy); this.renderDirty.add((((y + dy) / CH) | 0) * this.cw + (((x + dx) / CH) | 0)); } // Körnung der Nachbarn aktualisieren
     const cx = (x / CH) | 0, cy = (y / CH) | 0, ci = cy * this.cw + cx;
     this.renderDirty.add(ci);
     if (y + 1 < this.H) { this.colorPixel(x, y + 1); if ((y + 1) % CH === 0) this.renderDirty.add(ci + this.cw); }
@@ -228,16 +238,22 @@ class World {
       if (y > 0 && this.mat[i - this.W] !== MAT.LAVA) { r = 255; g = Math.min(255, g + 70); b += 40; }
       d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255; return;
     }
-    const t = TEX[m] || TEX[MAT.EARTH];
+    const dm = this.ditherMat ? this.ditherMat(x, y, m) : m; // gekörnte Materialgrenzen (js/worlds.js)
+    const t = TEX[dm] || TEX[MAT.EARTH];
     let r, g, b;
     if (t) { const s = t.s, ti = (((y % s) * s) + (x % s)) * 4; r = t.d[ti]; g = t.d[ti + 1]; b = t.d[ti + 2]; }
     else { const n = hash2(x, y, 3) * 30; r = 120 + n; g = 90 + n; b = 60; }
-    const surfD = y - this.surf[x];
+    const surfD = y - this.surf[x], P = this.pal;
+    if (P) { const k = P.m[dm]; if (k) { r *= k[0]; g *= k[1]; b *= k[2]; } const q = P.a && P.a[dm]; if (q) { r += q[0]; g += q[1]; b += q[2]; } }
+    if (dm !== MAT.TUNNEL && this.strataShade) { const f = this.strataShade(x, y, dm); r *= f; g *= f; b *= f; } // Schichtstreifen (js/worlds.js)
     if (m === MAT.TUNNEL) { r = r * 0.75 + 22; g = g * 0.7 + 16; b = b * 0.65 + 12; }
     else if (m === MAT.EARTH && surfD >= 0 && surfD < 3 && (y === 0 || this.mat[i - this.W] === MAT.SKY || surfD < 2)) {
       if (this.burnt[x]) { r = r * 0.25 + 22; g = g * 0.22 + 18; b = b * 0.2 + 14; }
+      else if (P) { const q = P.grass; r = r * q[0] + q[1]; g = g * q[2] + q[3]; b = b * q[4] + q[5]; }
       else { r = r * 0.3 + 30; g = g * 0.4 + 110; b = b * 0.2 + 20; }
     }
+    if (P && P.snow && SOLID[m] && surfD >= 0 && surfD < 4 && this.surf[x] < this.H * P.snow + hash2(x, 0, 5) * 14 && !this.burnt[x]) { r = r * 0.15 + 210; g = g * 0.15 + 216; b = b * 0.15 + 228; } // Schnee auf Gipfeln
+    else if (P && SOLID[m] && surfD > 30) { const f = 1 - Math.min(0.22, (surfD - 30) / this.H * 0.4); r *= f; g *= f; b *= f; } // Tiefe dunkler
     else if (m === MAT.WATER) {
       if (this.bg(x, y) === MAT.TUNNEL) { const tt = TEX[MAT.TUNNEL]; let tr = 40, tg = 30, tb = 25; if (tt) { const s = tt.s, ti = (((y % s) * s) + (x % s)) * 4; tr = tt.d[ti] * 0.4; tg = tt.d[ti + 1] * 0.4; tb = tt.d[ti + 2] * 0.4; } r = r * 0.45 + tr * 0.55; g = g * 0.5 + tg * 0.5; b = b * 0.6 + tb * 0.4 + 30; d[o + 3] = 255; }
       else d[o + 3] = 185;
@@ -266,13 +282,11 @@ class World {
   }
   // Startplateau je Basis: eben, fest, Himmel frei – Platz für Hütte, Wachturm (Gegenseite) und Burg (Burgseite)
   plateauSpan(bx, d) { return d > 0 ? [bx - PLAT_BACK, bx + PLAT_FRONT] : [bx - PLAT_FRONT, bx + PLAT_BACK]; }
-  generate(nBases) {
-    const { W, H, seed } = this, surf = this.surf, mat = this.mat;
-    const sf = new Float32Array(W);
-    for (let x = 0; x < W; x++) sf[x] = H * 0.27 + (fbm(x / 260, 0.5, seed, 3) - 0.5) * 260 + (fbm(x / 40, 3.3, seed + 5, 2) - 0.5) * 26;
+  // Startplateaus in das Höhenprofil sf einarbeiten (gemeinsam für alle Weltstile); lo/hi = erlaubte Plateauhöhe
+  makePlateaus(sf, nBases, lo, hi) {
+    const W = this.W;
     this.bases = this.basePositions(nBases);
     this.baseDir = this.bases.map(bx => (nBases === 1 ? 1 : bx < W / 2 ? 1 : -1));
-    const lo = 60, hi = H * 0.5;
     const spacing = nBases > 1 ? W / nBases : W;
     this.plats = [];
     this.bases.forEach((bx, i) => {
@@ -290,6 +304,13 @@ class World {
       blend(a, -1); blend(b, 1);
       this.plats.push({ a, b, h, d });
     });
+  }
+  generate(nBases) {
+    if (this.genStyled) return this.genStyled(nBases); // alle Weltstile inkl. Klassisch: js/worlds.js (Code unten = Rückfall ohne worlds.js)
+    const { W, H, seed } = this, surf = this.surf, mat = this.mat;
+    const sf = new Float32Array(W);
+    for (let x = 0; x < W; x++) sf[x] = H * 0.27 + (fbm(x / 260, 0.5, seed, 3) - 0.5) * 260 + (fbm(x / 40, 3.3, seed + 5, 2) - 0.5) * 26;
+    this.makePlateaus(sf, nBases, 60, H * 0.5);
     for (let x = 0; x < W; x++) surf[x] = Math.max(50, Math.min(H * 0.55, Math.round(sf[x])));
     this.castleSites = this.bases.map((bx, i) => ({ x: bx + this.baseDir[i] * CASTLE_OFF, y: surf[bx] - 1, d: this.baseDir[i] }));
     // Materialien: gleiche Regeln wie zuvor, aber in Prioritätsreihenfolge ausgewertet (spart Rauschaufrufe)
@@ -352,6 +373,7 @@ class World {
       const r = R(); const type = r < 0.55 ? 'flint' : r < 0.75 ? 'gold' : 'rock';
       const it = this.spawnItem(type, x, y); it.stuck = true;
     }
+    if (this.balanceGold) this.balanceGold(); // Gold je Basis-Abschnitt angleichen (js/worlds.js)
     this.activeNext.fill(1);
     this.recolorAll();
   }
@@ -482,6 +504,9 @@ class World {
     if (a === 'sellone') { const c = this.selClonk(t); if (c) this.sellOne(c, arg); return; }
     if (a === 'cup') { if (this.castleUpgrade) this.castleUpgrade(t, typeof arg === 'number' ? arg : 0); return; }
     if (a === 'cammo') { if (this.castleAmmo) this.castleAmmo(t, arg); return; }
+    if (a === 'tup') { if (this.towerUpgrade) this.towerUpgrade(t, typeof arg === 'number' ? arg : 0); return; }
+    if (a === 'tammo') { if (this.towerAmmo) { const k = Array.isArray(arg) ? arg[0] : arg, sid = Array.isArray(arg) && typeof arg[1] === 'number' ? arg[1] : 0; if (typeof k === 'string') this.towerAmmo(t, k, sid); } return; }
+    if (a === 'spec') { if (this.specBuy && typeof arg === 'string') this.specBuy(t, arg, 'human'); return; }
     if (a === 'research') return this.research(t, arg);
     const c = this.selClonk(t); if (!c) return;
     this.clonkAction(c, a, arg);
@@ -558,7 +583,7 @@ class World {
     const s = s0;
     if (s) {
       c.inside = s.id; c.act = 'walk'; c.vx = c.vy = 0; c.x = s.x; c.y = s.y; c.fire = 0; this.snd('door', s.x, s.y);
-      if (s.type === 'castle' && !c.armor && this.teams[c.team].res.weapons) { c.armor = 1; this.msg(c.name + ' erhält eine Rüstung.', c.team); }
+      if (s.type === 'castle' && !c.armor && this.teams[c.team].res.weapons) { c.armor = 1; c.armorFree = 1; this.msg(c.name + ' erhält eine Rüstung (Burg-Rüstung, nicht verkaufbar).', c.team); }
       return;
     }
     if (this.grabNear(c)) return;
@@ -574,7 +599,7 @@ class World {
       wf.remove = true; c.inv.push('wipf'); this.snd('grab', c.x, c.y); if (!this.teams[c.team].ai) this.msg('Wipf gefangen! (Ablegen lässt ihn frei, an der Hütte verkaufen)', c.team); return true;
     }
     if (!best) return false;
-    if (!giveItem(c, best.type)) { if (!this.teams[c.team].ai) this.msg(GEAR.has(best.type) || best.type === 'armor' ? ITEMS[best.type].name + ' hast du schon.' : 'Inventar voll (3 Plätze)!', c.team); return true; }
+    if (!giveItem(c, best.type)) { if (!this.teams[c.team].ai) this.msg(GEAR.has(best.type) || best.type === 'armor' ? ITEMS[best.type].name + ' hast du schon.' : best.type === 'arrows' ? 'Köcher voll (' + ARROW_MAX + ' Pfeile).' : 'Inventar voll (3 Plätze)!', c.team); return true; }
     best.remove = true; this.snd('grab', c.x, c.y); return true;
   }
   leave(c) {
@@ -652,7 +677,7 @@ class World {
     if (!this.nearBase(c)) { this.msg('Zum Verkaufen zur Hütte/Burg gehen!', c.team); this.snd('error', c.x, c.y); return; }
     let ty = null;
     if (typeof what === 'number') { if (what >= 0 && what < c.inv.length) ty = c.inv.splice(what, 1)[0]; }
-    else if (what === 'armor') { if (c.armor && !c.knight) { c.armor = 0; ty = 'armor'; } }
+    else if (what === 'armor') { if (c.armor && c.armorFree) { if (!t.ai) this.msg('Die Burg-Rüstung kann nicht verkauft werden.', c.team); this.snd('error', c.x, c.y); return; } if (c.armor && !c.knight) { c.armor = 0; ty = 'armor'; } }
     else if (GEAR.has(what) && hasG(c, what)) { c.gear.splice(c.gear.indexOf(what), 1); ty = what; if (actGear(c) === null && c.slot >= INV_MAX) c.slot = 0; }
     if (!ty) return;
     const sum = ITEMS[ty].sell; t.money += sum; if (t.stats) t.stats.earned += sum;
@@ -666,9 +691,11 @@ class World {
     if (entry.res && !t.res[entry.res]) { this.msg('Erst erforschen: ' + RES_BY[entry.res].name, t.id); return; }
     const price = shopPrice(what);
     if (t.money < price) { this.msg('Nicht genug Geld!', t.id); this.ev({ e: 'snd', n: 'error', x: bases[0].x, y: bases[0].y, team: t.id }); return; }
+    const sc = this.selClonk(t), scAt = sc && this.nearBase(sc);
+    const why = scAt ? buyBlocked(sc, what) : ''; // gewählter Buddler steht am Laden und hat das schon → ablehnen, kein Geld abziehen
+    if (why) { if (!t.ai) this.msg(why, t.id); this.ev({ e: 'snd', n: 'error', x: bases[0].x, y: bases[0].y, team: t.id }); return false; }
     t.money -= price;
-    const sc = this.selClonk(t);
-    const base = (sc && this.nearBase(sc)) || bases[0];
+    const base = scAt || bases[0];
     if (what === 'clonk' || what === 'knight') {
       const c = what === 'knight' ? this.spawnKnight(t.id, base.x, base.y - 2) : this.spawnClonk(t.id, base.x, base.y - 2);
       this.msg((what === 'knight' ? 'Ritter ' : '') + c.name + ' ist angekommen.', t.id);
@@ -677,8 +704,9 @@ class World {
       let vx = base.x + base.w / 2 + 10, n = 0; while (n++ < 6 && this.vehicles.some(o => Math.abs(o.x - vx) < 17)) vx += 18;
       this.spawnVehicle(what, Math.min(this.W - 12, vx), base.y - 2, t.id); this.msg(VEH[what].name + ' steht bereit.', t.id);
     } else if (sc && this.nearBase(sc) && giveItem(sc, what)) { if (!t.ai && GEAR.has(what)) this.msg(ITEMS[what].name + ' ausgerüstet' + (GEAR_SEL.includes(what) ? ' (Taste ' + (INV_MAX + 1 + GEAR_SEL.indexOf(what)) + ')' : '') + '.', t.id); }
-    else { const it = this.spawnItem(what, base.x + (this.rand() * 10 - 5), base.y - 6); it.pickCd = 10; }
+    else { const it = this.spawnItem(what, base.x + (this.rand() * 10 - 5), base.y - 6); it.pickCd = 10; if (!t.ai) this.msg(ITEMS[what].name + ' liegt an der ' + BUILD[base.type].name + (sc && scAt ? ' (Inventar voll).' : '.'), t.id); }
     this.snd('uncash', base.x, base.y);
+    return true;
   }
   // Bauplatz vor dem Buddler (gleiche Formel für Spieler, KI und Vorschau)
   sitePos(c, what) { const hw = BUILD[what].w >> 1; return { x: Math.round(c.x + c.dir * (hw + 6)), y: Math.round(c.y) }; }
@@ -699,7 +727,7 @@ class World {
         if (!DIGGABLE[m]) hard++; else { cut++; col = Math.max(col, y - yy + 1); }
       }
       if (col > LEVEL_CUT) tall++;
-      let k = 1; while (k <= LEVEL_FILL && !SOLID[mat[(y + k) * W + xx]]) { if (mat[(y + k) * W + xx] === MAT.LAVA) wet++; k++; }
+      let k = 1; while (k <= LEVEL_FILL && !SOLID[mat[(y + k) * W + xx]]) { const mk = mat[(y + k) * W + xx]; if (mk === MAT.LAVA || mk === MAT.WATER) wet++; k++; } // nie über Wasser/Lava aufschütten
       if (k > LEVEL_FILL) { deep++; fill += LEVEL_CAP; } else fill += k - 1;
     }
     if (wet) return { st: 'no', why: 'Wasser oder Lava im Weg' };
@@ -862,7 +890,7 @@ class World {
     for (const ty of c.inv.concat(c.gear || [])) { const it = this.spawnItem(ty, c.x, c.y - 5); it.vx = (this.rand() - 0.5) * 1.5; it.vy = -1.5; it.pickCd = 30; }
     c.inv = []; c.gear = [];
     this.snd('die', c.x, c.y);
-    this.msg(c.name + ' (' + this.teams[c.team].name + ') ist gestorben.');
+    this.msg(c.name + ' (' + this.teams[c.team].name + ') ist gestorben.', undefined, { t: c.team, x: Math.round(c.x), y: Math.round(c.y) });
     const t = this.teams[c.team];
     if (t.sel === c.id) {
       // Steuerung geht an den besten verbliebenen eigenen Buddler (gesund und nah), die übrigen bleiben KI-Helfer
@@ -937,7 +965,7 @@ class World {
   destroyStruct(s) {
     if (s.remove) return;
     s.remove = true;
-    this.msg((BUILD[s.type].name) + ' von ' + this.teams[s.team].name + ' wurde zerstört!');
+    this.msg((BUILD[s.type].name) + ' von ' + this.teams[s.team].name + ' wurde zerstört!', undefined, { t: s.team, x: Math.round(s.x), y: Math.round(s.y - s.h / 2) });
     for (const c of this.clonks) if (c.inside === s.id) { c.inside = 0; c.act = 'jump'; c.vy = -1; c.x = s.x; c.y = s.y; }
   }
 
@@ -959,7 +987,7 @@ class World {
     if (this.mat[y * this.W + x] === MAT.WOOD) k = 1;
     else { const gy = this.grassTop(x, y); if (gy >= 0) { k = 0; fy = gy - 1; } }
     if (k < 0) return false;
-    const key = (fy >> 1) * 4096 + (x >> 1);
+    const key = (fy >> 1) * 8192 + (x >> 1);
     if (this.fireSet.has(key)) return false;
     this.fireSet.add(key);
     if (k === 0) this.markBurnt(x);
@@ -996,7 +1024,7 @@ class World {
           }
           this.igniteNear(f.x, f.y, 5);
         }
-        keep.push(f); this.fireSet.add((f.y >> 1) * 4096 + (f.x >> 1));
+        keep.push(f); this.fireSet.add((f.y >> 1) * 8192 + (f.x >> 1));
       }
       this.fires = keep;
     }
@@ -1013,9 +1041,11 @@ class World {
   update() {
     if (this.remote) return;
     this.tick++;
+    if (this.oreDirty && this.oreDirty.size) this.refreshOres();
     this.simMaterials();
     this.updFires();
     for (const t of this.teams) if ((t.ai || t.helper) && !t.elim) this.aiTeam(t);
+    if (this.specTick) this.specTick(); // Spezialisten-Buddler (helpers.js)
     if (this.rescueTick) this.rescueTick();
     for (const c of this.clonks) this.updClonk(c);
     for (const v of this.vehicles) this.updVehicle(v);
@@ -1083,7 +1113,7 @@ class World {
           if (m === MAT.LAVA) {
             // Lava + Wasser -> Fels (Wasser verdampft)
             let quenched = false;
-            const nb = [i - W, i + W, i - 1, i + 1];
+            const nb = [i - W, i + W, x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1]; // kein Zeilenumbruch an den Rändern
             for (let q = 0; q < 4; q++) {
               const j = nb[q]; if (j < 0 || j >= W * H) continue;
               if (mat[j] === MAT.WATER) { const jx = j % W, jy = (j / W) | 0; this.setMat(jx, jy, this.bg(jx, jy)); this.setMat(x, y, MAT.ROCK); quenched = true; break; }
@@ -1110,7 +1140,7 @@ class World {
           if (moved) continue;
           if (b === L && (y === 0 || mat[i - W] !== L)) continue; // ruhige Oberfläche
           // Film/Tropfen direkt auf festem Boden wandert sonst endlos hin und her (Chunk bleibt aktiv): langsam verdunsten bzw. erstarren
-          if (SOLID[b] && (y === 0 || mat[i - W] !== L) && mat[i - 1] !== L && mat[i + 1] !== L && R() < 0.02) { this.setMat(x, y, L === MAT.LAVA ? MAT.ROCK : this.bg(x, y)); continue; }
+          if (SOLID[b] && (y === 0 || mat[i - W] !== L) && (x === 0 || mat[i - 1] !== L) && (x === W - 1 || mat[i + 1] !== L) && R() < 0.02) { this.setMat(x, y, L === MAT.LAVA ? MAT.ROCK : this.bg(x, y)); continue; }
           if (SOLID[b] && (y === 0 || mat[i - W] !== L) && R() < 0.0015) { this.setMat(x, y, L === MAT.LAVA ? MAT.ROCK : this.bg(x, y)); continue; }
           for (const dd of [d, -d]) {
             const nx = x + dd; if (nx < 0 || nx >= W) continue;
@@ -1325,12 +1355,17 @@ class World {
     }
   }
   digCircle(cx, cy, r, c) {
-    let n = 0; const r2 = r * r;
+    let n = 0, gx = -1, gy = -1, gd = 1e9; const r2 = r * r;
     for (let yy = Math.floor(cy - r); yy <= Math.ceil(cy + r); yy++) for (let xx = Math.floor(cx - r); xx <= Math.ceil(cx + r); xx++) {
       if (xx < 0 || yy < 0 || xx >= this.W || yy >= this.H) continue;
       const dx = xx - cx, dy = yy - cy; if (dx * dx + dy * dy > r2) continue;
       const m = this.mat[yy * this.W + xx];
+      if (m === MAT.GOLD && this.mineGold) { const d2 = dx * dx + dy * dy; if (d2 < gd) { gd = d2; gx = xx; gy = yy; } continue; } // Golderz: nicht wegschaufeln, sondern behauen
       if (DIGGABLE[m]) { if (m === MAT.GOLD) c.gold++; this.setMat(xx, yy, this.bg(xx, yy)); n++; }
+    }
+    if (gx >= 0) { // Hieb auf Golderz: alle ORE_HIT_T Ticks ORE_HIT_PX Pixel → 1 Gold (js/worlds.js)
+      n++;
+      if (!(c.oreCd > this.tick)) { c.oreCd = this.tick + ORE_HIT_T; const k = this.mineGold(gx, gy); c.gold += k; c.mineT = this.tick; if (k) this.snd('dig', gx, gy); }
     }
     if (c.gold >= 36) {
       c.gold -= 36;
@@ -1437,7 +1472,7 @@ class World {
       v.remove = true;
       const pc = this.clonks.find(c => c.id === v.pusher); if (pc) this.release(pc);
       for (const ty of v.inv) { const it = this.spawnItem(ty, v.x, v.y - 5); it.vx = (this.rand() - 0.5) * 2; it.vy = -1.5 - this.rand(); it.pickCd = 30; }
-      this.msg(d.name + ' wurde zerstört!'); this.snd('metalhit', v.x, v.y); this.ev({ e: 'boom', x: Math.round(v.x), y: Math.round(v.y - 4), r: 5 });
+      this.msg(d.name + ' wurde zerstört!', undefined, v.team >= 0 ? { t: v.team, x: Math.round(v.x), y: Math.round(v.y) } : undefined); this.snd('metalhit', v.x, v.y); this.ev({ e: 'boom', x: Math.round(v.x), y: Math.round(v.y - 4), r: 5 });
       return;
     }
     if (v.cd > 0) v.cd--;
@@ -1592,17 +1627,18 @@ class World {
     for (const f of this.fires) fl.push(f.x, f.y, f.k);
     return {
       c: this.clonks.map(c => [c.id, c.team, r1(c.x), r1(c.y), c.dir, ACTS.indexOf(c.act), Math.ceil(c.hp), r1(c.anim), invEnc(c.inv), Math.round(c.breath), c.name, c.punch, r1(c.digA),
-        (c.armor ? 1 : 0) | (c.knight ? 2 : 0) | (c.block ? 4 : 0) | (c.bowT > 0 ? 8 : 0) | (c.fire > 0 ? 16 : 0) | (c.blockT > 0 ? 32 : 0) | (c.invT > 0 ? 64 : 0), c.arrows, c.inside, c.swing, c.veh, c.slot || 0,
-        c.hk ? c.hk.st : 0, c.hk ? r1(c.hk.x) : 0, c.hk ? r1(c.hk.y) : 0, c.bl ? (c.bl.gas > 0 ? 1 : 2) : 0, (c.escCd || 0) > this.tick ? Math.ceil((c.escCd - this.tick) / 60) : 0, c.help ? (this.rescuerOf && this.rescuerOf(c) ? 2 : 1) : 0, invEnc(c.gear || [])]),
+        (c.armor ? 1 : 0) | (c.knight ? 2 : 0) | (c.block ? 4 : 0) | (c.bowT > 0 ? 8 : 0) | (c.fire > 0 ? 16 : 0) | (c.blockT > 0 ? 32 : 0) | (c.invT > 0 ? 64 : 0) | (c.armorFree ? 128 : 0), c.arrows, c.inside, c.swing, c.veh, c.slot || 0,
+        c.hk ? c.hk.st : 0, c.hk ? r1(c.hk.x) : 0, c.hk ? r1(c.hk.y) : 0, c.bl ? (c.bl.gas > 0 ? 1 : 2) : 0, (c.escCd || 0) > this.tick ? Math.ceil((c.escCd - this.tick) / 60) : 0, c.help ? (this.rescuerOf && this.rescuerOf(c) ? 2 : 1) : 0, invEnc(c.gear || []), c.spec && typeof SPEC_KEYS !== 'undefined' ? SPEC_KEYS.indexOf(c.spec) + 1 : 0, c.healT ? 1 : 0]),
       i: this.items.map(i => [i.id, ITEM_CODES.indexOf(i.type), r1(i.x), r1(i.y), i.fuse, i.stuck ? 1 : 0, r1(i.vx), r1(i.vy), i.landed ? 1 : 0]),
       m: this.monsters.map(m => [m.id, r1(m.x), r1(m.y), m.dir, Math.ceil(m.hp), r1(m.anim), m.bite > 0 ? m.bite : m.wind > 0 ? -m.wind : 0, m.fire > 0 ? 1 : 0]),
       a: this.animals.map(a => [a.id, ANIMAL_KINDS.indexOf(a.k), r1(a.x), r1(a.y), a.dir, r1(a.anim), (a.flee > 0 ? 1 : 0) | (a.flop ? 2 : 0) | (a.bite > 0 ? 4 : 0) | (a.perch ? 8 : 0) | (a.gold ? 16 : 0)]),
-      s: this.structs.map(s => [s.id, s.type, s.x, s.y, s.team, Math.round(s.prog * 100) / 100, Math.ceil(s.hp), s.fire > 0 ? 1 : 0, s.lv ? 1 : 0, s.up | 0, s.upT > 0 ? Math.ceil(s.upT / 60) : 0, s.arrows | 0, s.bolts | 0, s.walls ? s.walls.map(q => [q.x, q.y, Math.ceil(q.hp), q.br ? 1 : 0, q.d]) : 0, s.bDir || 0]),
+      s: this.structs.map(s => [s.id, s.type, s.x, s.y, s.team, Math.round(s.prog * 100) / 100, Math.ceil(s.hp), s.fire > 0 ? 1 : 0, s.lv ? 1 : 0, s.up | 0, s.upT > 0 ? Math.ceil(s.upT / 60) : 0, s.arrows | 0, s.bolts | 0, s.walls ? s.walls.map(q => [q.x, q.y, Math.ceil(q.hp), q.br ? 1 : 0, q.d]) : 0, s.bDir || 0, s.rep | 0, s.pitch | 0, s.pT > 0 ? 1 : 0]),
       cs: (this.cshots || []).map(p => [r1(p.x), r1(p.y), r1(p.vx), r1(p.vy), p.k]),
       v: this.vehicles.map(v => [v.id, VEH_CODES.indexOf(v.type), r1(v.x), r1(v.y), v.dir, v.team, Math.ceil(v.hp), Math.round(v.ang * 100) / 100, invEnc(v.inv), v.fire > 0 ? 1 : 0, v.pusher, v.cd]),
       t: this.teams.map(t => [t.money, t.sel, t.elim ? 1 : 0, Object.keys(t.res).join(','), t.rq, Math.round(t.rp * 1000) / 1000, t.ai ? 1 : 0, t.diff || '', t.stat || '', t.helper ? 1 : 0, t.hdiff || '', SELLABLE.filter(k => (t.autoSell || AUTO_SELL_DEFAULT)[k]).join(',')]),
       f: fl, b: this.burntNew && this.burntNew.length ? this.burntNew.splice(0) : undefined,
       st: this.state, w: this.winner, tk: this.tick,
+      ...this.oreSnap(),
     };
   }
   applySnap(s) {
@@ -1611,8 +1647,8 @@ class World {
       const c = old.get(a[0]) || { rx: a[2], ry: a[3] };
       const fl = a[13] || 0;
       Object.assign(c, { id: a[0], team: a[1], x: a[2], y: a[3], dir: a[4], act: ACTS[a[5]], hp: a[6], anim: a[7], inv: invDec(a[8]), breath: a[9], name: a[10], punch: a[11], digA: a[12],
-        armor: fl & 1, knight: fl & 2, block: fl & 4, bowT: fl & 8 ? 1 : 0, fire: fl & 16 ? 1 : 0, blockT: fl & 32 ? 1 : 0, invT: fl & 64 ? 1 : 0, arrows: a[14], inside: a[15], swing: a[16], veh: a[17], slot: a[18] || 0 });
-      c.hk = a[19] ? { st: a[19], x: a[20], y: a[21] } : null; c.bl = a[22] ? { gas: a[22] === 1 ? 1 : 0 } : null; c.escCd = a[23] ? this.tick + a[23] * 60 : 0; c.helpS = a[24] || 0; c.gear = invDec(a[25] || '');
+        armor: fl & 1, knight: fl & 2, block: fl & 4, bowT: fl & 8 ? 1 : 0, fire: fl & 16 ? 1 : 0, blockT: fl & 32 ? 1 : 0, invT: fl & 64 ? 1 : 0, armorFree: fl & 128 ? 1 : 0, arrows: a[14], inside: a[15], swing: a[16], veh: a[17], slot: a[18] || 0 });
+      c.hk = a[19] ? { st: a[19], x: a[20], y: a[21] } : null; c.bl = a[22] ? { gas: a[22] === 1 ? 1 : 0 } : null; c.escCd = a[23] ? this.tick + a[23] * 60 : 0; c.helpS = a[24] || 0; c.gear = invDec(a[25] || ''); c.spec = a[26] && typeof SPEC_KEYS !== 'undefined' ? SPEC_KEYS[a[26] - 1] || '' : ''; c.healT = a[27] ? 1 : 0;
       return c;
     });
     const oi = new Map(this.items.map(c => [c.id, c]));
@@ -1621,7 +1657,7 @@ class World {
     this.monsters = s.m.map(a => { const m = om.get(a[0]) || { rx: a[1], ry: a[2] }; Object.assign(m, { id: a[0], x: a[1], y: a[2], dir: a[3], hp: a[4], anim: a[5], bite: a[6] > 0 ? a[6] : 0, wind: a[6] < 0 ? -a[6] : 0, fire: a[7] }); return m; });
     const oa = new Map(this.animals.map(c => [c.id, c]));
     this.animals = (s.a || []).map(a => { const o = oa.get(a[0]) || { rx: a[2], ry: a[3] }; Object.assign(o, { id: a[0], k: ANIMAL_KINDS[a[1]], x: a[2], y: a[3], dir: a[4], anim: a[5], flee: a[6] & 1, flop: a[6] & 2, bite: a[6] & 4 ? 1 : 0, perch: a[6] & 8, gold: a[6] & 16 ? 1 : 0 }); return o; });
-    this.structs = s.s.map(a => { const B = BUILD[a[1]]; return { id: a[0], type: a[1], x: a[2], y: a[3], team: a[4], prog: a[5], hp: a[6], fire: a[7], lv: a[8] || 0, w: B.w, h: B.h, up: a[9] || 0, upT: (a[10] || 0) * 60, arrows: a[11] || 0, bolts: a[12] || 0, walls: a[13] ? a[13].map(q => ({ x: q[0], y: q[1], hp: q[2], br: q[3], d: q[4] })) : null, bDir: a[14] || 0 }; });
+    this.structs = s.s.map(a => { const B = BUILD[a[1]]; return { id: a[0], type: a[1], x: a[2], y: a[3], team: a[4], prog: a[5], hp: a[6], fire: a[7], lv: a[8] || 0, w: B.w, h: B.h, up: a[9] || 0, upT: (a[10] || 0) * 60, arrows: a[11] || 0, bolts: a[12] || 0, walls: a[13] ? a[13].map(q => ({ x: q[0], y: q[1], hp: q[2], br: q[3], d: q[4] })) : null, bDir: a[14] || 0, rep: a[15] || 0, pitch: a[16] || 0, pT: a[17] ? 30 : 0 }; });
     this.cshots = (s.cs || []).map(a => ({ x: a[0], y: a[1], vx: a[2], vy: a[3], k: a[4] }));
     const ov = new Map(this.vehicles.map(c => [c.id, c]));
     this.vehicles = (s.v || []).map(a => { const v = ov.get(a[0]) || { rx: a[2], ry: a[3] }; Object.assign(v, { id: a[0], type: VEH_CODES[a[1]], x: a[2], y: a[3], dir: a[4], team: a[5], hp: a[6], ang: a[7], inv: invDec(a[8]), fire: a[9], pusher: a[10], cd: a[11] }); return v; });
@@ -1631,6 +1667,16 @@ class World {
     if (s.b) for (const x of s.b) this.markBurnt(x);
     this.fires = fs;
     this.state = s.st; this.winner = s.w; this.tick = s.tk;
+    if (s.ol && this.oresDecode) this.oresDecode(s.ol); else if (s.og && this.oresApplyDelta) this.oresApplyDelta(s.og);
+  }
+  // Golderz-Stand für Clients: volle Liste nach Neuaufbau (Laden/Host-Wechsel), sonst nur geänderte Brocken [id, px, x, y]
+  oreSnap() {
+    if (!this.ores || !this.oresEncode) return {};
+    if (this.oreFull) { this.oreFull = false; this.oreChg.clear(); return { ol: this.oresEncode() }; }
+    if (!this.oreChg.size) return {};
+    const m = new Map(this.ores.map(o => [o.id, o])), og = [];
+    for (const id of this.oreChg) { const o = m.get(id); if (o) og.push([o.id, o.px, o.x, o.y]); }
+    this.oreChg.clear(); return { og };
   }
   encodeChunk(ci) {
     const cx = ci % this.cw, cy = (ci / this.cw) | 0;
@@ -1649,7 +1695,7 @@ class World {
     this.renderDirty.add(ci);
     if (cy + 1 < this.chh) this.renderDirty.add(ci + this.cw);
   }
-  fullMap() { return { mat: rleEncode(this.mat), surf: Array.from(this.surf), burnt: rleEncode(this.burnt) }; }
-  loadMap(m) { rleDecode(m.mat, this.mat); this.surf.set(m.surf); if (m.burnt) rleDecode(m.burnt, this.burnt); this.recolorAll(); }
+  fullMap() { return { mat: rleEncode(this.mat), surf: Array.from(this.surf), burnt: rleEncode(this.burnt), ores: this.oresEncode ? this.oresEncode() : undefined }; }
+  loadMap(m) { rleDecode(m.mat, this.mat); this.surf.set(m.surf); if (m.burnt) rleDecode(m.burnt, this.burnt); if (m.ores && this.oresDecode) this.oresDecode(m.ores); this.recolorAll(); }
 }
 if (typeof module !== 'undefined') module.exports = { World, MAT, ITEMS };

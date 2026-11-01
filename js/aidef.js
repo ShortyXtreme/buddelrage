@@ -45,11 +45,12 @@ function aiDefP(D) { return AI_DEF[D && D.k] || AI_DEF.normal; }
       if (helper) return;
       if (B.defend) {
         // Verteidiger zuteilen: genug Kampfkraft gegen die Bedrohung, bewaffnete/gesunde zuerst, Rest arbeitet weiter
-        const cap = Math.max(1, Math.round(own.length * P.share));
+        const fit = own.filter(c => !c.spec); // Spezialisten (helpers.js) arbeiten selbstständig – nie Verteidiger/Schutzsuchende
+        const cap = Math.max(1, Math.round(fit.length * P.share));
         let need = Math.min(cap, Math.max(1, Math.ceil(B.threatS * P.need)));
         const cx = B.threat.reduce((a, e) => a + e.x, 0) / B.threat.length;
         const sc = c => (c.knight ? 3 : 0) + (this.aiArmedEnough(c) ? 2 : 0) + (hasG(c, 'shield') ? 0.5 : 0) + c.hp / 60 - Math.abs(c.x - cx) / 300 - (B.roles.get(c.id) === 'builder' ? 1.5 : 0);
-        const cand = own.filter(c => !c.inside || (this.structById(c.inside) || {}).type !== 'hut' || c.hp > 50).sort((a, b) => sc(b) - sc(a));
+        const cand = fit.filter(c => !c.inside || (this.structById(c.inside) || {}).type !== 'hut' || c.hp > 50).sort((a, b) => sc(b) - sc(a));
         const canArm = t.res.weapons && t.money >= 15;
         let armBudget = Math.floor(t.money / 20);
         for (const c of cand) {
@@ -59,7 +60,7 @@ function aiDefP(D) { return AI_DEF[D && D.k] || AI_DEF.normal; }
           B.defenders.add(c.id); B.roles.set(c.id, 'defender'); need--;
         }
         // Unbewaffnete in Gefahr: in Hütte/Burg Schutz suchen (Mittel/Schwer), statt mit Fäusten gegen Ritter zu kämpfen
-        if (P.shelter && home) for (const c of own) {
+        if (P.shelter && home) for (const c of fit) {
           if (B.defenders.has(c.id) || c.knight || this.aiArmedEnough(c)) continue;
           const dz = Math.min(...B.threat.map(e => Math.hypot(e.x - c.x, (e.y - c.y) * 1.5)));
           if (dz < 170 && Math.abs(c.x - home.x) < 320 && Math.abs(c.y - home.y) < 90) B.roles.set(c.id, 'shelter');

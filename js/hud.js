@@ -44,14 +44,17 @@ function pixIcon(key, w, h, draw) {
   return (ICON_CACHE[key] = o.toDataURL());
 }
 function itemIcon(t) { return pixIcon('it_' + t, 12, 12, g => { if (t === 'arrow') { g.fillStyle = '#ddd'; g.fillRect(1, 5, 7, 1); g.fillStyle = '#c33'; g.fillRect(1, 4, 2, 3); return; } ITEM_DRAW[t](g, 5, 8, null); }); }
+// Symbol eines Gebäudes in einer Ausbaustufe (Laden-Karten)
+function upIcon(k, lvl, col) { col = col || '#2f5fe0'; const B = BUILD[k]; return pixIcon('u_' + k + lvl + col, B.w + 10, B.h + 26, g => { const s = { type: k, x: (B.w + 10) / 2, y: B.h + 24, w: B.w, h: B.h, prog: 1, id: 1, fire: 0, up: lvl, upT: 0, arrows: 1, bolts: 1, pitch: 1, bDir: 1 }; s.hp = structMax(s); drawStruct(g, s, col); }); }
 function fakeClonk(o) { return Object.assign({ act: 'walk', dir: 1, anim: 0.5, inv: [], hp: 100, knight: 0, armor: 0, block: 0, swing: 0, bowT: 0, punch: 0, fire: 0, digA: 0, breath: 100, inside: 0, blockT: 0, team: 0, x: 0, y: 0 }, o); }
+function specIcon(k, col) { col = col || '#2f5fe0'; return pixIcon('sp_' + k + col, 16, 24, g => { const c = fakeClonk({ spec: k }); drawClonk(g, c, col, 8, 22); drawSpec(g, c, col, 8, 22); }); }
 function entIcon(k, col) {
   col = col || '#2f5fe0';
   if (k === 'clonk') return pixIcon('cl' + col, 16, 22, g => drawClonk(g, fakeClonk({}), col, 8, 20));
   if (k === 'knight') return pixIcon('kn' + col, 16, 22, g => drawClonk(g, fakeClonk({ knight: 1, armor: 1, gear: ['sword', 'shield', 'bow'] }), col, 8, 20));
   if (VEH[k]) return pixIcon('v_' + k + col, 26, 18, g => drawVehicle(g, { type: k, dir: 1, ang: VEH[k].ang || 0.6, inv: k === 'lorry' ? ['gold', 'gold', 'gold', 'gold', 'gold'] : [], cd: 0, fire: 0, hp: VEH[k].hp, id: 1 }, col, 13, 16));
   if (BUILD[k]) { const B = BUILD[k]; return pixIcon('b_' + k + col, B.w + 6, B.h + 22, g => drawStruct(g, { type: k, x: (B.w + 6) / 2, y: B.h + 20, w: B.w, h: B.h, prog: 1, hp: B.hp, id: 1, fire: 0 }, col)); }
-  if (k === 'bridge') return pixIcon('bridge', 30, 10, g => { g.fillStyle = '#8a6038'; g.fillRect(1, 4, 28, 3); g.fillStyle = '#a07040'; for (let x = 2; x < 29; x += 4) g.fillRect(x, 4, 2, 1); g.fillStyle = '#5a3a1a'; g.fillRect(1, 7, 28, 1); });
+  if (k === 'bridge') return pixIcon('bridge2', 30, 10, g => { const S = sprBridge(); g.drawImage(S.cv, 0, 0); });
   return itemIcon(k);
 }
 
@@ -163,8 +166,9 @@ function updateHUD() {
   if (w.teams.length > 1) setHTML('hud-teams', w.teams.map(t => {
     const alive = w.clonks.filter(c => c.team === t.id && c.act !== 'dead').length;
     const tag = (t.id !== G.myTeam && G.myTeam >= 0 && w.ally(t.id, G.myTeam) ? '<span class="dtag d-ally" title="Verbündet">🤝</span>' : '') + (t.ai ? '<span class="dtag d-' + (t.diff || 'normal') + '">KI · ' + aiDiffName(t.diff) + '</span>' : t.helper ? '<span class="dtag d-help">Helfer · ' + aiDiffName(t.hdiff) + '</span>' : '');
-    const sub = t.ai && !t.elim && t.stat ? '<div class="tstat">' + escapeHtml(t.stat) + '</div>' : '';
-    return '<div class="trow' + (t.elim ? ' el' : '') + '"><div class="tline"><i style="background:' + t.color + '"></i>' + escapeHtml(t.name.slice(0, 14)) + tag + '<span class="muted" style="margin-left:auto">' + (t.elim ? '✝' : alive) + '</span></div>' + sub + '</div>';
+    const intel = typeof fogIntel !== 'function' || fogIntel(t.id); // Nebel: Gegnern keine Statuszeile/Anzahl (ausgeschieden ✝ bleibt – Spielziel)
+    const sub = intel && t.ai && !t.elim && t.stat ? '<div class="tstat">' + escapeHtml(t.stat) + '</div>' : '';
+    return '<div class="trow' + (t.elim ? ' el' : '') + '"><div class="tline"><i style="background:' + t.color + '"></i>' + escapeHtml(t.name.slice(0, 14)) + tag + '<span class="muted" style="margin-left:auto"' + (intel || t.elim ? '' : ' title="Im Spiel – Details nur in Sichtweite"') + '>' + (t.elim ? '✝' : intel ? alive : '●') + '</span></div>' + sub + '</div>';
   }).join('')); else $('hud-teams').style.display = 'none';
   // Unten: Leisten, Hotbar, Hinweise
   const c = myClonk();
@@ -186,6 +190,8 @@ function updateHUD() {
     const hbs = hb.join('');
     if (HUD.sig.hb !== hbs) { HUD.sig.hb = hbs; $('hotbar').innerHTML = hbs; for (const el of $('hotbar').querySelectorAll('.slot[data-s]')) el.onclick = e => { e.stopPropagation(); act('slot', +el.dataset.s); }; }
     const ex = []; if (c.knight) ex.push('<span>⚔ Ritter</span>'); if (c.arrows && !hasG(c, 'bow')) ex.push('<span>➶ Pfeile: ' + c.arrows + '</span>'); if (c.fire) ex.push('<span style="color:#ff9a6a">Brennt! Ins Wasser!</span>');
+    { const cs = w.castleOf ? w.castleOf(c.team, c) : null; const cst = cs ? castleStatusText(cs) : ''; if (cst) ex.push('<span class="cstat" title="Burg-Status">' + cst + '</span>'); }
+    { const ts = w.towerOf ? w.towerOf(c.team, c) : null; const tst = ts && Math.abs(ts.x - c.x) < 260 ? towerStatusText(ts) : ''; if (tst) ex.push('<span class="cstat" title="Wachturm-Status">' + tst + '</span>'); }
     setHTML('h-extra', ex.join(''));
     setHTML('prompts', settings.hints ? buildPrompts(w, c).join('') : '');
   } else if (me && w.state === 'run' && !G.spectate && !w.clonks.some(o => o.team === me.id && o.act !== 'dead')) {
@@ -194,6 +200,30 @@ function updateHUD() {
   setHTML('h-net', net.code && G.role !== 'single' ? escapeHtml(net.code) + (G.role === 'host' ? ' · Host' : '') + (pad.had ? ' · 🎮' : '') : (pad.had ? '🎮 Gamepad' : ''));
   document.body.classList.toggle('touchui', touchWanted());
   if (G.world && touchWanted() && $('touch').style.display !== 'block') updateTouchUI();
+}
+
+// Burg-Status (HUD): Stufe, Ausbau, Mauer-Lebenspunkte, Pfeile/Bolzen, Reparatur
+function castleStatusText(cs) {
+  if (!cs || !(cs.up > 0)) return '';
+  const L = castleLevel(cs), P = ['🏰 Burg ' + L + '/' + CUP.length];
+  if (cs.upT > 0) P.push('Ausbau ' + Math.ceil(cs.upT / 60) + ' s');
+  if (cs.walls && cs.walls.length) P.push('Mauern ' + cs.walls.map(q => q.br ? '<b style="color:#ff9a8a">kaputt</b>' : Math.ceil(q.hp) + '/' + WALL_HP).join(' · '));
+  if (L >= CAMMO.arrows.lvl) P.push('<span' + ((cs.arrows | 0) ? '' : ' style="color:#ff9a8a"') + '>Pfeile ' + (cs.arrows | 0) + '/' + CAMMO.arrows.max + '</span>');
+  if (L >= CAMMO.bolts.lvl) P.push('<span' + ((cs.bolts | 0) ? '' : ' style="color:#ff9a8a"') + '>Bolzen ' + (cs.bolts | 0) + '/' + CAMMO.bolts.max + '</span>');
+  if (cs.rep === 1) P.push('🔧 Reparatur läuft'); else if (cs.rep === 2) P.push('<span style="color:#ffcf7a">Reparatur pausiert (Angriff)</span>');
+  return P.join(' · ');
+}
+
+// Wachturm-Status (HUD): Stufe, Ausbau, Struktur, Turmpfeile/Pech, Ausbesserung
+function towerStatusText(ts) {
+  if (!ts || !(ts.up > 0)) return '';
+  const L = towerLevel(ts), P = ['🗼 Turm ' + L + '/' + TUP.length];
+  if (ts.upT > 0) P.push('Ausbau ' + Math.ceil(ts.upT / 60) + ' s');
+  P.push('Struktur ' + Math.ceil(ts.hp) + '/' + structMax(ts));
+  if (L >= TAMMO.arrows.lvl) P.push('<span' + ((ts.arrows | 0) ? '' : ' style="color:#ff9a8a"') + '>Pfeile ' + (ts.arrows | 0) + '/' + TAMMO.arrows.max + '</span>');
+  if (L >= TAMMO.pitch.lvl) P.push('<span' + ((ts.pitch | 0) ? '' : ' style="color:#ff9a8a"') + '>Pech ' + (ts.pitch | 0) + '/' + TAMMO.pitch.max + '</span>');
+  if (ts.rep === 1) P.push('🔧 wird ausgebessert'); else if (ts.rep === 2) P.push('<span style="color:#ffcf7a">Ausbessern pausiert</span>');
+  return P.join(' · ');
 }
 
 // ---------- Ziel-Overlay im Spielfeld: Fadenkreuz, Flugbahn, Interaktions-Marker ----------
